@@ -52,6 +52,8 @@ export class AuthService {
     const result = await this.pca.handleRedirectPromise();
     if (result?.account) {
       this.pca.setActiveAccount(result.account);
+      // Strip the auth code from the URL so refreshes don't try to replay it.
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
     const active = this.pca.getActiveAccount() ?? this.pca.getAllAccounts()[0] ?? null;
     if (active) this.pca.setActiveAccount(active);
@@ -60,26 +62,18 @@ export class AuthService {
 
   async signIn(): Promise<void> {
     const pca = this.requirePca();
-    try {
-      console.log('[auth] loginPopup() starting, scopes=', this.auth!.scopes);
-      const result = await pca.loginPopup({ scopes: this.auth!.scopes });
-      console.log('[auth] loginPopup() resolved, account=', result.account?.username);
-      pca.setActiveAccount(result.account);
-      this._account.set(result.account);
-    } catch (err) {
-      console.error('[auth] loginPopup() failed', err);
-      if (err instanceof BrowserAuthError && err.errorCode === 'user_cancelled') return;
-      throw err;
-    }
+    console.log('[auth] loginRedirect() starting, scopes=', this.auth!.scopes);
+    await pca.loginRedirect({ scopes: this.auth!.scopes });
+    // Page navigates away here; nothing after this line runs.
   }
 
   async signOut(): Promise<void> {
     const pca = this.requirePca();
     const account = pca.getActiveAccount();
     this._account.set(null);
-    await pca.logoutPopup({
+    await pca.logoutRedirect({
       ...(account ? { account } : {}),
-      mainWindowRedirectUri: window.location.origin,
+      postLogoutRedirectUri: window.location.origin,
     });
   }
 
@@ -134,11 +128,15 @@ export class AuthService {
   private async popupFallback(): Promise<string | null> {
     const pca = this.requirePca();
     try {
+      // Used only for token re-acquisition after the user is already
+      // signed in (e.g. expired token). Initial login uses redirect.
       const result = await pca.acquireTokenPopup({ scopes: this.auth!.scopes });
       return this.handleResult(result);
     } catch (err) {
       if (err instanceof BrowserAuthError && err.errorCode === 'user_cancelled') return null;
-      throw err;
+      // If popup is blocked, fall back to a full redirect.
+      await pca.acquireTokenRedirect({ scopes: this.auth!.scopes });
+      return null;
     }
   }
 
