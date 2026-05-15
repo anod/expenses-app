@@ -61,10 +61,13 @@ export class AuthService {
   async signIn(): Promise<void> {
     const pca = this.requirePca();
     try {
+      console.log('[auth] loginPopup() starting, scopes=', this.auth!.scopes);
       const result = await pca.loginPopup({ scopes: this.auth!.scopes });
+      console.log('[auth] loginPopup() resolved, account=', result.account?.username);
       pca.setActiveAccount(result.account);
       this._account.set(result.account);
     } catch (err) {
+      console.error('[auth] loginPopup() failed', err);
       if (err instanceof BrowserAuthError && err.errorCode === 'user_cancelled') return;
       throw err;
     }
