@@ -1,0 +1,15 @@
+services:
+  graph-tester:
+    build: .
+    image: expenses-graph-tester:latest
+    env_file: .env
+    # Device code flow prints a URL+code and waits for browser sign-in.
+    # We need a TTY so we can see the prompt clearly.
+    stdin_open: true
+    tty: true
+    volumes:
+      # Persist the MSAL token cache so you don't re-auth every run.
+      - ./.token-cache.json:/app/.token-cache.json
+      # Dumps land back on the host.
+      - ./dumps:/app/dumps
+    working_dir: /app

@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Secrets / personal data — NEVER commit
+.env
+.env.*
+!.env.example
+.token-cache.json
+*.pem
+*.key
+
+# Live workbook dumps (contain personal financial data)
+dumps/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Angular
+.angular/
+apps/web/.angular/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# Misc
+.cache/
+tmp/

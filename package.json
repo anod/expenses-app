@@ -1,0 +1,25 @@
+{
+  "name": "expenses",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test:connection": "node scripts/test-graph-connection.mjs",
+    "dump": "node scripts/test-graph-connection.mjs --dump",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @expenses/api\" \"npm run dev -w @expenses/web\""
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.16.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "typescript": "^5.6.3"
+  }
+}
