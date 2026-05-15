@@ -20,7 +20,7 @@ export class DumpReader {
   async readLatestSnapshot(): Promise<WorkbookSnapshot> {
     const path = await this.findLatest();
     if (!path) {
-      throw new NoDumpFoundError(`No dump file found in ${this.dumpsDir}. Run \`docker compose run --rm graph-tester node scripts/test-graph-connection.mjs --dump\` first.`);
+      throw new NoDumpFoundError(`No dump file found in ${this.dumpsDir}. Run \`npm run dump\` first.`);
     }
     this.log.debug({ path }, 'reading dump file');
     const raw = JSON.parse(await readFile(path, 'utf8')) as RawWorkbookDump;

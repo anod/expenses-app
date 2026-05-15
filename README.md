@@ -1,54 +1,88 @@
-# Expenses — Microsoft Graph connection tester (Phase 0)
+# Expenses
 
-Minimal Dockerized script to verify we can read your OneDrive Excel workbook
-through Microsoft Graph and dump the current data.
+A small webapp around an existing OneDrive Excel workbook. Reads the workbook
+through Microsoft Graph, renders it as a table in the browser, and (in later
+phases) caches and edits it.
+
+## Stack
+
+- **packages/shared** — TypeScript contracts + workbook parser (vitest).
+- **apps/api** — Express + Pino API serving the parsed workbook snapshot.
+- **apps/web** — Angular 21 standalone PWA (signals, OnPush, `@switch`/`@for`).
+- **scripts/test-graph-connection.mjs** — MSAL device-code flow that dumps
+  the workbook used range to `dumps/dump-<timestamp>.json`. Phase-0 tooling.
+
+## Layout
+
+```
+.
+├── apps/
+│   ├── api/      Express server reading the latest dump
+│   └── web/      Angular table view
+├── packages/
+│   └── shared/   Types + parser shared by api and web
+├── scripts/      Standalone Graph tooling (auth + dump)
+├── dumps/        Workbook dumps (gitignored)
+├── .env          Real config (gitignored)
+└── .env.example  Documented config template
+```
 
 ## One-time setup
 
-1. Register a Microsoft Entra app — see [`SETUP_GRAPH.md`](./SETUP_GRAPH.md).
-2. Copy your client ID into `.env` (`MICROSOFT_CLIENT_ID=...`).
-3. Confirm `ONEDRIVE_WORKBOOK_URL` and `WORKSHEET_NAME` in `.env` are correct.
+1. **Register a Microsoft Entra app** — fastest path is
+   [`scripts/register-app.sh`](scripts/register-app.sh) (requires `az login`).
+   Manual portal steps are in [`SETUP_GRAPH.md`](SETUP_GRAPH.md).
+2. `cp .env.example .env` and fill in `MICROSOFT_CLIENT_ID` and
+   `ONEDRIVE_WORKBOOK_URL`.
+3. `npm install` at the repo root (npm workspaces will install all packages).
 
-## Build the image
-
-```bash
-docker compose build
-```
-
-## Test the connection (interactive sign-in the first time)
+## Dump the workbook (Phase 0)
 
 ```bash
-docker compose run --rm graph-tester
+npm run dump
 ```
 
-You will see something like:
+First run prints a device-code URL — sign in with the Microsoft account that
+owns the OneDrive file. The refresh token is cached in `.token-cache.json`
+so subsequent runs are non-interactive.
 
-```
-==============================================================
-To sign in, use a web browser to open https://microsoft.com/devicelogin
-and enter the code ABCD-EFGH to authenticate.
-==============================================================
-```
+The dump lands in `dumps/dump-<ISO-timestamp>.json`.
 
-Open that URL in any browser, paste the code, sign in with the Microsoft
-account that owns the OneDrive workbook, and consent to the requested
-permissions (Files.ReadWrite, offline_access, User.Read).
-
-The script then prints workbook metadata and a 3-row preview.
-
-The refresh token is cached in `./.token-cache.json` (host-mounted), so
-subsequent runs skip the device-code prompt.
-
-## Dump the full used range to JSON
+A Dockerized variant is available too:
 
 ```bash
+docker compose run --rm graph-tester                     # connection test
 docker compose run --rm graph-tester node scripts/test-graph-connection.mjs --dump
 ```
 
-Output is written to `./dumps/dump-<timestamp>.json` on the host.
-
-## Reset auth
+## Run the app (Phase 1)
 
 ```bash
-rm .token-cache.json && touch .token-cache.json
+npm run dev
 ```
+
+This spawns the API (`:4000`) and Angular dev server (`:4200`) concurrently.
+Open <http://localhost:4200> — the page renders the latest dump as a table:
+sticky source/day/label columns, scrollable months, balance row highlighted,
+formula cells marked `ƒ`.
+
+## Other scripts
+
+| Command | Effect |
+| --- | --- |
+| `npm test` | Run all workspace tests (currently `packages/shared` parser tests) |
+| `npm run build` | Build all workspaces |
+| `npm run test:connection` | Smoke-test the Microsoft Graph connection (no dump) |
+
+## Roadmap
+
+The full plan with all 8 phases is in
+[`LLM_IMPLEMENTATION_PLAN.md`](LLM_IMPLEMENTATION_PLAN.md). Phase 1 (this
+read-only table fed by a static dump) is complete; Phase 2 swaps the dump
+reader for a live Microsoft Graph fetch with token refresh.
+
+## Privacy
+
+`.env`, `.token-cache.json`, and `dumps/` are gitignored. Do not commit them.
+The OneDrive sharing URL contains a capability token and is treated as a
+secret throughout this repo.

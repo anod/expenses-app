@@ -1,84 +1,82 @@
 # Setup: Microsoft Graph access to your OneDrive Excel file
 
-You need to register an application with Microsoft Entra (Azure AD) so this code
-can sign in to your Microsoft account and read your OneDrive workbook. This is a
+You need a Microsoft Entra (Azure AD) app registration so this code can sign
+in to your Microsoft account and read your OneDrive workbook. This is a
 one-time, free, ~5-minute task.
 
-## 1. Register the app
+## Option A — automated (recommended)
+
+If you have the Azure CLI installed and are signed in (`az login`):
+
+```bash
+./scripts/register-app.sh
+```
+
+The script creates an app named `expenses-app` (override with `APP_NAME=...`)
+configured for personal Microsoft accounts + device-code flow, requests the
+required Graph scopes, and writes `MICROSOFT_CLIENT_ID=<guid>` into `.env`.
+
+You'll still need to fill in `ONEDRIVE_WORKBOOK_URL` in `.env` manually
+(open the file in OneDrive in your browser and copy the full URL).
+
+## Option B — manual portal steps
 
 1. Open <https://entra.microsoft.com> and sign in with **the same Microsoft
    account that owns the OneDrive file**.
-2. In the left nav: **Identity → Applications → App registrations → + New registration**.
+2. **Identity → Applications → App registrations → + New registration**.
 3. Fill in:
    - **Name**: `expenses-app` (anything you like).
-   - **Supported account types**: choose
-     **"Personal Microsoft accounts only"** (since the file is in personal OneDrive).
-   - **Redirect URI**: leave blank for now — we use the device-code flow which
-     does not need a redirect URI.
+   - **Supported account types**: **"Personal Microsoft accounts only"**.
+   - **Redirect URI**: leave blank (device-code flow doesn't need one).
 4. Click **Register**.
-5. On the app's **Overview** page, copy the **Application (client) ID**. Paste
-   it into `.env` as `MICROSOFT_CLIENT_ID=...`.
+5. On the app's **Overview** page, copy the **Application (client) ID**
+   into `.env` as `MICROSOFT_CLIENT_ID=<guid>`.
+6. **Authentication → Advanced settings → Allow public client flows → Yes → Save**.
+7. **API permissions → + Add a permission → Microsoft Graph → Delegated permissions**:
+   - `Files.ReadWrite`
+   - `offline_access`
+   - `User.Read`
 
-## 2. Allow public-client / device-code flow
+   Personal accounts grant consent on first sign-in — no admin consent button
+   is needed.
 
-1. Open the app → **Authentication** (left nav).
-2. Scroll to **Advanced settings → Allow public client flows** and toggle it to **Yes**.
-3. Click **Save**.
-
-## 3. Add Graph permissions
-
-1. Open the app → **API permissions**.
-2. Click **+ Add a permission → Microsoft Graph → Delegated permissions**.
-3. Search for and check:
-   - `Files.ReadWrite` (read and write your files)
-   - `offline_access` (so we can refresh the token without re-signing-in)
-   - `User.Read` (basic profile, useful for the connection test)
-4. Click **Add permissions**.
-5. Personal accounts grant consent on first sign-in — no admin consent button is needed.
-
-## 4. Fill in `.env`
+## Fill in `.env`
 
 ```env
-MICROSOFT_CLIENT_ID=<the GUID from step 1.5>
+MICROSOFT_CLIENT_ID=<guid from step 5>
 MICROSOFT_TENANT_ID=consumers
 ONEDRIVE_WORKBOOK_URL=<paste the OneDrive sharing URL of your Excel file>
 WORKSHEET_NAME=Sheet1
 ```
 
-`ONEDRIVE_WORKBOOK_URL` is the URL you'd open in the browser to view the file.
+`ONEDRIVE_WORKBOOK_URL` is the URL you'd open in the browser to view the
+file. It contains a sharing capability token — treat it as a secret.
 
-## 5. Run the connection test
+## Run the connection test
 
 ```bash
 npm install
 npm run test:connection
 ```
 
-You'll see something like:
+Sign in with the device code shown. The token is cached in
+`.token-cache.json`; subsequent runs are non-interactive.
 
-```
-To sign in, use a web browser to open https://microsoft.com/devicelogin
-and enter the code ABCD-EFGH to authenticate.
-```
-
-Open that page in any browser, paste the code, sign in with the OneDrive
-account. The terminal will then resolve the workbook and print metadata.
-
-To dump the entire workbook used range to a JSON file:
+## Dump the workbook
 
 ```bash
 npm run dump
 ```
 
-This writes `dump-<timestamp>.json` in the project root.
+Writes `dumps/dump-<ISO-timestamp>.json`.
 
 ## Troubleshooting
 
-- **AADSTS50194 / "not configured as a multi-tenant"**: set
+- **AADSTS50194 / "not configured as multi-tenant"** — set
   `MICROSOFT_TENANT_ID=consumers` (not `common`).
-- **"Application is not configured for users in this directory"**: under app
-  registration → **Authentication**, ensure "Personal Microsoft accounts only"
-  or "Personal + work" is selected.
-- **Token cache issues**: delete `.token-cache.json` and re-run.
-- **403 on workbook read**: ensure the signed-in account is the owner (or has
-  edit access) of the file pointed to by `ONEDRIVE_WORKBOOK_URL`.
+- **"Application is not configured for users in this directory"** — under
+  app registration → **Authentication**, ensure "Personal Microsoft accounts
+  only" or "Personal + work" is selected.
+- **Token cache stuck** — delete `.token-cache.json` and re-run.
+- **403 on workbook read** — ensure the signed-in account is the owner (or
+  has edit access) of the file pointed to by `ONEDRIVE_WORKBOOK_URL`.
