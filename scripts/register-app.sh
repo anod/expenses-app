@@ -56,20 +56,28 @@ for PERM in "$PERM_FILES_READWRITE" "$PERM_OFFLINE_ACCESS" "$PERM_USER_READ"; do
 done
 echo "  ✓ permissions added (consent happens at first sign-in for personal accounts)"
 
-# Add SPA platform redirect URI for browser auth-code + PKCE (used by the web app)
-SPA_REDIRECT_URI="${SPA_REDIRECT_URI:-http://localhost:4200}"
-echo "• Ensuring SPA redirect URI '$SPA_REDIRECT_URI'..."
+# Add SPA platform redirect URIs for browser auth-code + PKCE (used by the web app).
+# Both localhost and 127.0.0.1 are registered so MSAL doesn't 400 on whichever
+# one the user opens in the browser.
+SPA_REDIRECT_URIS=("${SPA_REDIRECT_URI:-http://localhost:4200}" "http://127.0.0.1:4200")
+echo "• Ensuring SPA redirect URIs ${SPA_REDIRECT_URIS[*]}..."
 EXISTING_SPA_JSON=$(az ad app show --id "$APP_ID" --query 'spa.redirectUris' -o json 2>/dev/null || echo '[]')
-if echo "$EXISTING_SPA_JSON" | grep -q "\"$SPA_REDIRECT_URI\""; then
+NEEDS_UPDATE=0
+for URI in "${SPA_REDIRECT_URIS[@]}"; do
+  if ! echo "$EXISTING_SPA_JSON" | grep -q "\"$URI\""; then
+    NEEDS_UPDATE=1
+  fi
+done
+if [[ "$NEEDS_UPDATE" -eq 0 ]]; then
   echo "  ✓ already configured"
 else
-  # Merge with any existing SPA URIs.
-  MERGED=$(echo "$EXISTING_SPA_JSON" | python3 -c "
-import json, sys
+  SPA_URIS_CSV="$(IFS=,; echo "${SPA_REDIRECT_URIS[*]}")"
+  MERGED=$(echo "$EXISTING_SPA_JSON" | SPA_URIS="$SPA_URIS_CSV" python3 -c "
+import json, sys, os
 existing = json.load(sys.stdin) or []
-uri = '$SPA_REDIRECT_URI'
-if uri not in existing:
-    existing.append(uri)
+for uri in os.environ['SPA_URIS'].split(','):
+    if uri and uri not in existing:
+        existing.append(uri)
 print(json.dumps({'spa': {'redirectUris': existing}}))
 ")
   TMP=$(mktemp)
@@ -80,7 +88,7 @@ print(json.dumps({'spa': {'redirectUris': existing}}))
     --headers "Content-Type=application/json" \
     --body "@$TMP" >/dev/null
   rm -f "$TMP"
-  echo "  ✓ added SPA redirect URI"
+  echo "  ✓ added SPA redirect URI(s)"
 fi
 
 echo
@@ -98,4 +106,4 @@ echo "  ✓ .env updated"
 
 echo
 echo "Next:  docker compose run --rm graph-tester  # to populate dumps"
-echo "       npm run dev                           # to start the web app at $SPA_REDIRECT_URI"
+echo "       npm run dev                           # to start the web app at ${SPA_REDIRECT_URIS[0]}"
