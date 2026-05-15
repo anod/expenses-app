@@ -1,0 +1,8 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  background: #fafafa;
+  color: #1a1a1a;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}

@@ -1,15 +1,15 @@
 {
-  "name": "web",
-  "version": "0.0.0",
+  "name": "@expenses/web",
+  "version": "0.0.1",
+  "private": true,
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve --proxy-config proxy.conf.json --port 4200",
+    "dev": "ng serve --proxy-config proxy.conf.json --port 4200",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
-  "private": true,
-  "packageManager": "npm@11.11.1",
   "dependencies": {
     "@angular/common": "^21.2.0",
     "@angular/compiler": "^21.2.0",
@@ -17,6 +17,7 @@
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
+    "@expenses/shared": "*",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

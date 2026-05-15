@@ -1,11 +1,11 @@
-import { Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ExpensesTableComponent } from './expenses/expenses-table';
 
 @Component({
   selector: 'app-root',
-  imports: [],
+  imports: [ExpensesTableComponent],
   templateUrl: './app.html',
-  styleUrl: './app.css'
+  styleUrl: './app.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class App {
-  protected readonly title = signal('web');
-}
+export class App {}
