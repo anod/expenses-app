@@ -7,10 +7,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expenses/shared": "*",
+    "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
@@ -21,6 +23,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.7.5",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
   }
 }

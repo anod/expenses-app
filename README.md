@@ -55,31 +55,61 @@ docker compose run --rm graph-tester                     # connection test
 docker compose run --rm graph-tester node scripts/test-graph-connection.mjs --dump
 ```
 
-## Run the app (Phase 1)
+## Run the app (Phase 1 / Phase 4)
 
 ```bash
 npm run dev
 ```
 
 This spawns the API (`:4000`) and Angular dev server (`:4200`) concurrently.
-Open <http://localhost:4200> — the page renders the latest dump as a table:
-sticky source/day/label columns, scrollable months, balance row highlighted,
-formula cells marked `ƒ`.
+Open <http://localhost:4200>.
+
+The API can run in either of two modes, controlled by `EXPENSES_SOURCE` in
+your `.env`:
+
+| Mode  | Source                          | Sign-in required in browser? |
+| ----- | ------------------------------- | ---------------------------- |
+| `dump` | Latest file under `dumps/`      | No                           |
+| `graph` (default) | Live Microsoft Graph | Yes (Sign in with Microsoft) |
+
+In **graph mode**, the API exposes `GET /api/config` (clientId, authority,
+scopes) which the Angular app fetches at bootstrap to initialize MSAL.js
+(auth-code + PKCE). Every `/api/*` request from the browser carries a
+`Authorization: Bearer <user token>` header; the API forwards that token
+verbatim to Microsoft Graph. **No tokens are stored server-side.**
+
+### Sign-in flow
+
+1. Browser loads `/api/config` → initializes MSAL with the SPA `clientId`.
+2. User clicks **Sign in with Microsoft** (popup).
+3. MSAL caches the access + refresh tokens in `sessionStorage`.
+4. The HTTP interceptor adds `Authorization: Bearer …` to every `/api/*`
+   request. On a 401, it forces a silent refresh and retries once.
+
+### Endpoints
+
+| Endpoint | Auth | Notes |
+| --- | --- | --- |
+| `GET /healthz` | No | Liveness + current source |
+| `GET /api/config` | No | `{ source, auth: { clientId, authority, scopes } | null }` |
+| `GET /api/expenses` | Bearer (graph mode) | Parsed `WorkbookSnapshot` |
+| `GET /api/workbook/status` | Bearer (graph mode) | Workbook metadata only |
 
 ## Other scripts
 
 | Command | Effect |
 | --- | --- |
-| `npm test` | Run all workspace tests (currently `packages/shared` parser tests) |
+| `npm test` | Run all workspace tests (shared parser + API graph layer) |
 | `npm run build` | Build all workspaces |
 | `npm run test:connection` | Smoke-test the Microsoft Graph connection (no dump) |
 
 ## Roadmap
 
 The full plan with all 8 phases is in
-[`LLM_IMPLEMENTATION_PLAN.md`](LLM_IMPLEMENTATION_PLAN.md). Phase 1 (this
-read-only table fed by a static dump) is complete; Phase 2 swaps the dump
-reader for a live Microsoft Graph fetch with token refresh.
+[`LLM_IMPLEMENTATION_PLAN.md`](LLM_IMPLEMENTATION_PLAN.md). Phases 1 and 4
+(read-only table fed by either a dump or a live Graph fetch with browser
+sign-in) are complete; subsequent phases add a SQLite snapshot cache,
+write-through editing, and offline support.
 
 ## Privacy
 

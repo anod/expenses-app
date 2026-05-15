@@ -56,6 +56,33 @@ for PERM in "$PERM_FILES_READWRITE" "$PERM_OFFLINE_ACCESS" "$PERM_USER_READ"; do
 done
 echo "  ✓ permissions added (consent happens at first sign-in for personal accounts)"
 
+# Add SPA platform redirect URI for browser auth-code + PKCE (used by the web app)
+SPA_REDIRECT_URI="${SPA_REDIRECT_URI:-http://localhost:4200}"
+echo "• Ensuring SPA redirect URI '$SPA_REDIRECT_URI'..."
+EXISTING_SPA_JSON=$(az ad app show --id "$APP_ID" --query 'spa.redirectUris' -o json 2>/dev/null || echo '[]')
+if echo "$EXISTING_SPA_JSON" | grep -q "\"$SPA_REDIRECT_URI\""; then
+  echo "  ✓ already configured"
+else
+  # Merge with any existing SPA URIs.
+  MERGED=$(echo "$EXISTING_SPA_JSON" | python3 -c "
+import json, sys
+existing = json.load(sys.stdin) or []
+uri = '$SPA_REDIRECT_URI'
+if uri not in existing:
+    existing.append(uri)
+print(json.dumps({'spa': {'redirectUris': existing}}))
+")
+  TMP=$(mktemp)
+  echo "$MERGED" > "$TMP"
+  APP_OBJECT_ID=$(az ad app show --id "$APP_ID" --query id -o tsv)
+  az rest --method PATCH \
+    --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
+    --headers "Content-Type=application/json" \
+    --body "@$TMP" >/dev/null
+  rm -f "$TMP"
+  echo "  ✓ added SPA redirect URI"
+fi
+
 echo
 echo "================================================================"
 echo " Application (client) ID: $APP_ID"
@@ -70,4 +97,5 @@ fi
 echo "  ✓ .env updated"
 
 echo
-echo "Next:  docker compose run --rm graph-tester"
+echo "Next:  docker compose run --rm graph-tester  # to populate dumps"
+echo "       npm run dev                           # to start the web app at $SPA_REDIRECT_URI"

@@ -1,21 +1,56 @@
 import { z } from 'zod';
 
-const Schema = z.object({
+const Common = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
-  DUMPS_DIR: z.string().min(1).default('../../dumps'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('http://localhost:4200'),
+  EXPENSES_SOURCE: z.enum(['graph', 'dump']).default('graph'),
 });
 
-export type Config = z.infer<typeof Schema>;
+const DumpFields = z.object({
+  DUMPS_DIR: z.string().min(1).default('./dumps'),
+});
+
+const GraphFields = z.object({
+  MICROSOFT_CLIENT_ID: z.string().uuid('MICROSOFT_CLIENT_ID must be a GUID'),
+  MICROSOFT_AUTHORITY: z.string().url().default('https://login.microsoftonline.com/consumers'),
+  GRAPH_SCOPES: z
+    .string()
+    .default('Files.ReadWrite,User.Read')
+    .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
+  ONEDRIVE_WORKBOOK_URL: z.string().url('ONEDRIVE_WORKBOOK_URL must be a URL'),
+  WORKSHEET_NAME: z.string().min(1).default('Sheet1'),
+  GRAPH_BASE_URL: z.string().url().default('https://graph.microsoft.com/v1.0'),
+  GRAPH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+});
+
+export type CommonConfig = z.infer<typeof Common>;
+export type DumpConfig = CommonConfig & z.infer<typeof DumpFields>;
+export type GraphConfig = CommonConfig & z.infer<typeof DumpFields> & z.infer<typeof GraphFields>;
+export type Config = DumpConfig | GraphConfig;
+
+export function isGraphConfig(c: Config): c is GraphConfig {
+  return c.EXPENSES_SOURCE === 'graph';
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const result = Schema.safeParse(env);
-  if (!result.success) {
-    const issues = result.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
-    console.error(`Invalid configuration:\n${issues}`);
-    process.exit(1);
-  }
-  return result.data;
+  const common = Common.safeParse(env);
+  if (!common.success) bail(common.error);
+  const dump = DumpFields.safeParse(env);
+  if (!dump.success) bail(dump.error);
+
+  const base = { ...common.data, ...dump.data };
+
+  if (base.EXPENSES_SOURCE === 'dump') return base;
+
+  const graph = GraphFields.safeParse(env);
+  if (!graph.success) bail(graph.error, ' (required when EXPENSES_SOURCE=graph)');
+  return { ...base, ...graph.data };
+}
+
+function bail(err: z.ZodError, suffix = ''): never {
+  const issues = err.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
+  console.error(`Invalid configuration${suffix}:\n${issues}`);
+  process.exit(1);
 }

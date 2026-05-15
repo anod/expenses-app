@@ -39,6 +39,10 @@ You'll still need to fill in `ONEDRIVE_WORKBOOK_URL` in `.env` manually
 
    Personal accounts grant consent on first sign-in — no admin consent button
    is needed.
+8. **Authentication → + Add a platform → Single-page application** and add
+   redirect URI **`http://localhost:4200`**. This is required for the browser
+   sign-in flow used by the web app (auth-code + PKCE). The `register-app.sh`
+   script does this automatically.
 
 ## Fill in `.env`
 

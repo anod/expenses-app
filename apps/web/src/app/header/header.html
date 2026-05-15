@@ -1,0 +1,17 @@
+<header class="app-header">
+  <div class="brand">Expenses</div>
+  @if (auth.enabled()) {
+    @if (auth.isSignedIn()) {
+      <div class="user">
+        <span class="who">{{ auth.displayName() }}</span>
+        <button type="button" (click)="signOut()">Sign out</button>
+      </div>
+    } @else {
+      <button type="button" class="primary" (click)="signIn()">
+        Sign in with Microsoft
+      </button>
+    }
+  } @else {
+    <span class="badge">dump mode</span>
+  }
+</header>

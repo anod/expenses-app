@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -11,8 +12,10 @@ import type {
   ExpenseRow,
   WorkbookSnapshot,
 } from '@expenses/shared';
+import { AuthService } from '../auth/auth.service';
 
 type LoadState =
+  | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; snapshot: WorkbookSnapshot };
@@ -25,8 +28,9 @@ type LoadState =
 })
 export class ExpensesTableComponent {
   private readonly http = inject(HttpClient);
+  protected readonly auth = inject(AuthService);
 
-  protected readonly state = signal<LoadState>({ status: 'loading' });
+  protected readonly state = signal<LoadState>({ status: 'idle' });
 
   protected readonly formatter = computed(() => {
     const s = this.state();
@@ -42,7 +46,16 @@ export class ExpensesTableComponent {
   });
 
   constructor() {
-    this.load();
+    // Reload when auth status changes (sign-in or sign-out).
+    effect(() => {
+      const enabled = this.auth.enabled();
+      const signedIn = this.auth.isSignedIn();
+      if (enabled && !signedIn) {
+        this.state.set({ status: 'idle' });
+        return;
+      }
+      this.load();
+    });
   }
 
   protected reload(): void {

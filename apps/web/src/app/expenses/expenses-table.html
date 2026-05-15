@@ -1,6 +1,11 @@
 @let s = state();
 
 @switch (s.status) {
+  @case ('idle') {
+    <div class="status">
+      <p>Sign in to view your workbook.</p>
+    </div>
+  }
   @case ('loading') {
     <div class="status">Loading expenses…</div>
   }
