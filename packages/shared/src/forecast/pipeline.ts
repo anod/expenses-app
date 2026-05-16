@@ -338,7 +338,11 @@ export const project = (
     };
   });
 
-  return { startDate: visibleStart, endDate, days, status, minBalance, minBalanceDate, cards: cardForecasts };
+  return {
+    startDate: visibleStart, endDate, days, status, minBalance, minBalanceDate,
+    cards: cardForecasts,
+    account: { asOf: account.asOf, bankBalance: account.bankBalance },
+  };
 };
 
 /** End-to-end convenience: virtuals → merge → project. */

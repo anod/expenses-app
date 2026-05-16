@@ -119,6 +119,12 @@ export interface ForecastResult {
   minBalance: number;
   minBalanceDate: IsoDate;
   cards: CardForecast[];
+  /** Snapshot of the bank account at the time of forecast (last user update). */
+  account: {
+    asOf: IsoDate;
+    /** Bank balance as user last entered it (end-of-day at asOf). */
+    bankBalance: number;
+  };
 }
 
 export const occurrenceKeyOf = (recurringId: string, date: IsoDate): string =>

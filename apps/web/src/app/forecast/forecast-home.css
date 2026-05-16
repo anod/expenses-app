@@ -347,6 +347,13 @@
 
 .card-summary { padding: 1rem 1.25rem; }
 
+.bank-summary {
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 60%, var(--md-sys-color-surface));
+}
+.bank-summary h3 .material-symbols-outlined {
+  color: var(--md-sys-color-primary);
+}
+
 .card-summary .card-header {
   display: flex;
   align-items: baseline;

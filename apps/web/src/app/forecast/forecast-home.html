@@ -82,8 +82,29 @@
       </article>
     </section>
 
-    @if (cardSummaries().length > 0) {
+    @if (cardSummaries().length > 0 || forecast()) {
       <section class="cards-row">
+        @if (forecast(); as f) {
+          <article class="m3-card card-summary bank-summary">
+            <header class="card-header">
+              <h3>
+                <span class="material-symbols-outlined">account_balance</span>
+                Bank
+              </h3>
+              <span class="card-meta">as of {{ fmtDate(f.account.asOf) }}</span>
+            </header>
+            <div class="card-grid">
+              <div>
+                <div class="kpi-label">Snapshot</div>
+                <div class="kpi-value-sm">{{ fmt(f.account.bankBalance) }}</div>
+              </div>
+              <div>
+                <div class="kpi-label">Today</div>
+                <div class="kpi-value-sm">{{ fmt(f.days[0]?.balance ?? f.account.bankBalance) }}</div>
+              </div>
+            </div>
+          </article>
+        }
         @for (card of cardSummaries(); track card.cardId) {
           <article class="m3-card card-summary">
             <header class="card-header">
