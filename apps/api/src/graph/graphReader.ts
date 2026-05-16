@@ -10,6 +10,15 @@ import { WorkbookResolver, type DriveItemRef } from './workbookResolver.js';
 
 const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,formulas,numberFormat';
 
+/**
+ * Escapes a worksheet name for use inside an OData literal
+ * (`worksheets('<name>')`). Single quotes must be doubled, then the whole
+ * thing percent-encoded. Exported for testing.
+ */
+export function encodeWorksheetName(name: string): string {
+  return encodeURIComponent(name.replace(/'/g, "''"));
+}
+
 export interface GraphReaderOptions {
   client: GraphClient;
   resolver: WorkbookResolver;
@@ -46,7 +55,7 @@ export class GraphReader {
   }
 
   private async fetchUsedRange(accessToken: string, ref: DriveItemRef): Promise<RawUsedRange> {
-    const ws = encodeURIComponent(this.opts.worksheetName);
+    const ws = encodeWorksheetName(this.opts.worksheetName);
     const path =
       `/drives/${ref.driveId}/items/${ref.itemId}/workbook/worksheets('${ws}')` +
       `/usedRange?$select=${USED_RANGE_SELECT}`;

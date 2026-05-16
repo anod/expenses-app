@@ -1,5 +1,8 @@
 <header class="app-header">
   <div class="brand">Expenses</div>
+  @if (auth.initError(); as err) {
+    <div class="init-error" role="alert">{{ err }}</div>
+  }
   @if (auth.enabled()) {
     @if (auth.isSignedIn()) {
       <div class="user">

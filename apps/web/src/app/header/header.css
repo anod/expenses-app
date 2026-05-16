@@ -55,3 +55,11 @@ button.primary:hover {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.init-error {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.6rem;
+  background: #7f1d1d;
+  color: #fef2f2;
+  border-radius: 4px;
+}

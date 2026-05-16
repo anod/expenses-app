@@ -20,9 +20,12 @@ export class AuthService {
   private pca: PublicClientApplication | null = null;
   private auth: AuthConfig | null = null;
   private inFlightToken: Promise<string | null> | null = null;
+  private inFlightRefresh: Promise<string | null> | null = null;
 
   private readonly _account = signal<AccountInfo | null>(null);
+  private readonly _initError = signal<string | null>(null);
   readonly account = this._account.asReadonly();
+  readonly initError = this._initError.asReadonly();
   readonly isSignedIn = computed(() => this._account() !== null);
   readonly displayName = computed(() => {
     const a = this._account();
@@ -52,8 +55,14 @@ export class AuthService {
     const result = await this.pca.handleRedirectPromise();
     if (result?.account) {
       this.pca.setActiveAccount(result.account);
-      // Strip the auth code from the URL so refreshes don't try to replay it.
-      window.history.replaceState({}, document.title, window.location.pathname);
+      // Strip the auth code/state from the URL so refreshes don't replay it.
+      // Preserve the path and fragment; only the query string carries the
+      // auth response.
+      window.history.replaceState(
+        {},
+        document.title,
+        window.location.pathname + window.location.hash,
+      );
     }
     const active = this.pca.getActiveAccount() ?? this.pca.getAllAccounts()[0] ?? null;
     if (active) this.pca.setActiveAccount(active);
@@ -90,15 +99,31 @@ export class AuthService {
     }
   }
 
-  /** Force a fresh token (e.g. after a 401). */
+  /** Marks an init failure so the UI can show a visible error banner. */
+  setInitError(message: string | null): void {
+    this._initError.set(message);
+  }
+
+  /** Force a fresh token (e.g. after a 401). Deduplicated across callers. */
   async refreshToken(): Promise<string | null> {
     if (!this.pca || !this.auth) return null;
-    const account = this.pca.getActiveAccount();
+    if (this.inFlightRefresh) return this.inFlightRefresh;
+    const promise = this.doRefresh();
+    this.inFlightRefresh = promise;
+    try {
+      return await promise;
+    } finally {
+      this.inFlightRefresh = null;
+    }
+  }
+
+  private async doRefresh(): Promise<string | null> {
+    const account = this.pca!.getActiveAccount();
     if (!account) return null;
     try {
-      const result = await this.pca.acquireTokenSilent({
+      const result = await this.pca!.acquireTokenSilent({
         account,
-        scopes: this.auth.scopes,
+        scopes: this.auth!.scopes,
         forceRefresh: true,
       });
       return this.handleResult(result);

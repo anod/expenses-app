@@ -23,7 +23,12 @@ export const appConfig: ApplicationConfig = {
         const config = await firstValueFrom(http.get<ApiConfig>('/api/config'));
         await auth.initialize(config);
       } catch (err) {
+        const message =
+          err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Unable to reach the API';
         console.error('Failed to initialize auth from /api/config', err);
+        auth.setInitError(`Failed to load app config: ${message}`);
       }
     }),
   ],
