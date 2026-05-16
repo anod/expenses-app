@@ -24,7 +24,7 @@ interface AnchorItem {
 }
 
 type TimelineItem = ChargeItem | AnchorItem;
-type ChannelFilter = 'all' | 'bank' | 'cc';
+type ChannelFilter = 'all' | 'bank' | 'cc' | 'anchors';
 
 interface CardSummary {
   cardId: string;
@@ -130,12 +130,12 @@ export class ForecastHomeComponent {
     const filter = this.channelFilter();
     const items: TimelineItem[] = [];
     for (const day of f.days) {
-      // Charges first, then anchor at the end of the day. This makes the
-      // anchor row visually the "closing balance" after the day's expenses.
-      for (const c of day.charges) {
-        const row = this.toChargeItem(day.date, c);
-        if (filter === 'all' || row.channel === filter) {
-          items.push(row);
+      if (filter !== 'anchors') {
+        for (const c of day.charges) {
+          const row = this.toChargeItem(day.date, c);
+          if (filter === 'all' || row.channel === filter) {
+            items.push(row);
+          }
         }
       }
       if (day.isAnchor) {
