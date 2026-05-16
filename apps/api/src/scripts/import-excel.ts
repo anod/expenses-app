@@ -71,7 +71,7 @@ interface ImportSummary {
   skippedRows: { label: string; reason: string }[];
 }
 
-const skipLabels = new Set(['карта остаток', 'карта потрачено']);
+const skipLabels = new Set(['карта потрачено']);
 
 const pad = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -115,7 +115,7 @@ const partitionRows = (
   const skipped: { label: string; reason: string }[] = [];
 
   for (const row of rows) {
-    if (row.kind === 'derived') {
+    if (row.kind === 'derived' && row.labelTrimmed !== 'карта остаток') {
       skipped.push({ label: row.labelTrimmed, reason: 'derived row' });
       continue;
     }
@@ -126,14 +126,6 @@ const partitionRows = (
       });
       continue;
     }
-    if (row.day == null) {
-      skipped.push({
-        label: row.labelTrimmed,
-        reason: 'no day-of-month; cannot schedule',
-      });
-      continue;
-    }
-
     const nonNullValues = monthKeys
       .map((k) => row.amounts[k]?.value)
       .filter((v): v is number => typeof v === 'number');
@@ -151,7 +143,9 @@ const partitionRows = (
     const presentEveryMonth = monthKeys.every(
       (k) => typeof row.amounts[k]?.value === 'number',
     );
-    if (allEqual && nonNullValues.length >= 2 && presentEveryMonth) {
+    // Recurring requires a day-of-month (cadence anchor). Day-null rows fall
+    // through to the variable path which schedules per-column.
+    if (row.day != null && allEqual && nonNullValues.length >= 2 && presentEveryMonth) {
       recurringRows.push(row);
     } else {
       variableRows.push(row);
@@ -385,15 +379,37 @@ const main = async (): Promise<void> => {
     cardsCreated++;
   }
 
-  const channelForRow = (row: ExpenseRow): 'bank' | `cc:${string}` => {
-    const src = row.source.toLowerCase();
-    // "{source} debt" rows are direct bank-to-card installment/debt payments,
-    // not card purchases, so they hit the bank directly on row.day.
-    if (/\bdebt\b/i.test(row.labelTrimmed)) return 'bank';
-    if (src in CREDIT_CARD_SOURCES && cardSourcesPresent.has(src)) {
-      return `cc:${src}`;
-    }
+  const channelForRow = (_row: ExpenseRow): 'bank' => {
+    // Excel models every expense (including credit-card purchases) as an
+    // immediate bank delta within the column's [prior-anchor, next-anchor]
+    // period. We mirror that: imported rows always hit the bank channel.
+    // The cc-channel pipeline routing remains available for user-created
+    // entries via the UI.
     return 'bank';
+  };
+
+  // Maps an Excel column (whose header date is an anchor, e.g. "2026-05" =>
+  // 10-May-2026) plus a day-of-month into the first occurrence of that day
+  // strictly within the period (anchor, anchor + 1 month]. Day-null rows
+  // schedule at the next anchor (default day = anchorDay).
+  const anchorDay = 10;
+  const scheduleDateForColumn = (
+    monthKey: string,
+    day: number | null,
+  ): string => {
+    const d = day ?? anchorDay;
+    const [yStr, mStr] = monthKey.split('-');
+    let year = Number(yStr);
+    let month = Number(mStr);
+    if (d <= anchorDay) {
+      month += 1;
+      if (month > 12) {
+        month -= 12;
+        year += 1;
+      }
+    }
+    const clamped = Math.min(d, daysInMonth(year, month));
+    return `${year}-${pad(month)}-${pad(clamped)}`;
   };
 
   const { recurringRows, variableRows, skipped } = partitionRows(
@@ -415,6 +431,34 @@ const main = async (): Promise<void> => {
   let recurringCreated = 0;
   let ledgerCreated = 0;
 
+  // ----- Card spend ledger entries -----------------------------------------
+  // Each «карта потрачено» row has a value per anchor column representing the
+  // bank pull on that card's next billing day. The first month is already
+  // baked into `currentDebit`; remaining months become ledger entries on the
+  // card's billing day within each column's period.
+  for (const cardId of cardSourcesPresent) {
+    const def = CREDIT_CARD_SOURCES[cardId]!;
+    const row = cardSpentRows.find((r) => r.source.toLowerCase() === cardId);
+    if (!row) continue;
+    for (let i = 1; i < snap.months.length; i++) {
+      const m = snap.months[i]!;
+      const v = row.amounts[m.key]?.value;
+      if (typeof v !== 'number' || v === 0) continue;
+      const date = scheduleDateForColumn(m.key, def.billingDay);
+      const id = uniqueId(`l-${cardId}-bill-${m.key.slice(0, 7)}`);
+      const entry: LedgerEntry = {
+        id,
+        description: `${def.name} bill`,
+        amount: v,
+        channel: 'bank',
+        date,
+        status: 'pending',
+      };
+      repo.upsertLedger(entry);
+      ledgerCreated++;
+    }
+  }
+
   for (const row of recurringRows) {
     const amount = row.amounts[firstMonth.key]?.value;
     if (typeof amount !== 'number' || row.day == null) continue;
@@ -434,12 +478,11 @@ const main = async (): Promise<void> => {
   }
 
   for (const row of variableRows) {
-    if (row.day == null) continue;
     const channel = channelForRow(row);
     for (const m of snap.months) {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
-      const date = clampedDate(m.key, row.day);
+      const date = scheduleDateForColumn(m.key, row.day);
       const id = uniqueId(`l-${sanitizeId(row.labelTrimmed)}-${m.key.slice(0, 7)}`);
       const entry: LedgerEntry = {
         id,
