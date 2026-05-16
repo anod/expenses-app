@@ -144,16 +144,14 @@ persists. The migrations runner reapplies any new schema files on boot.
 
 ## 9. Demo mode
 
-To show the app to others without exposing real data, run a second instance:
+Demo mode is toggled from the in-app **Settings** page. When on, the API
+serves deterministic funny fake data from an in-memory SQLite; the real
+`/data/expenses.db` is not touched. The toggle state persists as
+`/data/demo-mode.json` so a restart preserves whichever mode you were in
+(fake-data edits themselves do not persist).
 
-```sh
-DEMO_MODE=true PORT=4001 docker compose -p expenses-demo -f compose.deploy.yml \
-  up -d --build
-```
-
-Or set `DEMO_MODE=true` in `.env.prod` for a single-instance demo. In demo
-mode the container uses an in-memory SQLite seeded with funny fake data;
-nothing is written to `/data`.
+Use demo mode to show the app to others without exposing real finances,
+or to take screenshots. Excel sync is disabled while demo mode is on.
 
 ## Troubleshooting
 

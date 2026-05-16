@@ -37,7 +37,40 @@ export class SettingsPageComponent {
   protected readonly syncResult = signal<SyncResultView | null>(null);
   protected readonly syncError = signal<string | null>(null);
 
-  constructor() { void this.load(); }
+  protected readonly demoEnabled = signal(false);
+  protected readonly demoBusy = signal(false);
+  protected readonly demoError = signal<string | null>(null);
+
+  constructor() {
+    void this.load();
+    void this.loadDemo();
+  }
+
+  protected async loadDemo(): Promise<void> {
+    try {
+      const r = await firstValueFrom(this.api.getDemo());
+      this.demoEnabled.set(r.enabled);
+    } catch {
+      // non-fatal — older servers may not expose this endpoint
+    }
+  }
+
+  protected async toggleDemo(enabled: boolean): Promise<void> {
+    if (this.demoBusy()) return;
+    this.demoBusy.set(true);
+    this.demoError.set(null);
+    try {
+      const r = await firstValueFrom(this.api.setDemo(enabled));
+      this.demoEnabled.set(r.enabled);
+      // Force a clean reload so /api/config, auth state, header badge,
+      // and all in-memory caches re-initialize against the new source.
+      window.location.reload();
+    } catch (err) {
+      this.demoError.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.demoBusy.set(false);
+    }
+  }
 
   protected async load(): Promise<void> {
     this.loading.set(true);

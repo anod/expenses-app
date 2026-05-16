@@ -49,6 +49,31 @@
       </div>
     </div>
 
+    <div class="m3-card demo-card">
+      <header class="sync-head">
+        <span class="material-symbols-outlined sync-icon">science</span>
+        <div>
+          <h2>Demo mode</h2>
+          <p>Replace the live data with deterministic fake data (in-memory only). Your real database is not touched. Toggling will reload the app.</p>
+        </div>
+      </header>
+      <label class="demo-toggle">
+        <input
+          type="checkbox"
+          [checked]="demoEnabled()"
+          [disabled]="demoBusy()"
+          (change)="toggleDemo($any($event.target).checked)"
+        />
+        <span>{{ demoEnabled() ? 'Demo mode is ON' : 'Demo mode is OFF' }}</span>
+      </label>
+      @if (demoError(); as e) {
+        <div class="sync-status error">
+          <span class="material-symbols-outlined">error</span>
+          {{ e }}
+        </div>
+      }
+    </div>
+
     <div class="m3-card sync-card">
       <header class="sync-head">
         <span class="material-symbols-outlined sync-icon">cloud_upload</span>

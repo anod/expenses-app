@@ -78,4 +78,12 @@ export class ForecastApi {
       syncedAt: string;
     }>('/api/sync/excel', body);
   }
+
+  getDemo() {
+    return this.http.get<{ enabled: boolean }>('/api/demo');
+  }
+
+  setDemo(enabled: boolean) {
+    return this.http.post<{ enabled: boolean }>('/api/demo', { enabled });
+  }
 }

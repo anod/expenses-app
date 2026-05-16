@@ -105,3 +105,14 @@
 .sync-status.success { background: var(--md-sys-color-tertiary-container, var(--md-sys-color-secondary-container)); color: var(--md-sys-color-on-tertiary-container, var(--md-sys-color-on-secondary-container)); }
 .sync-status.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .sync-status.info { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant); }
+
+.demo-card { display: flex; flex-direction: column; gap: 0.75rem; }
+.demo-toggle {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  font: var(--md-sys-typescale-body-large);
+  cursor: pointer;
+}
+.demo-toggle input[type="checkbox"] {
+  width: 1.1rem; height: 1.1rem; accent-color: var(--md-sys-color-primary);
+}
+.demo-toggle input[disabled] { cursor: progress; }

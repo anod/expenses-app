@@ -12,11 +12,22 @@ const syncBodySchema = z
   })
   .strict();
 
-export const buildSyncRoutes = (repo: StateRepo, writer: ExcelWriter | null): Router => {
+export const buildSyncRoutes = (
+  getRepo: () => StateRepo,
+  writer: ExcelWriter | null,
+  isDemo: () => boolean,
+): Router => {
   const router = Router();
 
   router.post('/sync/excel', requireBearer, async (req, res, next) => {
     try {
+      if (isDemo()) {
+        res.status(409).json({
+          error: 'DEMO_MODE_ACTIVE',
+          message: 'Excel sync is disabled while demo mode is on. Turn off demo mode in Settings to sync.',
+        });
+        return;
+      }
       if (!writer) {
         res.status(503).json({
           error: 'GRAPH_NOT_CONFIGURED',
@@ -30,6 +41,7 @@ export const buildSyncRoutes = (repo: StateRepo, writer: ExcelWriter | null): Ro
         return;
       }
       const mode: SyncMode = parsed.data.mode ?? 'overwrite';
+      const repo = getRepo();
       const state = {
         account: repo.getAccount(),
         cards: repo.listCards(),

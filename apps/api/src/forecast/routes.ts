@@ -34,36 +34,36 @@ const validateNoFutureAsOf = (asOf: string, today: string, what: string): void =
  * Builds the mutation routes. Each mutation returns the fresh ForecastResult
  * as a piggy-back so the client only needs one round-trip.
  */
-export const buildForecastRoutes = (repo: StateRepo): Router => {
+export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   const router = Router();
 
-  const today = (): string => todayInZone(repo.getSettings().timezone);
+  const today = (): string => todayInZone(getRepo().getSettings().timezone);
 
   const withForecast = <T>(res: import('express').Response, payload: T): void => {
-    res.json({ entity: payload, forecast: computeForecast(repo) });
+    res.json({ entity: payload, forecast: computeForecast(getRepo()) });
   };
 
   // --- account
-  router.get('/account', (_req, res) => res.json(repo.getAccount()));
+  router.get('/account', (_req, res) => res.json(getRepo().getAccount()));
   router.patch('/account', (req, res) => {
     try {
       const input = AccountInput.parse(req.body);
       validateNoFutureAsOf(input.asOf, today(), 'account');
-      repo.upsertAccount(input);
-      withForecast(res, repo.getAccount());
+      getRepo().upsertAccount(input);
+      withForecast(res, getRepo().getAccount());
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
   });
 
   // --- cards
-  router.get('/cards', (_req, res) => res.json(repo.listCards()));
+  router.get('/cards', (_req, res) => res.json(getRepo().listCards()));
   router.post('/cards', (req, res) => {
     try {
       const input = CreditCardInput.parse(req.body);
       validateNoFutureAsOf(input.asOf, today(), 'card');
       const card = { ...input, id: input.id ?? randomUUID() };
-      repo.upsertCard(card);
+      getRepo().upsertCard(card);
       withForecast(res, card);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
@@ -73,19 +73,19 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
     try {
       const input = CreditCardInput.parse({ ...req.body, id: req.params.id });
       validateNoFutureAsOf(input.asOf, today(), 'card');
-      repo.upsertCard({ ...input, id: req.params.id });
-      withForecast(res, repo.listCards().find((c) => c.id === req.params.id) ?? null);
+      getRepo().upsertCard({ ...input, id: req.params.id });
+      withForecast(res, getRepo().listCards().find((c) => c.id === req.params.id) ?? null);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
   });
   router.delete('/cards/:id', (req, res) => {
-    repo.deleteCard(req.params.id);
-    res.json({ forecast: computeForecast(repo) });
+    getRepo().deleteCard(req.params.id);
+    res.json({ forecast: computeForecast(getRepo()) });
   });
 
   // --- ledger
-  router.get('/ledger', (_req, res) => res.json(repo.listLedger()));
+  router.get('/ledger', (_req, res) => res.json(getRepo().listLedger()));
   router.post('/ledger', (req, res) => {
     try {
       const input = LedgerEntryInput.parse(req.body);
@@ -99,7 +99,7 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
         ...(input.recurringId != null ? { recurringId: input.recurringId } : {}),
         ...(input.occurrenceKey != null ? { occurrenceKey: input.occurrenceKey } : {}),
       };
-      repo.upsertLedger(entry);
+      getRepo().upsertLedger(entry);
       withForecast(res, entry);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
@@ -118,29 +118,29 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
         ...(input.recurringId != null ? { recurringId: input.recurringId } : {}),
         ...(input.occurrenceKey != null ? { occurrenceKey: input.occurrenceKey } : {}),
       };
-      repo.upsertLedger(entry);
+      getRepo().upsertLedger(entry);
       withForecast(res, entry);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
   });
   router.post('/ledger/:id/clear', (req, res) => {
-    const all = repo.listLedger();
+    const all = getRepo().listLedger();
     const found = all.find((e) => e.id === req.params.id);
     if (!found) {
       res.status(404).json({ error: 'NOT_FOUND' });
       return;
     }
-    repo.upsertLedger({ ...found, status: 'cleared' });
+    getRepo().upsertLedger({ ...found, status: 'cleared' });
     withForecast(res, { ...found, status: 'cleared' });
   });
   router.delete('/ledger/:id', (req, res) => {
-    repo.deleteLedger(req.params.id);
-    res.json({ forecast: computeForecast(repo) });
+    getRepo().deleteLedger(req.params.id);
+    res.json({ forecast: computeForecast(getRepo()) });
   });
 
   // --- recurring
-  router.get('/recurring', (_req, res) => res.json(repo.listRecurring()));
+  router.get('/recurring', (_req, res) => res.json(getRepo().listRecurring()));
   router.post('/recurring', (req, res) => {
     try {
       const input = RecurringInput.parse(req.body);
@@ -154,7 +154,7 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
         monthEndPolicy: input.monthEndPolicy,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
-      repo.upsertRecurring(tmpl);
+      getRepo().upsertRecurring(tmpl);
       withForecast(res, tmpl);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
@@ -173,24 +173,24 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
         monthEndPolicy: input.monthEndPolicy,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
-      repo.upsertRecurring(tmpl);
-      withForecast(res, repo.listRecurring().find((t) => t.id === req.params.id) ?? null);
+      getRepo().upsertRecurring(tmpl);
+      withForecast(res, getRepo().listRecurring().find((t) => t.id === req.params.id) ?? null);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
   });
   router.delete('/recurring/:id', (req, res) => {
-    repo.deleteRecurring(req.params.id);
-    res.json({ forecast: computeForecast(repo) });
+    getRepo().deleteRecurring(req.params.id);
+    res.json({ forecast: computeForecast(getRepo()) });
   });
 
   // --- settings
-  router.get('/settings', (_req, res) => res.json(repo.getSettings()));
+  router.get('/settings', (_req, res) => res.json(getRepo().getSettings()));
   router.patch('/settings', (req, res) => {
     try {
       const input = SettingsInput.parse(req.body);
-      repo.upsertSettings(input);
-      withForecast(res, repo.getSettings());
+      getRepo().upsertSettings(input);
+      withForecast(res, getRepo().getSettings());
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
@@ -198,7 +198,7 @@ export const buildForecastRoutes = (repo: StateRepo): Router => {
 
   // --- main forecast
   router.get('/forecast', (_req, res) => {
-    res.json(computeForecast(repo));
+    res.json(computeForecast(getRepo()));
   });
 
   return router;

@@ -6,10 +6,6 @@ const Common = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('http://localhost:4200'),
   EXPENSES_SOURCE: z.enum(['graph', 'dump']).default('graph'),
-  DEMO_MODE: z
-    .union([z.string(), z.boolean()])
-    .default(false)
-    .transform((v) => v === true || /^(1|true|yes|on)$/i.test(String(v))),
   SERVE_SPA: z
     .union([z.string(), z.boolean()])
     .default(false)
@@ -55,9 +51,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!dump.success) bail(dump.error);
 
   const base = { ...common.data, ...dump.data };
-
-  // Demo mode forces dump-source semantics (no Graph, no real DB writes).
-  if (base.DEMO_MODE) return { ...base, EXPENSES_SOURCE: 'dump' };
 
   if (base.EXPENSES_SOURCE === 'dump') return base;
 

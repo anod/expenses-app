@@ -17,7 +17,7 @@ const mkApp = () => {
   const repo = new StateRepo(db);
   const app = express();
   app.use(express.json());
-  app.use('/api', buildForecastRoutes(repo));
+  app.use('/api', buildForecastRoutes(() => repo));
   return { app, repo };
 };
 

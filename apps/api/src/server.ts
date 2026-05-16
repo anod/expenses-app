@@ -19,7 +19,8 @@ import { ExcelWriter } from './graph/excelWriter.js';
 import { requireBearer } from './auth.js';
 import { openDb } from './db/openDb.js';
 import { StateRepo } from './db/stateRepo.js';
-import { buildDemoState } from './demo/seed.js';
+import { DemoController } from './demo/demoController.js';
+import { buildDemoRoutes } from './demo/routes.js';
 import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
 import { buildSyncRoutes } from './sync/routes.js';
@@ -75,27 +76,18 @@ log.info(
 // Adapters
 const dumpReader = new DumpReader(resolve(repoRoot, config.DUMPS_DIR), log);
 
-const dbPath = config.DEMO_MODE ? ':memory:' : resolve(repoRoot, config.DB_PATH);
+const dbPath = resolve(repoRoot, config.DB_PATH);
 const db = openDb({ path: dbPath });
 const stateRepo = new StateRepo(db);
-if (config.DEMO_MODE) {
-  const demo = buildDemoState();
-  stateRepo.upsertAccount(demo.account);
-  stateRepo.upsertSettings(demo.settings);
-  for (const c of demo.cards) stateRepo.upsertCard(c);
-  for (const r of demo.recurring) stateRepo.upsertRecurring(r);
-  for (const e of demo.ledger) stateRepo.upsertLedger(e);
-  log.warn(
-    { cards: demo.cards.length, recurring: demo.recurring.length, ledger: demo.ledger.length },
-    'DEMO MODE: serving in-memory fake data; real DB is not touched',
-  );
-} else {
-  log.info({ dbPath }, 'sqlite ready');
-}
+log.info({ dbPath }, 'sqlite ready');
+
+const demoController = new DemoController(stateRepo, dbPath, log);
+const getRepo = (): StateRepo => demoController.getRepo();
+const isDemo = (): boolean => demoController.isActive();
 
 let graphReader: GraphReader | null = null;
 let excelWriter: ExcelWriter | null = null;
-if (isGraphConfig(config) && !config.DEMO_MODE) {
+if (isGraphConfig(config)) {
   const graphClient = new GraphClient({
     baseUrl: config.GRAPH_BASE_URL,
     log,
@@ -134,12 +126,12 @@ app.get('/healthz', (_req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     source: config.EXPENSES_SOURCE,
-    demo: config.DEMO_MODE,
+    demo: isDemo(),
   });
 });
 
 app.get('/api/config', (_req, res) => {
-  if (config.DEMO_MODE) {
+  if (isDemo()) {
     res.json({ source: 'demo', auth: null, demo: true });
     return;
   }
@@ -158,14 +150,19 @@ app.get('/api/config', (_req, res) => {
   }
 });
 
-const protectApi = config.REQUIRE_AUTH && isGraphConfig(config) && !config.DEMO_MODE;
+// Demo toggle is intentionally unauthenticated for personal-use simplicity:
+// when REQUIRE_AUTH is on, the tailnet is the perimeter and only the owner
+// can reach the box. Mount before /api auth gating so it stays reachable.
+app.use('/api', buildDemoRoutes(demoController));
+
+const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
 if (protectApi) {
-  app.use('/api', requireBearer, buildForecastRoutes(stateRepo));
-  app.use('/api', requireBearer, buildSyncRoutes(stateRepo, excelWriter));
+  app.use('/api', requireBearer, buildForecastRoutes(getRepo));
+  app.use('/api', requireBearer, buildSyncRoutes(getRepo, excelWriter, isDemo));
   log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer');
 } else {
-  app.use('/api', buildForecastRoutes(stateRepo));
-  app.use('/api', buildSyncRoutes(stateRepo, excelWriter));
+  app.use('/api', buildForecastRoutes(getRepo));
+  app.use('/api', buildSyncRoutes(getRepo, excelWriter, isDemo));
 }
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
