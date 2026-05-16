@@ -1,45 +1,154 @@
-<section class="forecast-home">
-  <h1>Forecast</h1>
-
+<section class="page">
   @if (loading()) {
-    <p>Loading…</p>
-  } @else if (error(); as e) {
-    <p class="error">Failed to load forecast: {{ e }}</p>
-  } @else if (forecast(); as f) {
-    <div class="summary" [class.status-safe]="f.status === 'safe'"
-                       [class.status-warning]="f.status === 'warning'"
-                       [class.status-breach]="f.status === 'breach'">
-      <div class="status">{{ f.status }}</div>
-      <div class="kpi">
-        <div class="label">Horizon</div>
-        <div class="value">{{ f.startDate }} → {{ f.endDate }}</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Min balance</div>
-        <div class="value">{{ fmt(f.minBalance) }}</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Min on</div>
-        <div class="value">{{ f.minBalanceDate }}</div>
-      </div>
+    <div class="m3-card loading">
+      <span class="material-symbols-outlined spin">progress_activity</span>
+      Loading forecast…
     </div>
+  } @else if (error(); as e) {
+    <div class="m3-card error-card">
+      <span class="material-symbols-outlined">error</span>
+      <div>
+        <h3>Failed to load forecast</h3>
+        <p>{{ e }}</p>
+      </div>
+      <button class="m3-btn m3-btn--filled" (click)="load()">
+        <span class="material-symbols-outlined">refresh</span>
+        Retry
+      </button>
+    </div>
+  } @else if (forecast(); as f) {
+    <!-- Hero status card -->
+    <section
+      class="hero-card"
+      [class.status-safe]="f.status === 'safe'"
+      [class.status-warning]="f.status === 'warning'"
+      [class.status-breach]="f.status === 'breach'"
+    >
+      <div class="hero-head">
+        <span class="m3-status" [class.m3-status--safe]="f.status === 'safe'"
+                                [class.m3-status--warning]="f.status === 'warning'"
+                                [class.m3-status--breach]="f.status === 'breach'">
+          <span class="material-symbols-outlined">
+            {{ f.status === 'breach' ? 'warning' : f.status === 'warning' ? 'priority_high' : 'check_circle' }}
+          </span>
+          {{ statusCopy().label }}
+        </span>
+        <button class="m3-btn m3-btn--icon" (click)="load()" title="Refresh">
+          <span class="material-symbols-outlined">refresh</span>
+        </button>
+      </div>
 
-    <h2>Anchor dates (10th of month)</h2>
-    <table class="anchors">
-      <thead>
-        <tr><th>Date</th><th>Balance</th><th>Charges</th></tr>
-      </thead>
-      <tbody>
-        @for (day of f.days; track day.date) {
-          @if (day.isAnchor) {
-            <tr>
-              <td>{{ day.date }}</td>
+      <div class="hero-body">
+        <div class="kpi kpi--lead">
+          <span class="kpi-label">Minimum balance</span>
+          <span class="kpi-value">{{ fmt(f.minBalance) }}</span>
+          <span class="kpi-meta">on {{ fmtDate(f.minBalanceDate) }}</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Horizon</span>
+          <span class="kpi-value-sm">{{ fmtDate(f.startDate) }} → {{ fmtDate(f.endDate) }}</span>
+          <span class="kpi-meta">{{ f.days.length }} days</span>
+        </div>
+        @if (settings(); as s) {
+          <div class="kpi">
+            <span class="kpi-label">Safety threshold</span>
+            <span class="kpi-value-sm">{{ fmt(s.threshold) }}</span>
+            <span class="kpi-meta">{{ statusCopy().subtitle }}</span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Chart card -->
+    <section class="m3-card chart-card">
+      <header class="card-header">
+        <h2>
+          <span class="material-symbols-outlined">show_chart</span>
+          Projected balance
+        </h2>
+      </header>
+      <app-balance-chart
+        [days]="f.days"
+        [threshold]="settings()?.threshold ?? null"
+        [minBalanceDate]="f.minBalanceDate"
+      />
+    </section>
+
+    <!-- Anchor dates -->
+    <section class="m3-card">
+      <header class="card-header">
+        <h2>
+          <span class="material-symbols-outlined">flag</span>
+          Anchor dates
+        </h2>
+        <span class="hint">10th of each month — mortgage cycle</span>
+      </header>
+      <table class="m3-table">
+        <thead>
+          <tr><th>Date</th><th>Balance</th><th>Charges</th></tr>
+        </thead>
+        <tbody>
+          @for (day of anchors(); track day.date) {
+            <tr [class.row-breach]="day.balance < (settings()?.threshold ?? 0)">
+              <td>{{ fmtDate(day.date) }}</td>
               <td class="amount">{{ fmt(day.balance) }}</td>
               <td>{{ day.charges.length }}</td>
             </tr>
+          } @empty {
+            <tr><td colspan="3" class="empty">No anchor dates in horizon.</td></tr>
           }
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Upcoming charges -->
+    <section class="m3-card">
+      <header class="card-header">
+        <h2>
+          <span class="material-symbols-outlined">event_upcoming</span>
+          Upcoming charges
+        </h2>
+        <div class="filter-chips" role="tablist">
+          <button class="m3-chip"
+                  role="tab"
+                  [attr.aria-pressed]="channelFilter() === 'all'"
+                  (click)="setFilter('all')">All</button>
+          <button class="m3-chip"
+                  role="tab"
+                  [attr.aria-pressed]="channelFilter() === 'bank'"
+                  (click)="setFilter('bank')">
+            <span class="material-symbols-outlined">account_balance</span>
+            Bank
+          </button>
+          <button class="m3-chip"
+                  role="tab"
+                  [attr.aria-pressed]="channelFilter() === 'cc'"
+                  (click)="setFilter('cc')">
+            <span class="material-symbols-outlined">credit_card</span>
+            Credit
+          </button>
+        </div>
+      </header>
+
+      <ul class="upcoming">
+        @for (row of visibleCharges(); track row.date + row.description) {
+          <li class="upcoming-row">
+            <span class="row-icon"
+                  [class.row-icon--cc]="row.channel === 'cc'">
+              <span class="material-symbols-outlined">{{ iconFor(row.channel) }}</span>
+            </span>
+            <div class="row-main">
+              <div class="row-desc">{{ row.description }}</div>
+              <div class="row-meta">{{ fmtDate(row.date) }}</div>
+            </div>
+            <div class="row-amount" [class.is-negative]="row.amount < 0">
+              {{ fmt(row.amount) }}
+            </div>
+          </li>
+        } @empty {
+          <li class="empty">No upcoming charges in this view.</li>
         }
-      </tbody>
-    </table>
+      </ul>
+    </section>
   }
 </section>

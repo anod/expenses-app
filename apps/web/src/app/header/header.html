@@ -1,26 +1,50 @@
 <header class="app-header">
-  <div class="brand">Expenses</div>
+  <div class="brand">
+    <span class="material-symbols-outlined brand-icon">savings</span>
+    <span>Expenses</span>
+  </div>
   <nav class="nav">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Forecast</a>
-    <a routerLink="/recurring" routerLinkActive="active">Recurring</a>
-    <a routerLink="/history" routerLinkActive="active">History</a>
-    <a routerLink="/settings" routerLinkActive="active">Settings</a>
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+      <span class="material-symbols-outlined">insights</span>
+      <span class="label">Forecast</span>
+    </a>
+    <a routerLink="/recurring" routerLinkActive="active">
+      <span class="material-symbols-outlined">event_repeat</span>
+      <span class="label">Recurring</span>
+    </a>
+    <a routerLink="/history" routerLinkActive="active">
+      <span class="material-symbols-outlined">history</span>
+      <span class="label">History</span>
+    </a>
+    <a routerLink="/settings" routerLinkActive="active">
+      <span class="material-symbols-outlined">tune</span>
+      <span class="label">Settings</span>
+    </a>
   </nav>
-  @if (auth.initError(); as err) {
-    <div class="init-error" role="alert">{{ err }}</div>
-  }
-  @if (auth.enabled()) {
-    @if (auth.isSignedIn()) {
-      <div class="user">
-        <span class="who">{{ auth.displayName() }}</span>
-        <button type="button" (click)="signOut()">Sign out</button>
+  <div class="trailing">
+    @if (auth.initError(); as err) {
+      <div class="init-error" role="alert">
+        <span class="material-symbols-outlined">error</span>
+        {{ err }}
       </div>
-    } @else {
-      <button type="button" class="primary" (click)="signIn()">
-        Sign in with Microsoft
-      </button>
     }
-  } @else {
-    <span class="badge">dump mode</span>
-  }
+    @if (auth.enabled()) {
+      @if (auth.isSignedIn()) {
+        <div class="user">
+          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+          <span class="who">{{ auth.displayName() }}</span>
+          <button type="button" class="m3-btn m3-btn--icon" (click)="signOut()" title="Sign out">
+            <span class="material-symbols-outlined">logout</span>
+          </button>
+        </div>
+      } @else {
+        <button type="button" class="m3-btn m3-btn--filled" (click)="signIn()">
+          <span class="material-symbols-outlined">login</span>
+          Sign in
+        </button>
+      }
+    } @else {
+      <span class="m3-chip dump-badge">dump mode</span>
+    }
+  </div>
 </header>

@@ -1,29 +1,69 @@
-.page {
-  padding: 1rem;
-  max-width: 900px;
-  margin: 0 auto;
+.page-head { margin-bottom: 1.25rem; }
+
+.page-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.25rem;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
+.page-head h1 .material-symbols-outlined {
+  color: var(--md-sys-color-primary);
 }
 
-th, td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
-  text-align: left;
+.subtitle {
+  font: var(--md-sys-typescale-body-large);
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 0;
 }
 
-td.amount {
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.spin { animation: spin 1.2s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.error-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+}
+
+.empty-icon {
+  font-size: 56px !important;
+  font-variation-settings: 'opsz' 48 !important;
+  color: var(--md-sys-color-primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state h3 { margin: 0 0 0.25rem; }
+.empty-state p { color: var(--md-sys-color-on-surface-variant); }
+
+.channel-chip {
+  cursor: default;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.channel-chip.is-cc {
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+.m3-table .amount {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.muted {
-  color: #6b7280;
-}
-
-.error {
-  color: #991b1b;
-}
+.is-negative { color: var(--md-sys-color-error); }

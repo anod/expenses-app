@@ -1,28 +1,61 @@
 <section class="page">
-  <h1>Recurring templates</h1>
+  <header class="page-head">
+    <h1>
+      <span class="material-symbols-outlined">event_repeat</span>
+      Recurring templates
+    </h1>
+    <p class="subtitle">Scheduled income and expenses that repeat every month.</p>
+  </header>
+
   @if (loading()) {
-    <p>Loading…</p>
+    <div class="m3-card loading">
+      <span class="material-symbols-outlined spin">progress_activity</span>
+      Loading…
+    </div>
   } @else if (error(); as e) {
-    <p class="error">{{ e }}</p>
+    <div class="m3-card error-card">
+      <span class="material-symbols-outlined">error</span>
+      {{ e }}
+    </div>
   } @else if (templates().length === 0) {
-    <p class="muted">No recurring templates yet. Editing will be added in Wave 2e.</p>
+    <div class="m3-card empty-state">
+      <span class="material-symbols-outlined empty-icon">event_busy</span>
+      <h3>No recurring templates yet</h3>
+      <p>Editing will be added in Wave 2e.</p>
+    </div>
   } @else {
-    <table>
-      <thead>
-        <tr><th>Description</th><th>Channel</th><th>Day</th><th>Amount</th><th>Start</th><th>End</th></tr>
-      </thead>
-      <tbody>
-        @for (t of templates(); track t.id) {
+    <div class="m3-card">
+      <table class="m3-table">
+        <thead>
           <tr>
-            <td>{{ t.description }}</td>
-            <td>{{ t.channel }}</td>
-            <td>{{ t.day }}</td>
-            <td class="amount">{{ t.amount }}</td>
-            <td>{{ t.startDate }}</td>
-            <td>{{ t.endDate ?? '—' }}</td>
+            <th>Description</th>
+            <th>Channel</th>
+            <th>Day</th>
+            <th class="amount">Amount</th>
+            <th>Start</th>
+            <th>End</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (t of templates(); track t.id) {
+            <tr>
+              <td>{{ t.description }}</td>
+              <td>
+                <span class="m3-chip channel-chip" [class.is-cc]="t.channel !== 'bank'">
+                  <span class="material-symbols-outlined">
+                    {{ t.channel === 'bank' ? 'account_balance' : 'credit_card' }}
+                  </span>
+                  {{ t.channel }}
+                </span>
+              </td>
+              <td>{{ t.day }}</td>
+              <td class="amount" [class.is-negative]="t.amount < 0">{{ t.amount }}</td>
+              <td>{{ t.startDate }}</td>
+              <td>{{ t.endDate ?? '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 </section>

@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import type { RecurringTemplate } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -7,7 +6,6 @@ import { ForecastApi } from '../forecast/forecast.api';
 @Component({
   selector: 'app-recurring-page',
   standalone: true,
-  imports: [CommonModule],
   templateUrl: './recurring-page.html',
   styleUrl: './recurring-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

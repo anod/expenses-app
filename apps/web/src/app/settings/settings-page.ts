@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import type { Settings } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -7,7 +6,6 @@ import { ForecastApi } from '../forecast/forecast.api';
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [CommonModule],
   templateUrl: './settings-page.html',
   styleUrl: './settings-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

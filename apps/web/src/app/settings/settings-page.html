@@ -1,20 +1,52 @@
 <section class="page">
-  <h1>Settings</h1>
+  <header class="page-head">
+    <h1>
+      <span class="material-symbols-outlined">tune</span>
+      Settings
+    </h1>
+    <p class="subtitle">Forecasting preferences. Editing comes in Wave 2e.</p>
+  </header>
+
   @if (loading()) {
-    <p>Loading…</p>
+    <div class="m3-card loading">
+      <span class="material-symbols-outlined spin">progress_activity</span>
+      Loading…
+    </div>
   } @else if (error(); as e) {
-    <p class="error">{{ e }}</p>
+    <div class="m3-card error-card">
+      <span class="material-symbols-outlined">error</span>
+      {{ e }}
+    </div>
   } @else if (settings(); as s) {
-    <dl>
-      <dt>Threshold</dt>
-      <dd>{{ s.threshold }}</dd>
-      <dt>Timezone</dt>
-      <dd>{{ s.timezone }}</dd>
-      <dt>Horizon (months)</dt>
-      <dd>{{ s.horizonMonths }}</dd>
-      <dt>Currency</dt>
-      <dd>{{ s.currency }}</dd>
-    </dl>
-    <p class="muted">Editing will be added in Wave 2e.</p>
+    <div class="settings-grid">
+      <div class="m3-card setting">
+        <span class="material-symbols-outlined setting-icon">shield</span>
+        <div>
+          <div class="setting-label">Safety threshold</div>
+          <div class="setting-value">{{ s.threshold }}</div>
+        </div>
+      </div>
+      <div class="m3-card setting">
+        <span class="material-symbols-outlined setting-icon">schedule</span>
+        <div>
+          <div class="setting-label">Timezone</div>
+          <div class="setting-value">{{ s.timezone }}</div>
+        </div>
+      </div>
+      <div class="m3-card setting">
+        <span class="material-symbols-outlined setting-icon">date_range</span>
+        <div>
+          <div class="setting-label">Horizon</div>
+          <div class="setting-value">{{ s.horizonMonths }} months</div>
+        </div>
+      </div>
+      <div class="m3-card setting">
+        <span class="material-symbols-outlined setting-icon">payments</span>
+        <div>
+          <div class="setting-label">Currency</div>
+          <div class="setting-value">{{ s.currency }}</div>
+        </div>
+      </div>
+    </div>
   }
 </section>

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 
@@ -11,6 +11,13 @@ import { AuthService } from '../auth/auth.service';
 })
 export class HeaderComponent {
   protected readonly auth = inject(AuthService);
+
+  protected readonly initials = computed(() => {
+    const name = this.auth.displayName();
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
+  });
 
   protected async signIn(): Promise<void> {
     try {
