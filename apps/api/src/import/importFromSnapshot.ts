@@ -190,11 +190,41 @@ export function importFromSnapshot(
     snap.rows.map((r) => r.source.toLowerCase()).filter((s) => s in CREDIT_CARD_SOURCES),
   );
   const cardSpentRows = snap.rows.filter((r) => r.labelTrimmed === 'карта потрачено');
+  /**
+   * Opening debit for a card.
+   *
+   * Excel's column delta is the SUM of every row in that column —
+   * itemised cc rows AND a (manual) «карта потрачено» entry alike.
+   * To make our forecast's bank effect for the first column match
+   * Excel exactly, `currentDebit` must capture BOTH contributions:
+   *
+   *   currentDebit(card) = | «карта потрачено» first-month value |
+   *                       + Σ | itemised cc-source rows in the first
+   *                             column for this card (excluding the
+   *                             «карта потрачено» row itself) |
+   *
+   * Those itemised rows are simultaneously SKIPPED from variable/
+   * recurring imports (see below), so each charge is counted exactly
+   * once — folded into `currentDebit` rather than duplicated as a
+   * separate cc ledger entry. From the second column onwards the
+   * forecast pipeline derives bills from itemised cc charges directly.
+   */
   const debitForCard = (cardId: string): number => {
-    const row = cardSpentRows.find((r) => r.source.toLowerCase() === cardId);
-    if (!row) return 0;
-    const v = row.amounts[firstMonth.key]?.value;
-    return typeof v === 'number' ? Math.abs(v) : 0;
+    let total = 0;
+    const manual = cardSpentRows.find((r) => r.source.toLowerCase() === cardId);
+    if (manual) {
+      const v = manual.amounts[firstMonth.key]?.value;
+      if (typeof v === 'number') total += Math.abs(v);
+    }
+    for (const r of snap.rows) {
+      if (r.kind !== 'expense') continue;
+      if (r.labelTrimmed === 'карта потрачено') continue;
+      if (r.source.toLowerCase() !== cardId) continue;
+      const v = r.amounts[firstMonth.key]?.value;
+      if (typeof v !== 'number') continue;
+      total += Math.abs(v);
+    }
+    return total;
   };
 
   let cardsCreated = 0;
@@ -231,15 +261,31 @@ export function importFromSnapshot(
   // Channel routing: rows whose `source` is a recognised credit card
   // (cal/isra) are routed to that card's cc channel so the forecast
   // pipeline rolls them up into the next billing day. All other rows
-  // hit the bank directly. Pre-asOf card debt is carried via the
-  // card's `currentDebit` (seeded above from first-month «карта потрачено»);
-  // because cc entries are dated strictly AFTER asOf (see
-  // scheduleDateForColumn), they never overlap with that carry-over.
+  // hit the bank directly.
+  //
+  // Period semantics — crucial for parity with Excel:
+  //   • The first column's «карта потрачено» seeds `card.currentDebit`.
+  //     That value is the SUM of all itemised first-column cal/isra
+  //     rows. To avoid double-counting, we therefore SKIP first-month
+  //     cc rows entirely (variable AND the first recurring occurrence)
+  //     and let `currentDebit` represent that entire period.
+  //   • For non-first columns, each column's cal/isra charges should
+  //     bill on the cycle that closes that column. We date variable cc
+  //     entries on `clampedDate(columnMonth, day)` (no anchor shift),
+  //     so they bill on the next billing day after the column month.
+  //   • For bank rows we keep the legacy `scheduleDateForColumn`
+  //     anchor-shift, which threads charges into the [anchor, anchor]
+  //     window the column represents.
   const channelForRow = (row: ExpenseRow): Channel => {
     const src = row.source.toLowerCase();
     if (src in CREDIT_CARD_SOURCES) return `cc:${src}` as Channel;
     return 'bank';
   };
+  const isCcRow = (row: ExpenseRow): boolean =>
+    row.source.toLowerCase() in CREDIT_CARD_SOURCES;
+
+  const firstMonthKey = firstMonth.key;
+  const secondMonth = snap.months[1];
 
   const { recurringRows, variableRows, skipped } = partitionRows(
     snap.rows,
@@ -275,21 +321,32 @@ export function importFromSnapshot(
   for (const row of recurringRows) {
     const amount = row.amounts[firstMonth.key]?.value;
     if (typeof amount !== 'number' || row.day == null) continue;
+    // For cc recurring, start at the SECOND month so the first
+    // occurrence (which is part of «карта потрачено» → currentDebit)
+    // isn't double-billed. Fall back to first month if the workbook
+    // only has one (in practice partitionRows requires ≥2 months,
+    // but this keeps the function total).
+    const startAnchor = isCcRow(row) && secondMonth ? secondMonth.key : firstMonthKey;
     upsertImportedRecurring(excelRecurringId(row), {
       description: describe(row),
       amount,
       channel: channelForRow(row),
       day: row.day,
-      startDate: clampedDate(firstMonth.key, row.day),
+      startDate: clampedDate(startAnchor, row.day),
       monthEndPolicy: 'clamp',
     });
   }
 
   for (const row of variableRows) {
+    const cc = isCcRow(row);
     for (const m of snap.months) {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
-      const date = scheduleDateForColumn(m.key, row.day);
+      // Skip first-month cc variable rows — already in currentDebit.
+      if (cc && m.key === firstMonthKey) continue;
+      const date = cc
+        ? clampedDate(m.key, row.day ?? anchorDay)
+        : scheduleDateForColumn(m.key, row.day);
       upsertImportedLedger(excelLedgerId(row, m.key), {
         description: describe(row),
         amount: v,

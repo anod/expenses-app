@@ -174,13 +174,17 @@ describe('importFromSnapshot — card creation', () => {
     expect(cards[0]!.asOf).toBe('2026-05-01');
   });
 
-  it('opens card debit from first-month «карта потрачено» (absolute value)', () => {
+  it('opens card debit from «карта потрачено» PLUS first-month itemised cc rows', () => {
+    // Excel's column delta sums ALL rows in the column (itemised cc rows
+    // AND «карта потрачено» alike). currentDebit must capture both so
+    // the first-period bank effect matches Excel.
     const cols = months('2026-05-01', '2026-06-01');
     const repo = newRepo();
     const snap = mkSnap({
       cols, balance: [10_000, 10_000],
       rows: [
-        mkRow(cols, { source: 'cal', day: 15, label: 'x', values: [-100, -100] }),
+        mkRow(cols, { source: 'cal', day: 15, label: 'x', values: [-100, -150] }),
+        mkRow(cols, { source: 'cal', day: 5,  label: 'y', values: [-50,  -60]  }),
         mkRow(cols, {
           source: 'cal', label: 'карта потрачено', kind: 'derived',
           values: [-1500, -2000],
@@ -189,18 +193,18 @@ describe('importFromSnapshot — card creation', () => {
     });
     importFromSnapshot(repo, snap);
     const card = repo.listCards().find((c) => c.id === 'cal')!;
-    expect(card.currentDebit).toBe(1500);
+    expect(card.currentDebit).toBe(1500 + 100 + 50); // = 1650
   });
 
-  it('opens card debit at 0 when «карта потрачено» row is absent', () => {
+  it('opens card debit at sum of first-month items when «карта потрачено» row is absent', () => {
     const cols = months('2026-05-01', '2026-06-01');
     const repo = newRepo();
     const snap = mkSnap({
       cols, balance: [10_000, 10_000],
-      rows: [mkRow(cols, { source: 'isra', day: 20, label: 'x', values: [-100, -100] })],
+      rows: [mkRow(cols, { source: 'isra', day: 20, label: 'x', values: [-75, -100] })],
     });
     importFromSnapshot(repo, snap);
-    expect(repo.listCards()[0]!.currentDebit).toBe(0);
+    expect(repo.listCards()[0]!.currentDebit).toBe(75);
   });
 
   it('purges pre-existing cards before recreating', () => {
@@ -242,7 +246,12 @@ describe('importFromSnapshot — channel routing', () => {
       cols, balance: [10_000, 10_000],
       rows: [mkRow(cols, { source: 'isra', day: 20, label: 'fuel', values: [-200, -200] })],
     }));
-    expect(repo.listRecurring().every((t) => t.channel === 'cc:isra')).toBe(true);
+    const recurring = repo.listRecurring();
+    expect(recurring.length).toBeGreaterThan(0);
+    expect(recurring.every((t) => t.channel === 'cc:isra')).toBe(true);
+    // cc recurring starts on the SECOND month to avoid double-billing
+    // the first-month occurrence (already part of currentDebit).
+    expect(recurring[0]!.startDate).toBe('2026-06-20');
   });
 
   it('routes non-cc sources (cash, onezero, …) to bank', () => {
@@ -289,6 +298,41 @@ describe('importFromSnapshot — channel routing', () => {
     }));
     const offenders = repo.listLedger().filter((e) => e.id.includes('cardbill'));
     expect(offenders).toEqual([]);
+  });
+
+  it('SKIPS first-month cc variable rows (already in currentDebit)', () => {
+    // Critical: «карта потрачено» first month is the SUM of itemised cal
+    // rows for that period. Importing those individual rows in addition
+    // to seeding currentDebit would double-bill that period.
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01');
+    const repo = newRepo();
+    importFromSnapshot(repo, mkSnap({
+      cols, balance: [10_000, 10_000, 10_000],
+      rows: [
+        mkRow(cols, { source: 'cal', day: 15, label: 'groceries',  values: [-100, -200, -300] }),
+        mkRow(cols, { source: 'cal', day: 5,  label: 'subscription', values: [-50, -60, -70] }),
+      ],
+    }));
+    const ledger = repo.listLedger().sort((a, b) => a.date.localeCompare(b.date));
+    // No ledger entry should reside in the first month (2026-05).
+    expect(ledger.every((e) => !e.date.startsWith('2026-05'))).toBe(true);
+    // Subsequent months: dates use column-month (no anchor shift), so the
+    // bill cycle that closes each column captures that column's spending.
+    expect(ledger.map((e) => e.date)).toEqual([
+      '2026-06-05', '2026-06-15', '2026-07-05', '2026-07-15',
+    ]);
+  });
+
+  it('cc variable rows in non-first months are dated within the column month', () => {
+    // Anchor-shift is NOT applied for cc rows: column=2026-06, day=5
+    // stays in June, billing on next billing day = 2026-07-02.
+    const cols = months('2026-05-01', '2026-06-01');
+    const repo = newRepo();
+    importFromSnapshot(repo, mkSnap({
+      cols, balance: [10_000, 10_000],
+      rows: [mkRow(cols, { source: 'cal', day: 5, label: 'sub', values: [-50, -60] })],
+    }));
+    expect(repo.listLedger().map((e) => e.date)).toEqual(['2026-06-05']);
   });
 });
 
@@ -585,7 +629,7 @@ describe('importFromSnapshot — settings', () => {
     const repo = newRepo();
     repo.upsertSettings({
       threshold: 9999, timezone: 'UTC', horizonMonths: 1,
-      currency: 'USD', workbookUrl: 'https://example/wb',
+      currency: 'ILS', workbookUrl: 'https://example/wb',
     });
     const cols = months('2026-05-01', '2026-06-01');
     importFromSnapshot(
@@ -662,31 +706,36 @@ describe('importFromSnapshot — golden forecast parity', () => {
     expect(day('2026-05-01')!.balance).toBe(20_000);
     expect(day('2026-05-01')!.delta).toBe(0);
 
-    // May 2: currentDebit -1_500 bills here (first billing day strictly after asOf).
-    expect(day('2026-05-02')!.delta).toBe(-1_500);
-    expect(day('2026-05-02')!.balance).toBe(18_500);
+    // May 2: currentDebit -1_600 bills here.
+    //   = |«карта потрачено» first-month -1_500|
+    //   + |itemised first-month cal groceries -100|
+    //   (first-month cc items are absorbed into currentDebit, not
+    //    duplicated as ledger entries — see the channel-routing block.)
+    expect(day('2026-05-02')!.delta).toBe(-1_600);
+    expect(day('2026-05-02')!.balance).toBe(18_400);
 
-    // May 10: mortgage virtual -5_500 → 13_000.
+    // May 10: mortgage virtual -5_500 → 12_900.
     expect(day('2026-05-10')!.delta).toBe(-5_500);
-    expect(day('2026-05-10')!.balance).toBe(13_000);
+    expect(day('2026-05-10')!.balance).toBe(12_900);
 
-    // May 15: cal groceries -100 routed to cc:cal — does NOT touch bank.
+    // May 15: NOTHING. First-month cc groceries are skipped (part of
+    // currentDebit). Balance flat.
     expect(day('2026-05-15')!.delta).toBe(0);
-    expect(day('2026-05-15')!.balance).toBe(13_000);
+    expect(day('2026-05-15')!.balance).toBe(12_900);
 
-    // Jun 1: salary virtual +15_000 → 28_000.
+    // Jun 1: salary virtual +15_000 → 27_900.
     expect(day('2026-06-01')!.delta).toBe(15_000);
-    expect(day('2026-06-01')!.balance).toBe(28_000);
+    expect(day('2026-06-01')!.balance).toBe(27_900);
 
-    // Jun 2: cc:cal bill = -100 (May 15 charge only; Jun 15 charge bills Jul 2)
-    expect(day('2026-06-02')!.delta).toBe(-100);
+    // Jun 2: NO cc bill — first-month cc charges all absorbed by currentDebit.
+    expect(day('2026-06-02')!.delta).toBe(0);
     expect(day('2026-06-02')!.balance).toBe(27_900);
 
     // Jun 10: mortgage -5_500 → 22_400.
     expect(day('2026-06-10')!.delta).toBe(-5_500);
     expect(day('2026-06-10')!.balance).toBe(22_400);
 
-    // Jun 15: cc:cal -200 → no bank delta.
+    // Jun 15: cc:cal -200 (second-month groceries) → no bank delta.
     expect(day('2026-06-15')!.delta).toBe(0);
 
     // Jul 1: salary virtual → 37_400.
