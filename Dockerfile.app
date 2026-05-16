@@ -41,6 +41,14 @@ RUN npm prune --omit=dev --workspaces --include-workspace-root
 # -----------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime
 
+LABEL org.opencontainers.image.title="expenses-app" \
+      org.opencontainers.image.description="Personal cash-flow forecasting app (Angular SPA + Express API + OneDrive Excel via Microsoft Graph)." \
+      org.opencontainers.image.source="https://github.com/anod/expenses-app" \
+      org.opencontainers.image.url="https://github.com/anod/expenses-app" \
+      org.opencontainers.image.documentation="https://github.com/anod/expenses-app/blob/main/docs/deploy.md" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="anod"
+
 ENV NODE_ENV=production \
     PORT=4000 \
     SERVE_SPA=true \

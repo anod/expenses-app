@@ -8,7 +8,7 @@ Proxmox LXC, exposed only over the user's tailnet via `tailscale serve`.
 ```
 ┌──────────────────── tailnet ────────────────────┐
 │  user's laptop/phone                            │
-│        ↓ https://expenses-host.<ts>.ts.net      │
+│        ↓ https://expenses.<ts>.ts.net           │
 │  ┌────────── Proxmox host ──────────┐           │
 │  │ ┌──────── LXC ─────────────────┐ │           │
 │  │ │ tailscaled  ─►  127.0.0.1:4000│ │           │
@@ -52,20 +52,23 @@ the hostname before deploying), open a shell into the LXC (`pct enter
 
 ```sh
 curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up --hostname alex-expenses --ssh
+tailscale up --hostname expenses --ssh
 ```
 
 The `--ssh` flag enables Tailscale SSH so you can `ssh` into the LXC
 from any tailnet device without exposing port 22 publicly.
 
+> Pick whatever hostname you like (`expenses`, `cashflow`, `<your-name>-expenses`).
+> The MagicDNS FQDN will be `<hostname>.<your-tailnet>.ts.net`.
+
 ## 3. Update the Azure app registration
 
 In the Azure portal → your app registration → **Authentication** → add an
 SPA redirect URI matching the tailnet hostname you'll give the LXC. For
-example, with `TS_HOSTNAME=alex-expenses`:
+example, with `TS_HOSTNAME=expenses`:
 
 ```
-https://alex-expenses.<your-tailnet>.ts.net
+https://expenses.<your-tailnet>.ts.net
 ```
 
 MSAL uses `window.location.origin`, so no SPA code change is needed.
@@ -81,7 +84,7 @@ Inside the LXC (`pct enter <id>`):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/anod/expenses-app/main/scripts/bootstrap-lxc.sh \
-  | TS_HOSTNAME=alex-expenses bash
+  | TS_HOSTNAME=expenses bash
 ```
 
 On first run the script will stop after creating `/opt/expenses/.env.prod`
@@ -102,7 +105,7 @@ PAT with `read:packages` to the script:
 
 ```sh
 GHCR_USER=anod GHCR_PAT=ghp_xxx \
-  TS_HOSTNAME=alex-expenses \
+  TS_HOSTNAME=expenses \
   bash bootstrap-lxc.sh
 ```
 
@@ -126,7 +129,7 @@ curl -s http://127.0.0.1:4000/api/config
 tailscale serve status
 ```
 
-Open `https://alex-expenses.<your-tailnet>.ts.net` from any tailnet
+Open `https://expenses.<your-tailnet>.ts.net` from any tailnet
 device and sign in with Microsoft.
 
 **Do not run `tailscale funnel`** unless you intend to expose the app to
