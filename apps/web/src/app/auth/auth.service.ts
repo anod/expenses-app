@@ -35,7 +35,12 @@ export class AuthService {
   /** Disabled when API is in dump mode and returns no auth config. */
   readonly enabled = computed(() => this.auth !== null);
 
+  private readonly _source = signal<ApiConfig['source']>('dump');
+  readonly source = this._source.asReadonly();
+  readonly isDemo = computed(() => this._source() === 'demo');
+
   async initialize(config: ApiConfig): Promise<void> {
+    this._source.set(config.source);
     if (config.source !== 'graph' || !config.auth) {
       return;
     }

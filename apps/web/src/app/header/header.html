@@ -44,7 +44,14 @@
         </button>
       }
     } @else {
-      <span class="m3-chip dump-badge">dump mode</span>
+      @if (auth.isDemo()) {
+        <span class="m3-chip demo-badge" title="In-memory demo data — your real workbook is not touched">
+          <span class="material-symbols-outlined">science</span>
+          demo mode
+        </span>
+      } @else {
+        <span class="m3-chip dump-badge">dump mode</span>
+      }
     }
   </div>
 </header>

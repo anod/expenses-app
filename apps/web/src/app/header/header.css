@@ -100,6 +100,18 @@
   cursor: default;
 }
 
+.demo-badge {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.demo-badge .material-symbols-outlined { font-size: 18px; }
+
 .init-error {
   display: inline-flex;
   align-items: center;

@@ -57,6 +57,12 @@
           <p>Write the current state to your OneDrive workbook. Choose a target sheet and whether to overwrite it or create a new sheet alongside. A supplementary <code>StateRaw</code> sheet is always written with the flat tables for round-trip debugging.</p>
         </div>
       </header>
+      @if (auth.isDemo()) {
+        <div class="sync-status info">
+          <span class="material-symbols-outlined">info</span>
+          Excel sync is disabled in demo mode.
+        </div>
+      } @else {
       <form [formGroup]="syncForm" (ngSubmit)="sync()" class="sync-form">
         <label class="field">
           <span>Target sheet</span>
@@ -91,6 +97,7 @@
           <span class="material-symbols-outlined">error</span>
           {{ e }}
         </div>
+      }
       }
     </div>
   }

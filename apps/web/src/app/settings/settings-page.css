@@ -104,3 +104,4 @@
 }
 .sync-status.success { background: var(--md-sys-color-tertiary-container, var(--md-sys-color-secondary-container)); color: var(--md-sys-color-on-tertiary-container, var(--md-sys-color-on-secondary-container)); }
 .sync-status.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+.sync-status.info { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface-variant); }

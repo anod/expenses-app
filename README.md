@@ -72,6 +72,11 @@ your `.env`:
 | `dump` | Latest file under `dumps/`      | No                           |
 | `graph` (default) | Live Microsoft Graph | Yes (Sign in with Microsoft) |
 
+Set `DEMO_MODE=true` to override both: the API opens an in-memory SQLite
+seeded with funny fake data (no real DB or workbook is touched). Useful for
+demos and screenshots. A **DEMO MODE** badge appears in the header.
+Writes still "work" within the in-memory DB but are forgotten on restart.
+
 In **graph mode**, the API exposes `GET /api/config` (clientId, authority,
 scopes) which the Angular app fetches at bootstrap to initialize MSAL.js
 (auth-code + PKCE). Every `/api/*` request from the browser carries a

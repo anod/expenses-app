@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Settings } from '@expenses/shared';
+import { AuthService } from '../auth/auth.service';
 import { ForecastApi } from '../forecast/forecast.api';
 
 interface SyncResultView {
@@ -23,6 +24,7 @@ interface SyncResultView {
 export class SettingsPageComponent {
   private readonly api = inject(ForecastApi);
   private readonly fb = inject(FormBuilder);
+  protected readonly auth = inject(AuthService);
   protected readonly settings = signal<Settings | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);

@@ -19,6 +19,7 @@ import { ExcelWriter } from './graph/excelWriter.js';
 import { requireBearer } from './auth.js';
 import { openDb } from './db/openDb.js';
 import { StateRepo } from './db/stateRepo.js';
+import { buildDemoState } from './demo/seed.js';
 import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
 import { buildSyncRoutes } from './sync/routes.js';
@@ -74,14 +75,27 @@ log.info(
 // Adapters
 const dumpReader = new DumpReader(resolve(repoRoot, config.DUMPS_DIR), log);
 
-const dbPath = resolve(repoRoot, config.DB_PATH);
+const dbPath = config.DEMO_MODE ? ':memory:' : resolve(repoRoot, config.DB_PATH);
 const db = openDb({ path: dbPath });
 const stateRepo = new StateRepo(db);
-log.info({ dbPath }, 'sqlite ready');
+if (config.DEMO_MODE) {
+  const demo = buildDemoState();
+  stateRepo.upsertAccount(demo.account);
+  stateRepo.upsertSettings(demo.settings);
+  for (const c of demo.cards) stateRepo.upsertCard(c);
+  for (const r of demo.recurring) stateRepo.upsertRecurring(r);
+  for (const e of demo.ledger) stateRepo.upsertLedger(e);
+  log.warn(
+    { cards: demo.cards.length, recurring: demo.recurring.length, ledger: demo.ledger.length },
+    'DEMO MODE: serving in-memory fake data; real DB is not touched',
+  );
+} else {
+  log.info({ dbPath }, 'sqlite ready');
+}
 
 let graphReader: GraphReader | null = null;
 let excelWriter: ExcelWriter | null = null;
-if (isGraphConfig(config)) {
+if (isGraphConfig(config) && !config.DEMO_MODE) {
   const graphClient = new GraphClient({
     baseUrl: config.GRAPH_BASE_URL,
     log,
@@ -116,10 +130,19 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/healthz', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), source: config.EXPENSES_SOURCE });
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    source: config.EXPENSES_SOURCE,
+    demo: config.DEMO_MODE,
+  });
 });
 
 app.get('/api/config', (_req, res) => {
+  if (config.DEMO_MODE) {
+    res.json({ source: 'demo', auth: null, demo: true });
+    return;
+  }
   if (isGraphConfig(config)) {
     res.json({
       source: 'graph',
@@ -128,9 +151,10 @@ app.get('/api/config', (_req, res) => {
         authority: config.MICROSOFT_AUTHORITY,
         scopes: config.GRAPH_SCOPES,
       },
+      demo: false,
     });
   } else {
-    res.json({ source: 'dump', auth: null });
+    res.json({ source: 'dump', auth: null, demo: false });
   }
 });
 

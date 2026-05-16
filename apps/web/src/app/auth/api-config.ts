@@ -5,6 +5,7 @@ export interface AuthConfig {
 }
 
 export interface ApiConfig {
-  source: 'graph' | 'dump';
+  source: 'graph' | 'dump' | 'demo';
   auth: AuthConfig | null;
+  demo?: boolean;
 }
