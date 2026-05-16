@@ -182,42 +182,44 @@
         }
       }
     </div>
-
-    <!-- Demo mode -->
-    <div class="m3-card section-card">
-      <header class="section-head">
-        <span class="material-symbols-outlined section-icon">science</span>
-        <div>
-          <h2>Demo mode</h2>
-          <p>Swap live data with deterministic fake data (in-memory). Your real DB stays untouched. Toggling reloads the app.</p>
-        </div>
-      </header>
-      <div class="toggle-row">
-        <button
-          type="button"
-          class="m3-switch"
-          role="switch"
-          [attr.aria-checked]="demoEnabled()"
-          [class.on]="demoEnabled()"
-          [disabled]="demoBusy()"
-          (click)="toggleDemo(!demoEnabled())"
-        >
-          <span class="m3-switch-track">
-            <span class="m3-switch-thumb">
-              @if (demoEnabled()) {
-                <span class="material-symbols-outlined">check</span>
-              }
-            </span>
-          </span>
-        </button>
-        <span class="toggle-label">{{ demoEnabled() ? 'Demo mode is ON' : 'Demo mode is OFF' }}</span>
-      </div>
-      @if (demoError(); as e) {
-        <div class="status-banner error">
-          <span class="material-symbols-outlined">error</span>
-          {{ e }}
-        </div>
-      }
-    </div>
   }
+
+  <!-- Demo mode toggle: always reachable, even when other settings fail to
+       load (so the user can always exit demo / enter demo regardless of
+       auth or backend state). -->
+  <div class="m3-card section-card">
+    <header class="section-head">
+      <span class="material-symbols-outlined section-icon">science</span>
+      <div>
+        <h2>Demo mode</h2>
+        <p>Swap live data with deterministic fake data (in-memory). Your real DB stays untouched. Toggling reloads the app.</p>
+      </div>
+    </header>
+    <div class="toggle-row">
+      <button
+        type="button"
+        class="m3-switch"
+        role="switch"
+        [attr.aria-checked]="demoEnabled()"
+        [class.on]="demoEnabled()"
+        [disabled]="demoBusy()"
+        (click)="toggleDemo(!demoEnabled())"
+      >
+        <span class="m3-switch-track">
+          <span class="m3-switch-thumb">
+            @if (demoEnabled()) {
+              <span class="material-symbols-outlined">check</span>
+            }
+          </span>
+        </span>
+      </button>
+      <span class="toggle-label">{{ demoEnabled() ? 'Demo mode is ON' : 'Demo mode is OFF' }}</span>
+    </div>
+    @if (demoError(); as e) {
+      <div class="status-banner error">
+        <span class="material-symbols-outlined">error</span>
+        {{ e }}
+      </div>
+    }
+  </div>
 </section>

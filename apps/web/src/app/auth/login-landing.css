@@ -1,0 +1,66 @@
+.landing {
+  min-height: calc(100vh - 4rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.landing-card {
+  max-width: 28rem;
+  width: 100%;
+  padding: 2rem 1.75rem;
+  text-align: center;
+}
+
+.landing-icon {
+  color: var(--md-sys-color-primary);
+  font-size: 3rem !important;
+  margin-bottom: 0.5rem;
+}
+
+.landing-card h1 {
+  margin: 0 0 0.5rem;
+  font: var(--md-sys-typescale-headline-small);
+}
+
+.tagline {
+  margin: 0 0 1.5rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+.actions .m3-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.muted-note {
+  margin: 1rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+.status-banner.error {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.spin { animation: spin 0.9s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }

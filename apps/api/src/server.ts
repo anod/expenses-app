@@ -166,16 +166,31 @@ app.get('/api/config', (_req, res) => {
 app.use('/api', buildDemoRoutes(demoController));
 
 const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
+// Bearer is required in graph mode, but transparently skipped while demo
+// mode is active — the SPA does not initialize MSAL in demo, so no token
+// would be sent. Sync/Import additionally 409 in demo (handled in-route).
+const conditionalBearer = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (isDemo()) {
+    next();
+    return;
+  }
+  requireBearer(req, res, next);
+};
 if (protectApi) {
-  app.use('/api', requireBearer, buildForecastRoutes(getRepo));
-  app.use('/api', requireBearer, buildSyncRoutes(getRepo, excelWriter, isDemo));
-  app.use('/api', requireBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
-  log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer');
+  app.use('/api', conditionalBearer, buildForecastRoutes(getRepo));
+  app.use('/api', conditionalBearer, buildSyncRoutes(getRepo, excelWriter, isDemo));
+  app.use('/api', conditionalBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
+  log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer (skipped in demo)');
 } else {
   app.use('/api', buildForecastRoutes(getRepo));
   app.use('/api', buildSyncRoutes(getRepo, excelWriter, isDemo));
-  // Import always requires a Bearer (Graph needs the user's token).
-  app.use('/api', requireBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
+  // Import always requires a Bearer (Graph needs the user's token) but
+  // is also conditionally skipped in demo (where it 409s anyway).
+  app.use('/api', conditionalBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
 }
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {

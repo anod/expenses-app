@@ -1,0 +1,45 @@
+<section class="landing">
+  <div class="m3-card landing-card">
+    <span class="material-symbols-outlined landing-icon">savings</span>
+    <h1>Expenses</h1>
+    <p class="tagline">Personal cash-flow forecasting — sign in to view your data, or try the demo with deterministic fake data.</p>
+
+    @if (error(); as e) {
+      <div class="status-banner error">
+        <span class="material-symbols-outlined">error</span>
+        {{ e }}
+      </div>
+    }
+
+    <div class="actions">
+      <button
+        type="button"
+        class="m3-btn primary"
+        (click)="signIn()"
+        [disabled]="signingIn() || enteringDemo()"
+      >
+        @if (signingIn()) {
+          <span class="material-symbols-outlined spin">progress_activity</span> Redirecting…
+        } @else {
+          <span class="material-symbols-outlined">login</span> Sign in with Microsoft
+        }
+      </button>
+      <button
+        type="button"
+        class="m3-btn"
+        (click)="tryDemo()"
+        [disabled]="signingIn() || enteringDemo()"
+      >
+        @if (enteringDemo()) {
+          <span class="material-symbols-outlined spin">progress_activity</span> Loading demo…
+        } @else {
+          <span class="material-symbols-outlined">science</span> Try demo mode
+        }
+      </button>
+    </div>
+
+    <p class="muted-note">
+      Demo mode uses in-memory fake data; your real workbook is not touched. You can switch back in Settings.
+    </p>
+  </div>
+</section>

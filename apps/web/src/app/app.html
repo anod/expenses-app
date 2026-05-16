@@ -1,4 +1,8 @@
 <app-header />
 <main class="content">
-  <router-outlet />
+  @if (showLanding()) {
+    <app-login-landing />
+  } @else {
+    <router-outlet />
+  }
 </main>
