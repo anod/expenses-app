@@ -4,7 +4,8 @@ import type { ForecastResult, Settings, ProjectionCharge } from '@expenses/share
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
-interface UpcomingRow {
+interface ChargeItem {
+  kind: 'charge';
   date: string;
   description: string;
   amount: number;
@@ -12,6 +13,14 @@ interface UpcomingRow {
   cardId?: string;
 }
 
+interface AnchorItem {
+  kind: 'anchor';
+  date: string;
+  balance: number;
+  belowThreshold: boolean;
+}
+
+type TimelineItem = ChargeItem | AnchorItem;
 type ChannelFilter = 'all' | 'bank' | 'cc';
 
 @Component({
@@ -31,28 +40,6 @@ export class ForecastHomeComponent {
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
 
-  protected readonly anchors = computed(() =>
-    this.forecast()?.days.filter((d) => d.isAnchor) ?? [],
-  );
-
-  protected readonly allCharges = computed<UpcomingRow[]>(() => {
-    const f = this.forecast();
-    if (!f) return [];
-    const rows: UpcomingRow[] = [];
-    for (const day of f.days) {
-      for (const c of day.charges) {
-        rows.push(this.toRow(day.date, c));
-      }
-    }
-    return rows;
-  });
-
-  protected readonly visibleCharges = computed(() => {
-    const filter = this.channelFilter();
-    if (filter === 'all') return this.allCharges();
-    return this.allCharges().filter((r) => r.channel === filter);
-  });
-
   protected readonly statusCopy = computed(() => {
     const status = this.forecast()?.status;
     switch (status) {
@@ -65,6 +52,32 @@ export class ForecastHomeComponent {
       default:
         return { label: '—', subtitle: '' };
     }
+  });
+
+  /** Charges + anchors interleaved chronologically. Anchors render as separators. */
+  protected readonly timeline = computed<TimelineItem[]>(() => {
+    const f = this.forecast();
+    if (!f) return [];
+    const threshold = this.settings()?.threshold ?? 0;
+    const filter = this.channelFilter();
+    const items: TimelineItem[] = [];
+    for (const day of f.days) {
+      if (day.isAnchor) {
+        items.push({
+          kind: 'anchor',
+          date: day.date,
+          balance: day.balance,
+          belowThreshold: day.balance < threshold,
+        });
+      }
+      for (const c of day.charges) {
+        const row = this.toChargeItem(day.date, c);
+        if (filter === 'all' || row.channel === filter) {
+          items.push(row);
+        }
+      }
+    }
+    return items;
   });
 
   constructor() {
@@ -103,13 +116,30 @@ export class ForecastHomeComponent {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
   }
 
+  protected fmtAnchorDate(iso: string): string {
+    const d = new Date(`${iso}T00:00:00`);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+  }
+
   protected iconFor(channel: 'bank' | 'cc'): string {
     return channel === 'bank' ? 'account_balance' : 'credit_card';
   }
 
-  private toRow(date: string, c: ProjectionCharge): UpcomingRow {
+  protected isAnchor(i: TimelineItem): i is AnchorItem {
+    return i.kind === 'anchor';
+  }
+
+  protected isCharge(i: TimelineItem): i is ChargeItem {
+    return i.kind === 'charge';
+  }
+
+  protected trackTimeline = (_: number, i: TimelineItem): string =>
+    i.kind === 'anchor' ? `a:${i.date}` : `c:${i.date}:${i.description}`;
+
+  private toChargeItem(date: string, c: ProjectionCharge): ChargeItem {
     if (c.source.kind === 'cc-bill') {
       return {
+        kind: 'charge',
         date,
         description: c.description,
         amount: c.amount,
@@ -118,6 +148,7 @@ export class ForecastHomeComponent {
       };
     }
     return {
+      kind: 'charge',
       date,
       description: c.description,
       amount: c.amount,
