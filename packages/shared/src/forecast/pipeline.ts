@@ -9,6 +9,8 @@ import {
 } from './dates.js';
 import {
   type Account,
+  type CardForecast,
+  type CardDailyBalance,
   type CreditCard,
   type DailyProjection,
   type ForecastResult,
@@ -268,7 +270,67 @@ export const project = (
         ? 'warning'
         : 'safe';
 
-  return { startDate, endDate, days, status, minBalance, minBalanceDate };
+  // Per-card outstanding tracking. Outstanding rises on cc-charge date and
+  // is reset to 0 on the billing day (after the bill is paid). Bills include
+  // both the opening currentDebit (first billing day strictly after asOf) and
+  // any cc-charges accumulated since the previous bill.
+  const ccChargesByCardDate = new Map<string, Map<IsoDate, number>>();
+  for (const e of effective) {
+    if (e.status !== 'pending') continue;
+    if (e.channel === 'bank') continue;
+    const cardId = e.channel.slice(3);
+    let m = ccChargesByCardDate.get(cardId);
+    if (!m) {
+      m = new Map();
+      ccChargesByCardDate.set(cardId, m);
+    }
+    const prev = m.get(e.date) ?? 0;
+    m.set(e.date, prev + Math.abs(e.amount));
+  }
+
+  const cardForecasts: CardForecast[] = cards.map((card) => {
+    const dayList: CardDailyBalance[] = [];
+    let outstanding = 0;
+    let openingDebit = card.currentDebit;
+    let openingBillDate: IsoDate | null = null;
+    if (card.currentDebit > 0) {
+      openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
+    }
+    // The "opening debit" was accrued before startDate; if startDate is past
+    // the opening bill date, the debt was already paid before we begin.
+    if (openingBillDate && compareIso(openingBillDate, startDate) < 0) {
+      openingDebit = 0;
+      openingBillDate = null;
+    }
+    outstanding = openingDebit;
+
+    const perDate = ccChargesByCardDate.get(card.id);
+    let cur = startDate;
+    while (compareIso(cur, endDate) <= 0) {
+      // Accrue any cc-charges with this exact date.
+      const accrued = perDate?.get(cur) ?? 0;
+      outstanding += accrued;
+      const { d } = parseIso(cur);
+      const isBillingDay = d === card.billingDayOfMonth;
+      // On the billing day, debt is settled at end of day.
+      if (isBillingDay && compareIso(cur, card.asOf) > 0) {
+        outstanding = 0;
+      }
+      dayList.push({ date: cur, outstanding, isBillingDay });
+      cur = addDays(cur, 1);
+    }
+
+    return {
+      cardId: card.id,
+      name: card.name,
+      billingDayOfMonth: card.billingDayOfMonth,
+      asOf: card.asOf,
+      openingDebit: card.currentDebit,
+      days: dayList,
+    };
+  });
+
+  return { startDate, endDate, days, status, minBalance, minBalanceDate, cards: cardForecasts };
 };
 
 /** End-to-end convenience: virtuals → merge → project. */

@@ -74,6 +74,32 @@
       </article>
     </section>
 
+    @if (cardSummaries().length > 0) {
+      <section class="cards-row">
+        @for (card of cardSummaries(); track card.cardId) {
+          <article class="m3-card card-summary">
+            <header class="card-header">
+              <h3>
+                <span class="material-symbols-outlined">credit_card</span>
+                {{ card.name }}
+              </h3>
+              <span class="card-meta">bills on the {{ card.billingDay }}</span>
+            </header>
+            <div class="card-grid">
+              <div>
+                <div class="kpi-label">Current debit</div>
+                <div class="kpi-value-sm">{{ fmt(card.openingDebit) }}</div>
+              </div>
+              <div>
+                <div class="kpi-label">At {{ fmtDate(card.nextAnchorDate) }}</div>
+                <div class="kpi-value-sm">{{ fmt(card.nextAnchorOutstanding) }}</div>
+              </div>
+            </div>
+          </article>
+        }
+      </section>
+    }
+
     <!-- Timeline: charges with anchor separators in chronological order -->
     <section class="m3-card timeline-card">
       <header class="card-header">

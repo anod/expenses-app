@@ -23,6 +23,15 @@ interface AnchorItem {
 type TimelineItem = ChargeItem | AnchorItem;
 type ChannelFilter = 'all' | 'bank' | 'cc';
 
+interface CardSummary {
+  cardId: string;
+  name: string;
+  openingDebit: number;
+  nextAnchorDate: string;
+  nextAnchorOutstanding: number;
+  billingDay: number;
+}
+
 @Component({
   selector: 'app-forecast-home',
   standalone: true,
@@ -52,6 +61,26 @@ export class ForecastHomeComponent {
       default:
         return { label: '—', subtitle: '' };
     }
+  });
+
+  /** Per-card summary shown beside the chart: opening debit + next anchor projection. */
+  protected readonly cardSummaries = computed<CardSummary[]>(() => {
+    const f = this.forecast();
+    if (!f) return [];
+    const nextAnchor = f.days.find((d) => d.isAnchor);
+    return f.cards.map((card) => {
+      const anchorDay = nextAnchor
+        ? card.days.find((d) => d.date === nextAnchor.date)
+        : undefined;
+      return {
+        cardId: card.cardId,
+        name: card.name,
+        openingDebit: card.openingDebit,
+        nextAnchorDate: nextAnchor?.date ?? card.asOf,
+        nextAnchorOutstanding: anchorDay?.outstanding ?? 0,
+        billingDay: card.billingDayOfMonth,
+      };
+    });
   });
 
   /** Charges + anchors interleaved chronologically. Anchors render as separators. */

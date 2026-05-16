@@ -37,6 +37,7 @@ import {
   type ForecastResult,
   type LedgerEntry,
   type RecurringTemplate,
+  type CreditCard,
 } from '@expenses/shared';
 import { loadConfig } from '../config.js';
 import { openDb } from '../db/openDb.js';
@@ -45,19 +46,32 @@ import { StateRepo } from '../db/stateRepo.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
 
+/**
+ * Workbook `source` values that represent credit cards (will be modelled
+ * as separate CreditCard entities with cc-routing through the pipeline).
+ * Other non-empty sources (e.g. 'onezero' = OneZero digital bank) are
+ * treated as bank-channel direct charges, with the source kept as a
+ * description prefix.
+ */
+const CREDIT_CARD_SOURCES: Record<string, { name: string; billingDay: number }> = {
+  cal: { name: 'Cal', billingDay: 2 },
+  isra: { name: 'Isracard', billingDay: 2 },
+};
+
 interface ImportSummary {
   workbook: string;
   worksheet: string;
   monthsParsed: number;
   startDate: string;
   startBalance: number;
+  cardsCreated: number;
   recurringCreated: number;
   ledgerCreated: number;
   warnings: string[];
   skippedRows: { label: string; reason: string }[];
 }
 
-const skipLabels = new Set(['карта потрачено', 'карта остаток']);
+const skipLabels = new Set(['карта остаток', 'карта потрачено']);
 
 const pad = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -171,37 +185,45 @@ const sessionFilesDir = (): string | null => {
   return join(root, sessions.at(-1)!, 'files');
 };
 
+import { computeForecast } from '../forecast/computeForecast.js';
+
 const writeParityReport = async (
   repo: StateRepo,
   snap: ReturnType<typeof parseWorkbookDump>,
   summary: ImportSummary,
 ): Promise<void> => {
-  let forecast: ForecastResult | null = null;
-  const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
-  try {
-    const resp = await fetch(`${apiUrl}/api/forecast`);
-    if (resp.ok) {
-      forecast = (await resp.json()) as ForecastResult;
-    }
-  } catch {
-    // API not running — that's fine.
-  }
+  const forecast: ForecastResult = computeForecast(repo);
 
   const lines: string[] = [];
   lines.push('# Excel parity — Wave 2d (import)', '');
   lines.push(`- Workbook: \`${summary.workbook}\` / \`${summary.worksheet}\``);
   lines.push(`- Months parsed: ${summary.monthsParsed}`);
   lines.push(`- account.asOf: ${summary.startDate}`);
+  lines.push(`- Credit cards created: ${summary.cardsCreated}`);
   lines.push(`- Recurring templates created: ${summary.recurringCreated}`);
   lines.push(`- Ledger entries created: ${summary.ledgerCreated}`);
   lines.push('');
 
+  lines.push('## Credit cards');
+  lines.push('');
+  const cards = repo.listCards();
+  if (cards.length === 0) {
+    lines.push('_None._');
+  } else {
+    lines.push('| Id | Name | Billing day | currentDebit |');
+    lines.push('| --- | --- | ---: | ---: |');
+    for (const c of cards) {
+      lines.push(`| ${c.id} | ${c.name} | ${c.billingDayOfMonth} | ${c.currentDebit.toFixed(2)} |`);
+    }
+  }
+  lines.push('');
+
   lines.push('## Imported recurring templates');
   lines.push('');
-  lines.push('| Description | Day | Amount |');
-  lines.push('| --- | ---: | ---: |');
+  lines.push('| Description | Channel | Day | Amount |');
+  lines.push('| --- | --- | ---: | ---: |');
   for (const t of repo.listRecurring()) {
-    lines.push(`| ${t.description} | ${t.day} | ${t.amount.toFixed(2)} |`);
+    lines.push(`| ${t.description} | ${t.channel} | ${t.day} | ${t.amount.toFixed(2)} |`);
   }
   lines.push('');
 
@@ -218,32 +240,60 @@ const writeParityReport = async (
   }
   lines.push('');
 
-  if (forecast) {
-    lines.push('## Anchor balance: Excel vs Forecast');
-    lines.push('');
-    lines.push('| Anchor date | Excel balance | Forecast balance | Diff |');
-    lines.push('| --- | ---: | ---: | ---: |');
-    for (const m of snap.months) {
-      const excel = snap.balanceRow?.amounts?.[m.key]?.value ?? null;
-      const day = forecast.days.find((d) => d.date === m.key);
-      const f = day?.balance ?? null;
-      const diff = f != null && excel != null ? f - excel : null;
-      lines.push(
-        `| ${m.key} | ${excel == null ? '—' : excel.toFixed(2)} | ` +
-        `${f == null ? '—' : f.toFixed(2)} | ` +
-        `${diff == null ? '—' : diff.toFixed(2)} |`,
-      );
-    }
-    lines.push('');
+  lines.push('## Anchor balance: Excel vs Forecast');
+  lines.push('');
+  lines.push('| Anchor date | Excel balance | Forecast balance | Diff |');
+  lines.push('| --- | ---: | ---: | ---: |');
+  for (const m of snap.months) {
+    const excel = snap.balanceRow?.amounts?.[m.key]?.value ?? null;
+    const day = forecast.days.find((d) => d.date === m.key);
+    const f = day?.balance ?? null;
+    const diff = f != null && excel != null ? f - excel : null;
     lines.push(
-      `Forecast min: ${forecast.minBalance.toFixed(2)} on ${forecast.minBalanceDate} — status **${forecast.status}**`,
+      `| ${m.key} | ${excel == null ? '—' : excel.toFixed(2)} | ` +
+      `${f == null ? '—' : f.toFixed(2)} | ` +
+      `${diff == null ? '—' : diff.toFixed(2)} |`,
     );
-  } else {
-    lines.push('## Forecast comparison');
-    lines.push('');
-    lines.push(`API not reachable at \`${apiUrl}\`; restart the dev API and re-run for a diff table.`);
   }
   lines.push('');
+  lines.push(
+    `Forecast min: ${forecast.minBalance.toFixed(2)} on ${forecast.minBalanceDate} — status **${forecast.status}**`,
+  );
+  lines.push('');
+
+  // Per-card outstanding at each anchor day vs Excel "карта остаток"
+  // (Excel models a single derived "card remaining" row; we attribute it
+  //  to the first credit card if there is more than one.)
+  const cardRemainsRow = snap.rows.find((r) => r.labelTrimmed === 'карта остаток');
+  for (const card of forecast.cards) {
+    lines.push(`## Card outstanding: ${card.name} (\`${card.cardId}\`)`);
+    lines.push('');
+    const showExcel = cardRemainsRow != null && card === forecast.cards[0];
+    if (showExcel) {
+      lines.push('| Anchor date | Excel «карта остаток» | Forecast outstanding | Diff |');
+      lines.push('| --- | ---: | ---: | ---: |');
+    } else {
+      lines.push('| Anchor date | Forecast outstanding |');
+      lines.push('| --- | ---: |');
+    }
+    for (const m of snap.months) {
+      const day = card.days.find((d) => d.date === m.key);
+      const f = day?.outstanding ?? null;
+      if (showExcel) {
+        const excelRaw = cardRemainsRow!.amounts[m.key]?.value;
+        const excel = typeof excelRaw === 'number' ? Math.abs(excelRaw) : null;
+        const diff = f != null && excel != null ? f - excel : null;
+        lines.push(
+          `| ${m.key} | ${excel == null ? '—' : excel.toFixed(2)} | ` +
+          `${f == null ? '—' : f.toFixed(2)} | ` +
+          `${diff == null ? '—' : diff.toFixed(2)} |`,
+        );
+      } else {
+        lines.push(`| ${m.key} | ${f == null ? '—' : f.toFixed(2)} |`);
+      }
+    }
+    lines.push('');
+  }
 
   const dir = sessionFilesDir();
   if (dir) {
@@ -301,6 +351,48 @@ const main = async (): Promise<void> => {
     currency: 'ILS',
   });
 
+  // ----- Credit cards -------------------------------------------------------
+  // Build a card for each recognised credit-card source. `currentDebit` for a
+  // card is the absolute value of the first-month "карта потрачено" row whose
+  // source matches the card (Excel models card spend-to-date this way; it
+  // becomes a bank pull on the next billing day after asOf).
+  const cardSourcesPresent = new Set(
+    snap.rows
+      .map((r) => r.source.toLowerCase())
+      .filter((s) => s in CREDIT_CARD_SOURCES),
+  );
+  const cardSpentRows = snap.rows.filter(
+    (r) => r.labelTrimmed === 'карта потрачено',
+  );
+  const debitForCard = (cardId: string): number => {
+    const row = cardSpentRows.find((r) => r.source.toLowerCase() === cardId);
+    if (!row) return 0;
+    const v = row.amounts[firstMonth.key]?.value;
+    return typeof v === 'number' ? Math.abs(v) : 0;
+  };
+
+  let cardsCreated = 0;
+  for (const cardId of cardSourcesPresent) {
+    const def = CREDIT_CARD_SOURCES[cardId]!;
+    const card: CreditCard = {
+      id: cardId,
+      name: def.name,
+      currentDebit: debitForCard(cardId),
+      asOf: firstMonth.key,
+      billingDayOfMonth: def.billingDay,
+    };
+    repo.upsertCard(card);
+    cardsCreated++;
+  }
+
+  const channelForRow = (row: ExpenseRow): 'bank' | `cc:${string}` => {
+    const src = row.source.toLowerCase();
+    if (src in CREDIT_CARD_SOURCES && cardSourcesPresent.has(src)) {
+      return `cc:${src}`;
+    }
+    return 'bank';
+  };
+
   const { recurringRows, variableRows, skipped } = partitionRows(
     snap.rows,
     snap.months.map((m) => m.key),
@@ -323,12 +415,13 @@ const main = async (): Promise<void> => {
   for (const row of recurringRows) {
     const amount = row.amounts[firstMonth.key]?.value;
     if (typeof amount !== 'number' || row.day == null) continue;
+    const channel = channelForRow(row);
     const id = uniqueId(`r-${sanitizeId(row.labelTrimmed)}`);
     const template: RecurringTemplate = {
       id,
       description: describe(row),
       amount,
-      channel: 'bank',
+      channel,
       day: row.day,
       startDate: clampedDate(firstMonth.key, row.day),
       monthEndPolicy: 'clamp',
@@ -339,16 +432,21 @@ const main = async (): Promise<void> => {
 
   for (const row of variableRows) {
     if (row.day == null) continue;
+    const channel = channelForRow(row);
     for (const m of snap.months) {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
+      // For cc-channel ledger entries, skip occurrences on/before card.asOf
+      // because they're already represented in currentDebit and the pipeline
+      // would otherwise drop them anyway (strictly-after filter).
+      if (channel !== 'bank' && m.key <= firstMonth.key) continue;
       const date = clampedDate(m.key, row.day);
       const id = uniqueId(`l-${sanitizeId(row.labelTrimmed)}-${m.key.slice(0, 7)}`);
       const entry: LedgerEntry = {
         id,
         description: describe(row),
         amount: v,
-        channel: 'bank',
+        channel,
         date,
         status: 'pending',
       };
@@ -363,6 +461,7 @@ const main = async (): Promise<void> => {
     monthsParsed: snap.months.length,
     startDate: firstMonth.key,
     startBalance,
+    cardsCreated,
     recurringCreated,
     ledgerCreated,
     warnings: snap.warnings,
@@ -376,6 +475,7 @@ const main = async (): Promise<void> => {
   console.log(`  workbook:          ${summary.workbook} / ${summary.worksheet}`);
   console.log(`  months parsed:     ${summary.monthsParsed}`);
   console.log(`  account.asOf:      ${summary.startDate}`);
+  console.log(`  credit cards:      ${summary.cardsCreated}`);
   console.log(`  recurring created: ${summary.recurringCreated}`);
   console.log(`  ledger created:    ${summary.ledgerCreated}`);
   console.log(`  skipped rows:      ${summary.skippedRows.length}`);
