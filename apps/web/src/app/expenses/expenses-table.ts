@@ -87,10 +87,16 @@ export class ExpensesTableComponent {
     this.http.get<WorkbookSnapshot>('/api/expenses').subscribe({
       next: (snapshot) => this.state.set({ status: 'ready', snapshot }),
       error: (err: unknown) => {
+        const body =
+          err && typeof err === 'object' && 'error' in err
+            ? (err as { error?: { message?: string; error?: string } }).error
+            : undefined;
         const message =
-          err && typeof err === 'object' && 'message' in err
+          body?.message ??
+          body?.error ??
+          (err && typeof err === 'object' && 'message' in err
             ? String((err as { message: unknown }).message)
-            : 'Failed to load expenses';
+            : 'Failed to load expenses');
         this.state.set({ status: 'error', message });
       },
     });

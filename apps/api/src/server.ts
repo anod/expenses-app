@@ -195,6 +195,13 @@ if (protectApi) {
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
   try {
+    if (isDemo()) {
+      res.status(409).json({
+        error: 'DEMO_MODE_ACTIVE',
+        message: 'Workbook view is disabled in demo mode.',
+      });
+      return;
+    }
     if (graphReader && req.accessToken) {
       const snapshot = await graphReader.readSnapshot(req.accessToken);
       res.json(snapshot);
@@ -209,6 +216,13 @@ app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
 
 app.get('/api/workbook/status', graphOrDump(), async (req, res, next) => {
   try {
+    if (isDemo()) {
+      res.status(409).json({
+        error: 'DEMO_MODE_ACTIVE',
+        message: 'Workbook status is unavailable in demo mode.',
+      });
+      return;
+    }
     if (graphReader && req.accessToken) {
       const meta = await graphReader.readMeta(req.accessToken);
       res.json({
@@ -293,10 +307,10 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 /**
- * Returns a middleware that requires Bearer auth in graph mode and is a
- * no-op in dump mode. This keeps endpoint handlers clean.
+ * Returns a middleware that requires Bearer auth in graph mode (skipped in
+ * demo) and is a no-op in dump mode. Keeps endpoint handlers clean.
  */
 function graphOrDump() {
-  if (isGraphConfig(config)) return requireBearer;
+  if (isGraphConfig(config)) return conditionalBearer;
   return (_req: Request, _res: Response, next: NextFunction) => next();
 }
