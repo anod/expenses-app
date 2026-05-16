@@ -3,30 +3,33 @@
  *
  * Reads the latest workbook dump under `dumps/`, parses it via
  * `parseWorkbookDump`, and seeds the configured SQLite DB with:
- *   - account.balanceAsOf  = balanceRow at the first month column.
- *   - account.asOf         = first month's anchor date (e.g. 2026-05-10).
- *   - recurring_template   = rows that repeat the same amount across all
- *                            non-null months (with day != null).
- *   - ledger_entry         = rows with day != null that vary per month
- *                            (one entry per month with non-null amount).
+ *   - account                = bank balance at the first month's anchor.
+ *   - settings               = defaults (₪2,000 threshold, Asia/Jerusalem, ILS).
+ *   - credit_card            = one per recognised cc source.
+ *   - recurring_template     = rows that repeat the same amount across all
+ *                              non-null months (with day != null).
+ *   - ledger_entry           = (a) per-month values for variable rows;
+ *                              (b) per-period card-bill rows derived from
+ *                                  «карта потрачено» beyond the first month;
+ *                              (c) per-period «карта остаток» placeholder.
  *
- * Modeling choices (Wave 2d data seed):
- *  - All charges land on the bank channel using `row.day` as the date.
- *    Source prefix (cal/onezero/isra) is preserved in the description but
- *    not modelled as a separate card yet — that requires user input on
- *    billing-day semantics. Cards table is left empty for now.
- *  - Rows with day=null are reported as warnings (we don't know when to
- *    schedule them).
- *  - Derived rows (kind='derived') and the workbook book-keeping rows
- *    "карта потрачено" / "карта остаток" are skipped.
+ * Stable IDs (Wave 2f foundation):
+ *  - Excel-sourced rows are written with deterministic IDs prefixed `excel:`
+ *    so re-runs are idempotent without wholesale truncation.
+ *  - User-created entries (assigned non-`excel:` IDs by the API) are NOT
+ *    touched by re-imports — they survive across runs.
+ *  - On re-import we delete only `excel:*` rows that are no longer in the
+ *    workbook, and preserve `status='cleared'` for already-cleared imported
+ *    ledger entries (user's clear action wins over Excel re-import).
  *
- * Idempotency: the script deletes all data rows from the five domain
- * tables before inserting fresh content so that re-running on the same
- * dump produces the same state.
+ * Excel period-bucket semantics: each column header (e.g. "2026-05") is an
+ * anchor date; values in that column represent bank deltas in the period
+ * (col-anchor, col-anchor+1m]. `scheduleDateForColumn` maps (column, day)
+ * into that period; day-null rows default to the next anchor day.
  *
- * Privacy: this script never prints financial values to stdout. It
- * writes a parity report (gitignored) to the active session-state files
- * dir; that report contains real numbers and must stay local.
+ * Privacy: this script never prints financial values to stdout. It writes
+ * a parity report (gitignored) to the active session-state files dir; that
+ * report contains real numbers and must stay local.
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -162,6 +165,20 @@ const sanitizeId = (s: string): string =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase()
     .slice(0, 32) || 'row';
+
+/** Stable-ID prefix that marks a row as Excel-sourced. */
+const EXCEL_PREFIX = 'excel:';
+
+const sourceKey = (s: string): string => (s.trim() || '_').toLowerCase();
+
+const excelRecurringId = (row: ExpenseRow): string =>
+  `${EXCEL_PREFIX}r:${sourceKey(row.source)}:${sanitizeId(row.labelTrimmed)}:${row.day ?? 'x'}`;
+
+const excelLedgerId = (row: ExpenseRow, monthKey: string): string =>
+  `${EXCEL_PREFIX}l:${sourceKey(row.source)}:${sanitizeId(row.labelTrimmed)}:${monthKey.slice(0, 7)}`;
+
+const excelCardBillId = (cardId: string, monthKey: string): string =>
+  `${EXCEL_PREFIX}l:cardbill:${cardId}:${monthKey.slice(0, 7)}`;
 
 const sessionFilesDir = (): string | null => {
   const home = process.env.HOME ?? process.env.USERPROFILE;
@@ -328,13 +345,54 @@ const main = async (): Promise<void> => {
   const db = openDb({ path: dbPath });
   const repo = new StateRepo(db);
 
-  db.exec(
-    'DELETE FROM ledger_entry; ' +
-    'DELETE FROM recurring_template; ' +
-    'DELETE FROM credit_card; ' +
-    'DELETE FROM account; ' +
-    'DELETE FROM settings;',
+  // Idempotent reset: only the singleton tables are wiped (they're re-seeded
+  // unconditionally below). Recurring/ledger use stable `excel:` IDs and are
+  // reconciled at the end of the import — user-created rows survive.
+  db.exec('DELETE FROM credit_card; DELETE FROM account; DELETE FROM settings;');
+
+  // One-time cleanup: prior importer versions used non-stable IDs like
+  // `r-zp` / `l-cal-debt-2026-06`. Until the stable-ID refactor those were
+  // wiped on each run; now that wholesale truncation is gone, leftover rows
+  // would double-count. Drop anything that looks auto-generated by the old
+  // importer. (User-created entries via the API get UUIDs.)
+  const legacyLedgerPattern = /^l-/;
+  const legacyRecurringPattern = /^r-/;
+  let legacyLedgerRemoved = 0;
+  let legacyRecurringRemoved = 0;
+  for (const e of repo.listLedger()) {
+    if (!e.id.startsWith(EXCEL_PREFIX) && legacyLedgerPattern.test(e.id)) {
+      repo.deleteLedger(e.id);
+      legacyLedgerRemoved++;
+    }
+  }
+  for (const t of repo.listRecurring()) {
+    if (!t.id.startsWith(EXCEL_PREFIX) && legacyRecurringPattern.test(t.id)) {
+      repo.deleteRecurring(t.id);
+      legacyRecurringRemoved++;
+    }
+  }
+  if (legacyLedgerRemoved > 0) {
+    snap.warnings.push(`Cleaned ${legacyLedgerRemoved} legacy ledger entries`);
+  }
+  if (legacyRecurringRemoved > 0) {
+    snap.warnings.push(`Cleaned ${legacyRecurringRemoved} legacy recurring templates`);
+  }
+
+  // Snapshot existing Excel-sourced rows so we can:
+  //   (a) preserve `status='cleared'` on already-cleared imported entries,
+  //   (b) garbage-collect orphans (excel:* IDs not present in this import).
+  const existingLedgerStatus = new Map<string, LedgerEntry['status']>();
+  for (const e of repo.listLedger()) {
+    if (e.id.startsWith(EXCEL_PREFIX)) existingLedgerStatus.set(e.id, e.status);
+  }
+  const existingRecurringIds = new Set(
+    repo
+      .listRecurring()
+      .map((r) => r.id)
+      .filter((id) => id.startsWith(EXCEL_PREFIX)),
   );
+  const touchedLedgerIds = new Set<string>();
+  const touchedRecurringIds = new Set<string>();
 
   repo.upsertAccount({ bankBalance: startBalance, asOf: firstMonth.key });
 
@@ -417,19 +475,29 @@ const main = async (): Promise<void> => {
     snap.months.map((m) => m.key),
   );
 
-  const usedIds = new Set<string>();
-  const uniqueId = (base: string): string => {
-    let id = base;
-    let n = 2;
-    while (usedIds.has(id)) {
-      id = `${base}-${n++}`;
-    }
-    usedIds.add(id);
-    return id;
-  };
-
   let recurringCreated = 0;
   let ledgerCreated = 0;
+
+  const upsertImportedLedger = (id: string, entry: Omit<LedgerEntry, 'id' | 'status'>): void => {
+    // Resolve same-id collisions deterministically — append :2, :3 ... so
+    // re-imports keep producing the same suffixes for the same Excel rows.
+    let finalId = id;
+    let n = 2;
+    while (touchedLedgerIds.has(finalId)) finalId = `${id}:${n++}`;
+    const status = existingLedgerStatus.get(finalId) ?? 'pending';
+    repo.upsertLedger({ ...entry, id: finalId, status });
+    touchedLedgerIds.add(finalId);
+    ledgerCreated++;
+  };
+
+  const upsertImportedRecurring = (id: string, tpl: Omit<RecurringTemplate, 'id'>): void => {
+    let finalId = id;
+    let n = 2;
+    while (touchedRecurringIds.has(finalId)) finalId = `${id}:${n++}`;
+    repo.upsertRecurring({ ...tpl, id: finalId });
+    touchedRecurringIds.add(finalId);
+    recurringCreated++;
+  };
 
   // ----- Card spend ledger entries -----------------------------------------
   // Each «карта потрачено» row has a value per anchor column representing the
@@ -445,17 +513,12 @@ const main = async (): Promise<void> => {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
       const date = scheduleDateForColumn(m.key, def.billingDay);
-      const id = uniqueId(`l-${cardId}-bill-${m.key.slice(0, 7)}`);
-      const entry: LedgerEntry = {
-        id,
+      upsertImportedLedger(excelCardBillId(cardId, m.key), {
         description: `${def.name} bill`,
         amount: v,
         channel: 'bank',
         date,
-        status: 'pending',
-      };
-      repo.upsertLedger(entry);
-      ledgerCreated++;
+      });
     }
   }
 
@@ -463,18 +526,14 @@ const main = async (): Promise<void> => {
     const amount = row.amounts[firstMonth.key]?.value;
     if (typeof amount !== 'number' || row.day == null) continue;
     const channel = channelForRow(row);
-    const id = uniqueId(`r-${sanitizeId(row.labelTrimmed)}`);
-    const template: RecurringTemplate = {
-      id,
+    upsertImportedRecurring(excelRecurringId(row), {
       description: describe(row),
       amount,
       channel,
       day: row.day,
       startDate: clampedDate(firstMonth.key, row.day),
       monthEndPolicy: 'clamp',
-    };
-    repo.upsertRecurring(template);
-    recurringCreated++;
+    });
   }
 
   for (const row of variableRows) {
@@ -483,18 +542,35 @@ const main = async (): Promise<void> => {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
       const date = scheduleDateForColumn(m.key, row.day);
-      const id = uniqueId(`l-${sanitizeId(row.labelTrimmed)}-${m.key.slice(0, 7)}`);
-      const entry: LedgerEntry = {
-        id,
+      upsertImportedLedger(excelLedgerId(row, m.key), {
         description: describe(row),
         amount: v,
         channel,
         date,
-        status: 'pending',
-      };
-      repo.upsertLedger(entry);
-      ledgerCreated++;
+      });
     }
+  }
+
+  // Garbage-collect Excel-sourced rows that disappeared from the workbook.
+  let orphanedLedger = 0;
+  let orphanedRecurring = 0;
+  for (const id of existingLedgerStatus.keys()) {
+    if (!touchedLedgerIds.has(id)) {
+      repo.deleteLedger(id);
+      orphanedLedger++;
+    }
+  }
+  for (const id of existingRecurringIds) {
+    if (!touchedRecurringIds.has(id)) {
+      repo.deleteRecurring(id);
+      orphanedRecurring++;
+    }
+  }
+  if (orphanedLedger > 0) {
+    snap.warnings.push(`Removed ${orphanedLedger} stale Excel ledger entries`);
+  }
+  if (orphanedRecurring > 0) {
+    snap.warnings.push(`Removed ${orphanedRecurring} stale Excel recurring templates`);
   }
 
   const summary: ImportSummary = {
