@@ -10,6 +10,7 @@ const Common = z.object({
 
 const DumpFields = z.object({
   DUMPS_DIR: z.string().min(1).default('./dumps'),
+  DB_PATH: z.string().min(1).default('./data/expenses.db'),
 });
 
 const GraphFields = z.object({

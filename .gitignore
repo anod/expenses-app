@@ -9,6 +9,9 @@ node_modules/
 *.pem
 *.key
 
+# SQLite database (contains personal financial data)
+data/
+
 # Live workbook dumps (contain personal financial data)
 dumps/
 

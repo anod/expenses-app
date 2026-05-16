@@ -16,6 +16,9 @@ import { GraphClient, GraphError, GraphTimeoutError } from './graph/graphClient.
 import { GraphReader } from './graph/graphReader.js';
 import { WorkbookResolver } from './graph/workbookResolver.js';
 import { requireBearer } from './auth.js';
+import { openDb } from './db/openDb.js';
+import { StateRepo } from './db/stateRepo.js';
+import { computeForecast } from './forecast/computeForecast.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -68,6 +71,11 @@ log.info(
 // Adapters
 const dumpReader = new DumpReader(resolve(repoRoot, config.DUMPS_DIR), log);
 
+const dbPath = resolve(repoRoot, config.DB_PATH);
+const db = openDb({ path: dbPath });
+const stateRepo = new StateRepo(db);
+log.info({ dbPath }, 'sqlite ready');
+
 let graphReader: GraphReader | null = null;
 if (isGraphConfig(config)) {
   const graphClient = new GraphClient({
@@ -118,6 +126,15 @@ app.get('/api/config', (_req, res) => {
     });
   } else {
     res.json({ source: 'dump', auth: null });
+  }
+});
+
+app.get('/api/forecast', (_req, res, next) => {
+  try {
+    const result = computeForecast(stateRepo);
+    res.json(result);
+  } catch (err) {
+    next(err);
   }
 });
 

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Excel parity baseline (Wave 2a)
+ * Excel parity report
  *
- * Reads the latest local dump (or one passed on argv) and writes a baseline
- * report of per-month totals from the existing workbook into
- * session-state/.../files/parity-wave-2a.md.
+ * Usage:
+ *   node scripts/excel-parity.mjs            # uses Wave 2a (baseline)
+ *   node scripts/excel-parity.mjs --wave 2b  # diff against /api/forecast
  *
- * Wave 2a only exposes the pure pipeline (no API, no persisted state) — so
- * the parity report here is a BASELINE snapshot. Subsequent waves diff the
- * forecast pipeline output against this baseline.
+ * Wave 2a writes a baseline of per-month Excel totals.
+ * Wave 2b queries `/api/forecast` and produces a side-by-side comparison
+ * of the projected bank balance at each anchor date (10th of month) vs.
+ * the Excel "balance row" for the same date.
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -18,33 +19,32 @@ import { parseWorkbookDump } from '@expenses/shared';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 
-const dumpsDir = join(repoRoot, 'dumps');
-const argDump = process.argv[2];
-const dumpPath = argDump
-  ? resolve(argDump)
-  : join(
-      dumpsDir,
-      readdirSync(dumpsDir)
-        .filter((f) => f.startsWith('dump-') && f.endsWith('.json'))
-        .sort()
-        .at(-1) ?? '',
-    );
+const argv = process.argv.slice(2);
+const waveIdx = argv.indexOf('--wave');
+const wave = waveIdx >= 0 ? argv[waveIdx + 1] : '2a';
+const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
 
-if (!dumpPath || !dumpPath.endsWith('.json')) {
+const dumpsDir = join(repoRoot, 'dumps');
+const dumpPath = join(
+  dumpsDir,
+  (readdirSync(dumpsDir)
+    .filter((f) => f.startsWith('dump-') && f.endsWith('.json'))
+    .sort()
+    .at(-1)) ?? '',
+);
+if (!dumpPath.endsWith('.json')) {
   console.error('No dump file found. Run a workbook dump first.');
   process.exit(1);
 }
-
 const dump = JSON.parse(readFileSync(dumpPath, 'utf8'));
 const snap = parseWorkbookDump(dump);
 
-const monthTotal = (monthKey) => {
+const monthTotal = (key) => {
   let outflow = 0;
   let inflow = 0;
   for (const row of snap.rows) {
     if (row.kind !== 'expense') continue;
-    const cell = row.amounts[monthKey];
-    const v = cell?.value;
+    const v = row.amounts[key]?.value;
     if (typeof v !== 'number') continue;
     if (v < 0) outflow += v;
     else inflow += v;
@@ -53,38 +53,66 @@ const monthTotal = (monthKey) => {
 };
 
 const lines = [];
-lines.push(`# Excel parity baseline — Wave 2a`);
-lines.push('');
-lines.push(`- Workbook: \`${snap.workbook.name}\` (worksheet: \`${snap.workbook.worksheet}\`)`);
-lines.push(`- Dumped at: ${dump.dumpedAt ?? 'n/a'}`);
-lines.push(`- Currency: ${snap.workbook.currency.code ?? '?'} (${snap.workbook.currency.symbol ?? '?'})`);
-lines.push(`- Months parsed: ${snap.months.length}`);
-lines.push(`- Expense rows: ${snap.rows.filter((r) => r.kind === 'expense').length}`);
-lines.push('');
-lines.push('## Per-month totals (Excel side)');
-lines.push('');
-lines.push('| Month key | Label | Outflow | Inflow | Net | Balance row |');
-lines.push('| --- | --- | ---: | ---: | ---: | ---: |');
-for (const m of snap.months) {
-  const { outflow, inflow } = monthTotal(m.key);
-  const bal = snap.balanceRow?.amounts?.[m.key]?.value ?? null;
-  lines.push(
-    `| ${m.key} | ${m.label} | ${outflow.toFixed(2)} | ${inflow.toFixed(2)} | ` +
-    `${(outflow + inflow).toFixed(2)} | ${bal == null ? '—' : bal.toFixed(2)} |`,
-  );
+
+if (wave === '2a') {
+  lines.push('# Excel parity baseline — Wave 2a', '');
+  lines.push(`- Workbook: \`${snap.workbook.name}\` / \`${snap.workbook.worksheet}\``);
+  lines.push(`- Dumped at: ${dump.dumpedAt ?? 'n/a'}`);
+  lines.push(`- Currency: ${snap.workbook.currency.code ?? '?'}`);
+  lines.push(`- Months parsed: ${snap.months.length}`, '');
+  lines.push('## Per-month totals (Excel side)', '');
+  lines.push('| Month key | Outflow | Inflow | Net | Balance row |');
+  lines.push('| --- | ---: | ---: | ---: | ---: |');
+  for (const m of snap.months) {
+    const { outflow, inflow } = monthTotal(m.key);
+    const bal = snap.balanceRow?.amounts?.[m.key]?.value ?? null;
+    lines.push(
+      `| ${m.key} | ${outflow.toFixed(2)} | ${inflow.toFixed(2)} | ${(outflow + inflow).toFixed(2)} | ${bal == null ? '—' : bal.toFixed(2)} |`,
+    );
+  }
+} else if (wave === '2b') {
+  // Fetch /api/forecast
+  const resp = await fetch(`${apiUrl}/api/forecast`);
+  if (!resp.ok) {
+    console.error(`GET ${apiUrl}/api/forecast → ${resp.status}`);
+    process.exit(1);
+  }
+  const forecast = await resp.json();
+
+  lines.push('# Excel parity diff — Wave 2b', '');
+  lines.push(`- API: \`${apiUrl}/api/forecast\``);
+  lines.push(`- Forecast horizon: ${forecast.startDate} → ${forecast.endDate}`);
+  lines.push(`- Forecast status: **${forecast.status}** (min ${forecast.minBalance.toFixed(2)} on ${forecast.minBalanceDate})`);
+  lines.push('');
+  lines.push('## Per-month-anchor comparison');
+  lines.push('');
+  lines.push('| Anchor date | Excel balance | Forecast balance | Diff |');
+  lines.push('| --- | ---: | ---: | ---: |');
+  for (const m of snap.months) {
+    const excelBal = snap.balanceRow?.amounts?.[m.key]?.value ?? null;
+    const fd = forecast.days.find((d) => d.date === m.key);
+    if (!fd && excelBal == null) continue;
+    const fcst = fd ? fd.balance : null;
+    const diff = fcst != null && excelBal != null ? fcst - excelBal : null;
+    lines.push(
+      `| ${m.key} | ${excelBal == null ? '—' : excelBal.toFixed(2)} | ${fcst == null ? '—' : fcst.toFixed(2)} | ${diff == null ? '—' : diff.toFixed(2)} |`,
+    );
+  }
+  lines.push('');
+  lines.push('## Wave 2b note');
+  lines.push('');
+  lines.push('Wave 2b ships SQLite + `/api/forecast`. With an EMPTY database the');
+  lines.push('forecast will be flat (balance=0), so big diffs vs. Excel are expected.');
+  lines.push('The diff column becomes meaningful once Wave 2c lets you upsert');
+  lines.push('Account/Cards/Ledger/Recurring (or once Wave 2b adds an Excel→SQLite');
+  lines.push('seed). At that point any non-zero diff is a real parity bug.');
+} else {
+  console.error(`Unknown wave: ${wave}`);
+  process.exit(1);
 }
-lines.push('');
-lines.push('## Wave 2a note');
-lines.push('');
-lines.push('Wave 2a delivers only the pure forecast pipeline — no persisted state,');
-lines.push('no API, no UI. The pipeline itself is exercised by 47 unit tests in');
-lines.push('`packages/shared/src/forecast/`. A real apples-to-apples Excel-vs-forecast');
-lines.push('comparison requires Wave 2b (SQLite + `/api/forecast` + initial seed).');
-lines.push('This baseline anchors the Excel side so future waves diff against it.');
 
 if (snap.warnings.length) {
-  lines.push('');
-  lines.push('## Parser warnings');
+  lines.push('', '## Parser warnings');
   for (const w of snap.warnings) lines.push(`- ${w}`);
 }
 
@@ -103,8 +131,9 @@ if (sessionRoot) {
 }
 const finalOutDir = resolvedOutDir ?? join(repoRoot, 'scripts', 'output');
 mkdirSync(finalOutDir, { recursive: true });
-const outFile = join(finalOutDir, 'parity-wave-2a.md');
+const outFile = join(finalOutDir, `parity-wave-${wave}.md`);
 writeFileSync(outFile, lines.join('\n') + '\n');
 
 console.log(lines.join('\n'));
 console.log(`\nReport written to: ${outFile}`);
+
