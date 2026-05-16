@@ -40,15 +40,23 @@
         </header>
 
         <div class="kpi-block">
-          <div class="kpi-label">Minimum balance</div>
-          <div class="kpi-value">{{ fmt(f.minBalance) }}</div>
-          <div class="kpi-meta">on {{ fmtDate(f.minBalanceDate) }}</div>
+          <div class="kpi-label">
+            @if (nextAnchor(); as a) {
+              Balance on {{ fmtAnchorDate(a.date) }}
+            } @else {
+              Projected balance
+            }
+          </div>
+          <div class="kpi-value" [class.kpi-warn]="nextAnchor()?.belowThreshold">
+            {{ fmt(nextAnchor()?.balance ?? f.days[0]?.balance ?? 0) }}
+          </div>
+          <div class="kpi-meta">next anchor day</div>
         </div>
 
         <dl class="kpi-grid">
           <div>
-            <dt>Horizon</dt>
-            <dd>{{ fmtDate(f.startDate) }} → {{ fmtDate(f.endDate) }}</dd>
+            <dt>Minimum</dt>
+            <dd>{{ fmt(f.minBalance) }} <small>· {{ fmtDate(f.minBalanceDate) }}</small></dd>
           </div>
           @if (settings(); as s) {
             <div>

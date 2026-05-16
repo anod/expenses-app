@@ -345,7 +345,7 @@ const main = async (): Promise<void> => {
   repo.upsertAccount({ bankBalance: startBalance, asOf: firstMonth.key });
 
   repo.upsertSettings({
-    threshold: 0,
+    threshold: 2000,
     timezone: 'Asia/Jerusalem',
     horizonMonths: Math.max(1, snap.months.length),
     currency: 'ILS',

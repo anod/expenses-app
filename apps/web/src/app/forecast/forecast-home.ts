@@ -63,6 +63,20 @@ export class ForecastHomeComponent {
     }
   });
 
+  /** Projected bank balance at the next anchor day (10th of month). */
+  protected readonly nextAnchor = computed<{ date: string; balance: number; belowThreshold: boolean } | null>(() => {
+    const f = this.forecast();
+    if (!f) return null;
+    const anchor = f.days.find((d) => d.isAnchor);
+    if (!anchor) return null;
+    const threshold = this.settings()?.threshold ?? 0;
+    return {
+      date: anchor.date,
+      balance: anchor.balance,
+      belowThreshold: anchor.balance < threshold,
+    };
+  });
+
   /** Per-card summary shown beside the chart: opening debit + next anchor projection. */
   protected readonly cardSummaries = computed<CardSummary[]>(() => {
     const f = this.forecast();

@@ -17,6 +17,8 @@ interface ChartModel {
   points: ChartPoint[];
   linePath: string;
   areaPath: string;
+  trendPath?: string;
+  trendSlopePerMonth?: number;
   minBalance: number;
   maxBalance: number;
   threshold?: number;
@@ -87,11 +89,21 @@ interface ChartModel {
           [attr.y]="chart().thresholdY! - 4"
           text-anchor="end"
           class="threshold-label"
-        >threshold</text>
+        >threshold {{ formatShort(chart().threshold!) }}</text>
       }
 
       <!-- Area -->
       <path [attr.d]="chart().areaPath" fill="url(#balance-area-gradient)" />
+      <!-- Trend line (linear regression) -->
+      @if (chart().trendPath; as tp) {
+        <path [attr.d]="tp" class="trend" />
+        <text
+          [attr.x]="chart().width - chart().pad.right - 4"
+          [attr.y]="chart().pad.top + 12"
+          text-anchor="end"
+          class="trend-label"
+        >trend {{ chart().trendSlopePerMonth! >= 0 ? '+' : '' }}{{ formatShort(chart().trendSlopePerMonth!) }}/mo</text>
+      }
       <!-- Line -->
       <path [attr.d]="chart().linePath" class="line" />
 
@@ -135,6 +147,18 @@ interface ChartModel {
       stroke-width: 2;
       stroke-linejoin: round;
       stroke-linecap: round;
+    }
+    .trend {
+      fill: none;
+      stroke: var(--md-sys-color-tertiary);
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      opacity: 0.85;
+    }
+    .trend-label {
+      fill: var(--md-sys-color-tertiary);
+      font-size: 10px;
+      font-weight: 500;
     }
     .threshold {
       stroke: var(--md-sys-color-error);
@@ -223,6 +247,29 @@ export class BalanceChartComponent {
 
     const anchors = points.filter((_, i) => days[i]!.isAnchor);
 
+    // Linear regression of balance over day index (least-squares).
+    // Drawn as a dashed line — slope shows whether balance is trending up
+    // or down ("expense trend").
+    let trendPath: string | undefined;
+    let trendSlopePerMonth: number | undefined;
+    if (n >= 2) {
+      const meanX = (n - 1) / 2;
+      const meanY = balances.reduce((s, v) => s + v, 0) / n;
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < n; i++) {
+        const dx = i - meanX;
+        num += dx * (balances[i]! - meanY);
+        den += dx * dx;
+      }
+      const slope = den === 0 ? 0 : num / den;     // per-day
+      const intercept = meanY - slope * meanX;
+      const y0 = intercept;
+      const y1 = intercept + slope * (n - 1);
+      trendPath = `M${xOf(0).toFixed(1)},${yOf(y0).toFixed(1)} L${xOf(n - 1).toFixed(1)},${yOf(y1).toFixed(1)}`;
+      trendSlopePerMonth = slope * 30;
+    }
+
     const minDate = this.minBalanceDate();
     const minPoint = minDate ? points.find((p) => p.date === minDate) : undefined;
 
@@ -248,6 +295,8 @@ export class BalanceChartComponent {
     return {
       width, height, pad, innerW, innerH,
       points, linePath, areaPath,
+      ...(trendPath ? { trendPath } : {}),
+      ...(trendSlopePerMonth != null ? { trendSlopePerMonth } : {}),
       minBalance: Math.min(...balances),
       maxBalance: Math.max(...balances),
       ...(threshold != null ? { threshold, thresholdY: yOf(threshold) } : {}),
