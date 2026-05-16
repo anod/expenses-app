@@ -6,6 +6,7 @@
  * and returns a summary. See that file's header comment for semantics.
  */
 import type {
+  Channel,
   ExpenseRow,
   LedgerEntry,
   RecurringTemplate,
@@ -227,6 +228,19 @@ export function importFromSnapshot(
     return `${year}-${pad(month)}-${pad(clamped)}`;
   };
 
+  // Channel routing: rows whose `source` is a recognised credit card
+  // (cal/isra) are routed to that card's cc channel so the forecast
+  // pipeline rolls them up into the next billing day. All other rows
+  // hit the bank directly. Pre-asOf card debt is carried via the
+  // card's `currentDebit` (seeded above from first-month «карта потрачено»);
+  // because cc entries are dated strictly AFTER asOf (see
+  // scheduleDateForColumn), they never overlap with that carry-over.
+  const channelForRow = (row: ExpenseRow): Channel => {
+    const src = row.source.toLowerCase();
+    if (src in CREDIT_CARD_SOURCES) return `cc:${src}` as Channel;
+    return 'bank';
+  };
+
   const { recurringRows, variableRows, skipped } = partitionRows(
     snap.rows,
     snap.months.map((m) => m.key),
@@ -252,23 +266,11 @@ export function importFromSnapshot(
     recurringCreated++;
   };
 
-  for (const cardId of cardSourcesPresent) {
-    const def = CREDIT_CARD_SOURCES[cardId]!;
-    const row = cardSpentRows.find((r) => r.source.toLowerCase() === cardId);
-    if (!row) continue;
-    for (let i = 1; i < snap.months.length; i++) {
-      const m = snap.months[i]!;
-      const v = row.amounts[m.key]?.value;
-      if (typeof v !== 'number' || v === 0) continue;
-      const date = scheduleDateForColumn(m.key, def.billingDay);
-      upsertImportedLedger(excelCardBillId(cardId, m.key), {
-        description: `${def.name} bill`,
-        amount: v,
-        channel: 'bank',
-        date,
-      });
-    }
-  }
+  // NOTE: we intentionally do NOT generate per-period «карта потрачено»
+  // bank-channel ledger entries here anymore. Card bills are now derived
+  // by the forecast pipeline from cc-channel outstanding (rolled up from
+  // individual cal/isra rows). Any legacy `excel:l:cardbill:*` entries
+  // from earlier imports will be GC'd by the orphan sweep below.
 
   for (const row of recurringRows) {
     const amount = row.amounts[firstMonth.key]?.value;
@@ -276,7 +278,7 @@ export function importFromSnapshot(
     upsertImportedRecurring(excelRecurringId(row), {
       description: describe(row),
       amount,
-      channel: 'bank',
+      channel: channelForRow(row),
       day: row.day,
       startDate: clampedDate(firstMonth.key, row.day),
       monthEndPolicy: 'clamp',
@@ -291,7 +293,7 @@ export function importFromSnapshot(
       upsertImportedLedger(excelLedgerId(row, m.key), {
         description: describe(row),
         amount: v,
-        channel: 'bank',
+        channel: channelForRow(row),
         date,
       });
     }
