@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "import:excel": "tsx src/scripts/import-excel.ts"
   },
   "dependencies": {
     "@expenses/shared": "*",
