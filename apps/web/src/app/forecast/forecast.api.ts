@@ -65,4 +65,17 @@ export class ForecastApi {
   patchSettings(body: Settings) {
     return this.http.patch<MutationResult<Settings>>('/api/settings', body);
   }
+
+  syncExcel(body: { mode: 'overwrite' | 'new'; targetSheet?: string; rawSheetName?: string }) {
+    return this.http.post<{
+      workbook: string;
+      targetSheet: string;
+      rawSheet: string;
+      mode: 'overwrite' | 'new';
+      anchorRows: number;
+      anchorCols: number;
+      rawRows: number;
+      syncedAt: string;
+    }>('/api/sync/excel', body);
+  }
 }

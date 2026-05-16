@@ -4,7 +4,7 @@
       <span class="material-symbols-outlined">tune</span>
       Settings
     </h1>
-    <p class="subtitle">Forecasting preferences. Editing comes in Wave 2e.</p>
+    <p class="subtitle">Forecasting preferences and Excel sync.</p>
   </header>
 
   @if (loading()) {
@@ -47,6 +47,51 @@
           <div class="setting-value">{{ s.currency }}</div>
         </div>
       </div>
+    </div>
+
+    <div class="m3-card sync-card">
+      <header class="sync-head">
+        <span class="material-symbols-outlined sync-icon">cloud_upload</span>
+        <div>
+          <h2>Sync to Excel</h2>
+          <p>Write the current state to your OneDrive workbook. Choose a target sheet and whether to overwrite it or create a new sheet alongside. A supplementary <code>StateRaw</code> sheet is always written with the flat tables for round-trip debugging.</p>
+        </div>
+      </header>
+      <form [formGroup]="syncForm" (ngSubmit)="sync()" class="sync-form">
+        <label class="field">
+          <span>Target sheet</span>
+          <input formControlName="targetSheet" type="text" maxlength="31" />
+        </label>
+        <div class="mode-group" role="radiogroup" aria-label="Mode">
+          <label class="m3-chip mode-chip">
+            <input type="radio" formControlName="mode" value="overwrite" />
+            <span>Overwrite</span>
+          </label>
+          <label class="m3-chip mode-chip">
+            <input type="radio" formControlName="mode" value="new" />
+            <span>New sheet (auto-suffix if name taken)</span>
+          </label>
+        </div>
+        <button type="submit" class="m3-btn primary" [disabled]="syncing() || syncForm.invalid">
+          @if (syncing()) {
+            <span class="material-symbols-outlined spin">progress_activity</span> Syncing…
+          } @else {
+            <span class="material-symbols-outlined">cloud_sync</span> Sync now
+          }
+        </button>
+      </form>
+      @if (syncResult(); as r) {
+        <div class="sync-status success">
+          <span class="material-symbols-outlined">check_circle</span>
+          Wrote <strong>{{ r.targetSheet }}</strong> and <strong>{{ r.rawSheet }}</strong> to <em>{{ r.workbook }}</em> at {{ r.syncedAt | date:'mediumTime' }}.
+        </div>
+      }
+      @if (syncError(); as e) {
+        <div class="sync-status error">
+          <span class="material-symbols-outlined">error</span>
+          {{ e }}
+        </div>
+      }
     </div>
   }
 </section>

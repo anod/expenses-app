@@ -68,3 +68,39 @@
   font-variant-numeric: tabular-nums;
   color: var(--md-sys-color-on-surface);
 }
+.sync-card { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.sync-head { display: flex; gap: 1rem; align-items: flex-start; }
+.sync-head h2 { margin: 0 0 0.25rem; font: var(--md-sys-typescale-title-medium); }
+.sync-head p { margin: 0; font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); }
+.sync-head p code { font-family: ui-monospace, monospace; background: var(--md-sys-color-surface-container-high); padding: 0 0.25rem; border-radius: 4px; }
+.sync-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+  font-size: 24px; flex: 0 0 auto;
+}
+.sync-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; }
+.sync-form .field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 200px; }
+.sync-form .field span {
+  font: var(--md-sys-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sync-form .field input {
+  font: var(--md-sys-typescale-body-large);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-small, 8px);
+  padding: 0.5rem 0.75rem;
+}
+.mode-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.mode-chip { cursor: pointer; }
+.mode-chip input { margin-right: 0.4rem; }
+.sync-status {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 1rem; border-radius: var(--md-sys-shape-corner-medium, 12px);
+}
+.sync-status.success { background: var(--md-sys-color-tertiary-container, var(--md-sys-color-secondary-container)); color: var(--md-sys-color-on-tertiary-container, var(--md-sys-color-on-secondary-container)); }
+.sync-status.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }

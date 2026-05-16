@@ -15,11 +15,13 @@ import { DumpReader, NoDumpFoundError } from './dumpReader.js';
 import { GraphClient, GraphError, GraphTimeoutError } from './graph/graphClient.js';
 import { GraphReader } from './graph/graphReader.js';
 import { WorkbookResolver } from './graph/workbookResolver.js';
+import { ExcelWriter } from './graph/excelWriter.js';
 import { requireBearer } from './auth.js';
 import { openDb } from './db/openDb.js';
 import { StateRepo } from './db/stateRepo.js';
 import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
+import { buildSyncRoutes } from './sync/routes.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -78,6 +80,7 @@ const stateRepo = new StateRepo(db);
 log.info({ dbPath }, 'sqlite ready');
 
 let graphReader: GraphReader | null = null;
+let excelWriter: ExcelWriter | null = null;
 if (isGraphConfig(config)) {
   const graphClient = new GraphClient({
     baseUrl: config.GRAPH_BASE_URL,
@@ -91,6 +94,7 @@ if (isGraphConfig(config)) {
     worksheetName: config.WORKSHEET_NAME,
     log,
   });
+  excelWriter = new ExcelWriter({ client: graphClient, resolver, log });
 }
 
 const app = express();
@@ -131,6 +135,7 @@ app.get('/api/config', (_req, res) => {
 });
 
 app.use('/api', buildForecastRoutes(stateRepo));
+app.use('/api', buildSyncRoutes(stateRepo, excelWriter));
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
   try {

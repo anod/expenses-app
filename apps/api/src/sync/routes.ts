@@ -1,0 +1,51 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import type { StateRepo } from '../db/stateRepo.js';
+import type { ExcelWriter, SyncMode } from '../graph/excelWriter.js';
+import { requireBearer } from '../auth.js';
+
+const syncBodySchema = z
+  .object({
+    targetSheet: z.string().trim().min(1).max(31).optional(),
+    rawSheetName: z.string().trim().min(1).max(31).optional(),
+    mode: z.enum(['overwrite', 'new']).optional(),
+  })
+  .strict();
+
+export const buildSyncRoutes = (repo: StateRepo, writer: ExcelWriter | null): Router => {
+  const router = Router();
+
+  router.post('/sync/excel', requireBearer, async (req, res, next) => {
+    try {
+      if (!writer) {
+        res.status(503).json({
+          error: 'GRAPH_NOT_CONFIGURED',
+          message: 'Excel sync is unavailable: no Graph workbook is configured for this server.',
+        });
+        return;
+      }
+      const parsed = syncBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: 'BAD_REQUEST', issues: parsed.error.issues });
+        return;
+      }
+      const mode: SyncMode = parsed.data.mode ?? 'overwrite';
+      const state = {
+        account: repo.getAccount(),
+        cards: repo.listCards(),
+        recurring: repo.listRecurring(),
+        ledger: repo.listLedger(),
+        settings: repo.getSettings(),
+      };
+      const opts: { targetSheet?: string; rawSheetName?: string; mode: SyncMode } = { mode };
+      if (parsed.data.targetSheet !== undefined) opts.targetSheet = parsed.data.targetSheet;
+      if (parsed.data.rawSheetName !== undefined) opts.rawSheetName = parsed.data.rawSheetName;
+      const result = await writer.sync(state, req.accessToken!, opts);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  return router;
+};
