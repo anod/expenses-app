@@ -1,20 +1,44 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { RecurringTemplate } from '@expenses/shared';
+import type { Channel, CreditCard, RecurringTemplate } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
+
+type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 
 @Component({
   selector: 'app-recurring-page',
   standalone: true,
+  imports: [ReactiveFormsModule],
   templateUrl: './recurring-page.html',
   styleUrl: './recurring-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RecurringPageComponent {
   private readonly api = inject(ForecastApi);
+  private readonly fb = inject(FormBuilder);
+
   protected readonly templates = signal<RecurringTemplate[]>([]);
+  protected readonly cards = signal<CreditCard[]>([]);
   protected readonly loading = signal(true);
+  protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly edit = signal<EditState>({ kind: 'idle' });
+
+  /** Channel options for the form select: bank + every card. */
+  protected readonly channelOptions = computed<Array<{ value: Channel; label: string }>>(() => [
+    { value: 'bank', label: 'Bank' },
+    ...this.cards().map((c) => ({ value: `cc:${c.id}` as Channel, label: c.name })),
+  ]);
+
+  protected readonly form = this.fb.nonNullable.group({
+    description: ['', [Validators.required, Validators.maxLength(200)]],
+    amount: [0, [Validators.required]],
+    channel: ['bank' as Channel, [Validators.required]],
+    day: [1, [Validators.required, Validators.min(1), Validators.max(31)]],
+    startDate: ['', [Validators.required]],
+    endDate: [''],
+  });
 
   constructor() { void this.load(); }
 
@@ -22,11 +46,107 @@ export class RecurringPageComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.templates.set(await firstValueFrom(this.api.listRecurring()));
+      const [tpls, cards] = await Promise.all([
+        firstValueFrom(this.api.listRecurring()),
+        firstValueFrom(this.api.listCards()),
+      ]);
+      this.templates.set(tpls);
+      this.cards.set(cards);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
       this.loading.set(false);
     }
   }
+
+  protected startEdit(t: RecurringTemplate): void {
+    this.form.reset({
+      description: t.description,
+      amount: t.amount,
+      channel: t.channel,
+      day: t.day,
+      startDate: t.startDate,
+      endDate: t.endDate ?? '',
+    });
+    this.edit.set({ kind: 'edit', id: t.id });
+  }
+
+  protected startNew(): void {
+    const today = new Date().toISOString().slice(0, 10);
+    this.form.reset({
+      description: '',
+      amount: 0,
+      channel: 'bank',
+      day: 1,
+      startDate: today,
+      endDate: '',
+    });
+    this.edit.set({ kind: 'new' });
+  }
+
+  protected cancel(): void {
+    this.edit.set({ kind: 'idle' });
+    this.error.set(null);
+  }
+
+  protected async save(): Promise<void> {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    const state = this.edit();
+    if (state.kind === 'idle') return;
+    const v = this.form.getRawValue();
+    const body = {
+      description: v.description.trim(),
+      amount: v.amount,
+      channel: v.channel,
+      day: v.day,
+      startDate: v.startDate,
+      monthEndPolicy: 'clamp' as const,
+      ...(v.endDate ? { endDate: v.endDate } : {}),
+    };
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      if (state.kind === 'new') {
+        const res = await firstValueFrom(this.api.createRecurring(body));
+        this.templates.update((arr) => [...arr, res.entity]);
+      } else {
+        const res = await firstValueFrom(this.api.updateRecurring(state.id, body));
+        this.templates.update((arr) => arr.map((t) => (t.id === state.id ? res.entity : t)));
+      }
+      this.edit.set({ kind: 'idle' });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async remove(t: RecurringTemplate): Promise<void> {
+    if (!confirm(`Delete recurring template “${t.description}”?`)) return;
+    const prev = this.templates();
+    this.templates.update((arr) => arr.filter((x) => x.id !== t.id));
+    try {
+      await firstValueFrom(this.api.deleteRecurring(t.id));
+    } catch (err) {
+      this.templates.set(prev);
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected channelLabel(channel: Channel): string {
+    if (channel === 'bank') return 'Bank';
+    const id = channel.slice(3);
+    return this.cards().find((c) => c.id === id)?.name ?? channel;
+  }
+
+  protected isEditing(id: string): boolean {
+    const s = this.edit();
+    return s.kind === 'edit' && s.id === id;
+  }
+
+  protected isNew(): boolean { return this.edit().kind === 'new'; }
+  protected isIdle(): boolean { return this.edit().kind === 'idle'; }
 }

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { ForecastResult, Settings, ProjectionCharge } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
@@ -35,19 +36,34 @@ interface CardSummary {
 @Component({
   selector: 'app-forecast-home',
   standalone: true,
-  imports: [BalanceChartComponent],
+  imports: [BalanceChartComponent, ReactiveFormsModule],
   templateUrl: './forecast-home.html',
   styleUrl: './forecast-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ForecastHomeComponent {
   private readonly api = inject(ForecastApi);
+  private readonly fb = inject(FormBuilder);
 
   protected readonly forecast = signal<ForecastResult | null>(null);
   protected readonly settings = signal<Settings | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
+
+  /** Which snapshot is being edited: 'bank', a cardId, or null. */
+  protected readonly editing = signal<string | null>(null);
+  protected readonly saving = signal(false);
+
+  protected readonly bankForm = this.fb.nonNullable.group({
+    bankBalance: [0, [Validators.required]],
+    asOf: ['', [Validators.required]],
+  });
+
+  protected readonly cardForm = this.fb.nonNullable.group({
+    currentDebit: [0, [Validators.required, Validators.min(0)]],
+    asOf: ['', [Validators.required]],
+  });
 
   protected readonly statusCopy = computed(() => {
     const status = this.forecast()?.status;
@@ -180,6 +196,74 @@ export class ForecastHomeComponent {
 
   protected trackTimeline = (_: number, i: TimelineItem): string =>
     i.kind === 'anchor' ? `a:${i.date}` : `c:${i.date}:${i.description}`;
+
+  // ---------- Snapshot editing ----------
+
+  protected isEditingBank(): boolean { return this.editing() === 'bank'; }
+  protected isEditingCard(cardId: string): boolean { return this.editing() === cardId; }
+  protected isAnyEdit(): boolean { return this.editing() !== null; }
+
+  protected startEditBank(): void {
+    const f = this.forecast();
+    if (!f) return;
+    this.bankForm.reset({ bankBalance: f.account.bankBalance, asOf: f.account.asOf });
+    this.editing.set('bank');
+  }
+
+  protected startEditCard(cardId: string): void {
+    const f = this.forecast();
+    const card = f?.cards.find((c) => c.cardId === cardId);
+    if (!card) return;
+    this.cardForm.reset({ currentDebit: card.snapshotDebit, asOf: card.asOf });
+    this.editing.set(cardId);
+  }
+
+  protected cancelEdit(): void {
+    this.editing.set(null);
+    this.error.set(null);
+  }
+
+  protected async saveBank(): Promise<void> {
+    if (this.bankForm.invalid) { this.bankForm.markAllAsTouched(); return; }
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const v = this.bankForm.getRawValue();
+      const res = await firstValueFrom(this.api.patchAccount({
+        bankBalance: v.bankBalance, asOf: v.asOf,
+      }));
+      this.forecast.set(res.forecast);
+      this.editing.set(null);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async saveCard(cardId: string): Promise<void> {
+    if (this.cardForm.invalid) { this.cardForm.markAllAsTouched(); return; }
+    const f = this.forecast();
+    const card = f?.cards.find((c) => c.cardId === cardId);
+    if (!card) return;
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const v = this.cardForm.getRawValue();
+      const res = await firstValueFrom(this.api.updateCard(cardId, {
+        name: card.name,
+        currentDebit: v.currentDebit,
+        asOf: v.asOf,
+        billingDayOfMonth: card.billingDayOfMonth,
+      }));
+      this.forecast.set(res.forecast);
+      this.editing.set(null);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
 
   private toChargeItem(date: string, c: ProjectionCharge): ChargeItem {
     if (c.source.kind === 'cc-bill') {

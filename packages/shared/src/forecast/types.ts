@@ -105,7 +105,9 @@ export interface CardForecast {
   name: string;
   billingDayOfMonth: number;
   asOf: IsoDate;
-  /** Outstanding debit AT card.asOf (i.e. starting point). */
+  /** Raw `currentDebit` from the card snapshot (liability at end-of-day `asOf`). */
+  snapshotDebit: number;
+  /** Outstanding debit projected at the first emitted day (visibleStart). */
   openingDebit: number;
   /** Day-by-day outstanding over the forecast window. */
   days: CardDailyBalance[];

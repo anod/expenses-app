@@ -333,6 +333,7 @@ export const project = (
       name: card.name,
       billingDayOfMonth: card.billingDayOfMonth,
       asOf: card.asOf,
+      snapshotDebit: card.currentDebit,
       openingDebit: openingDebitForResult,
       days: dayList,
     };

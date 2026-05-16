@@ -86,44 +86,108 @@
       <section class="cards-row">
         @if (forecast(); as f) {
           <article class="m3-card card-summary bank-summary">
-            <header class="card-header">
-              <h3>
-                <span class="material-symbols-outlined">account_balance</span>
-                Bank
-              </h3>
-              <span class="card-meta">as of {{ fmtDate(f.account.asOf) }}</span>
-            </header>
-            <div class="card-grid">
-              <div>
-                <div class="kpi-label">Snapshot</div>
-                <div class="kpi-value-sm">{{ fmt(f.account.bankBalance) }}</div>
+            @if (!isEditingBank()) {
+              <header class="card-header">
+                <h3>
+                  <span class="material-symbols-outlined">account_balance</span>
+                  Bank
+                </h3>
+                <div class="card-header-actions">
+                  <span class="card-meta">as of {{ fmtDate(f.account.asOf) }}</span>
+                  <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                          (click)="startEditBank()" [disabled]="isAnyEdit()">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                </div>
+              </header>
+              <div class="card-grid">
+                <div>
+                  <div class="kpi-label">Snapshot</div>
+                  <div class="kpi-value-sm">{{ fmt(f.account.bankBalance) }}</div>
+                </div>
+                <div>
+                  <div class="kpi-label">Today</div>
+                  <div class="kpi-value-sm">{{ fmt(f.days[0]?.balance ?? f.account.bankBalance) }}</div>
+                </div>
               </div>
-              <div>
-                <div class="kpi-label">Today</div>
-                <div class="kpi-value-sm">{{ fmt(f.days[0]?.balance ?? f.account.bankBalance) }}</div>
-              </div>
-            </div>
+            } @else {
+              <form class="snapshot-form" [formGroup]="bankForm" (ngSubmit)="saveBank()">
+                <h3 class="form-title">
+                  <span class="material-symbols-outlined">account_balance</span>
+                  Update bank snapshot
+                </h3>
+                <label class="field">
+                  <span class="field-label">Bank balance</span>
+                  <input type="number" formControlName="bankBalance" step="1" />
+                </label>
+                <label class="field">
+                  <span class="field-label">As of</span>
+                  <input type="date" formControlName="asOf" />
+                </label>
+                <div class="form-actions">
+                  <button type="button" class="m3-btn" (click)="cancelEdit()" [disabled]="saving()">Cancel</button>
+                  <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || bankForm.invalid">
+                    <span class="material-symbols-outlined" [class.spin]="saving()">
+                      {{ saving() ? 'progress_activity' : 'save' }}
+                    </span>
+                    Save
+                  </button>
+                </div>
+              </form>
+            }
           </article>
         }
         @for (card of cardSummaries(); track card.cardId) {
           <article class="m3-card card-summary">
-            <header class="card-header">
-              <h3>
-                <span class="material-symbols-outlined">credit_card</span>
-                {{ card.name }}
-              </h3>
-              <span class="card-meta">bills on the {{ card.billingDay }}</span>
-            </header>
-            <div class="card-grid">
-              <div>
-                <div class="kpi-label">Current debit</div>
-                <div class="kpi-value-sm">{{ fmt(card.openingDebit) }}</div>
+            @if (!isEditingCard(card.cardId)) {
+              <header class="card-header">
+                <h3>
+                  <span class="material-symbols-outlined">credit_card</span>
+                  {{ card.name }}
+                </h3>
+                <div class="card-header-actions">
+                  <span class="card-meta">bills on the {{ card.billingDay }}</span>
+                  <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                          (click)="startEditCard(card.cardId)" [disabled]="isAnyEdit()">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                </div>
+              </header>
+              <div class="card-grid">
+                <div>
+                  <div class="kpi-label">Current debit</div>
+                  <div class="kpi-value-sm">{{ fmt(card.openingDebit) }}</div>
+                </div>
+                <div>
+                  <div class="kpi-label">At {{ fmtDate(card.nextAnchorDate) }}</div>
+                  <div class="kpi-value-sm">{{ fmt(card.nextAnchorOutstanding) }}</div>
+                </div>
               </div>
-              <div>
-                <div class="kpi-label">At {{ fmtDate(card.nextAnchorDate) }}</div>
-                <div class="kpi-value-sm">{{ fmt(card.nextAnchorOutstanding) }}</div>
-              </div>
-            </div>
+            } @else {
+              <form class="snapshot-form" [formGroup]="cardForm" (ngSubmit)="saveCard(card.cardId)">
+                <h3 class="form-title">
+                  <span class="material-symbols-outlined">credit_card</span>
+                  Update {{ card.name }} snapshot
+                </h3>
+                <label class="field">
+                  <span class="field-label">Current debit</span>
+                  <input type="number" formControlName="currentDebit" min="0" step="1" />
+                </label>
+                <label class="field">
+                  <span class="field-label">As of</span>
+                  <input type="date" formControlName="asOf" />
+                </label>
+                <div class="form-actions">
+                  <button type="button" class="m3-btn" (click)="cancelEdit()" [disabled]="saving()">Cancel</button>
+                  <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || cardForm.invalid">
+                    <span class="material-symbols-outlined" [class.spin]="saving()">
+                      {{ saving() ? 'progress_activity' : 'save' }}
+                    </span>
+                    Save
+                  </button>
+                </div>
+              </form>
+            }
           </article>
         }
       </section>
