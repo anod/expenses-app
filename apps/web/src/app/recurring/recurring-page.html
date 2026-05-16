@@ -1,0 +1,28 @@
+<section class="page">
+  <h1>Recurring templates</h1>
+  @if (loading()) {
+    <p>Loading…</p>
+  } @else if (error(); as e) {
+    <p class="error">{{ e }}</p>
+  } @else if (templates().length === 0) {
+    <p class="muted">No recurring templates yet. Editing will be added in Wave 2e.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr><th>Description</th><th>Channel</th><th>Day</th><th>Amount</th><th>Start</th><th>End</th></tr>
+      </thead>
+      <tbody>
+        @for (t of templates(); track t.id) {
+          <tr>
+            <td>{{ t.description }}</td>
+            <td>{{ t.channel }}</td>
+            <td>{{ t.day }}</td>
+            <td class="amount">{{ t.amount }}</td>
+            <td>{{ t.startDate }}</td>
+            <td>{{ t.endDate ?? '—' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

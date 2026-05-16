@@ -19,6 +19,7 @@ import { requireBearer } from './auth.js';
 import { openDb } from './db/openDb.js';
 import { StateRepo } from './db/stateRepo.js';
 import { computeForecast } from './forecast/computeForecast.js';
+import { buildForecastRoutes } from './forecast/routes.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -129,14 +130,7 @@ app.get('/api/config', (_req, res) => {
   }
 });
 
-app.get('/api/forecast', (_req, res, next) => {
-  try {
-    const result = computeForecast(stateRepo);
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+app.use('/api', buildForecastRoutes(stateRepo));
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
   try {

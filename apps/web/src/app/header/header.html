@@ -1,5 +1,11 @@
 <header class="app-header">
   <div class="brand">Expenses</div>
+  <nav class="nav">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Forecast</a>
+    <a routerLink="/recurring" routerLinkActive="active">Recurring</a>
+    <a routerLink="/history" routerLinkActive="active">History</a>
+    <a routerLink="/settings" routerLinkActive="active">Settings</a>
+  </nav>
   @if (auth.initError(); as err) {
     <div class="init-error" role="alert">{{ err }}</div>
   }

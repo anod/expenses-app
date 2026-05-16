@@ -1,0 +1,45 @@
+<section class="forecast-home">
+  <h1>Forecast</h1>
+
+  @if (loading()) {
+    <p>Loading…</p>
+  } @else if (error(); as e) {
+    <p class="error">Failed to load forecast: {{ e }}</p>
+  } @else if (forecast(); as f) {
+    <div class="summary" [class.status-safe]="f.status === 'safe'"
+                       [class.status-warning]="f.status === 'warning'"
+                       [class.status-breach]="f.status === 'breach'">
+      <div class="status">{{ f.status }}</div>
+      <div class="kpi">
+        <div class="label">Horizon</div>
+        <div class="value">{{ f.startDate }} → {{ f.endDate }}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Min balance</div>
+        <div class="value">{{ fmt(f.minBalance) }}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Min on</div>
+        <div class="value">{{ f.minBalanceDate }}</div>
+      </div>
+    </div>
+
+    <h2>Anchor dates (10th of month)</h2>
+    <table class="anchors">
+      <thead>
+        <tr><th>Date</th><th>Balance</th><th>Charges</th></tr>
+      </thead>
+      <tbody>
+        @for (day of f.days; track day.date) {
+          @if (day.isAnchor) {
+            <tr>
+              <td>{{ day.date }}</td>
+              <td class="amount">{{ fmt(day.balance) }}</td>
+              <td>{{ day.charges.length }}</td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  }
+</section>

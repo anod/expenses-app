@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { ExpensesTableComponent } from './expenses/expenses-table';
+import { RouterOutlet } from '@angular/router';
 import { HeaderComponent } from './header/header';
 
 @Component({
   selector: 'app-root',
-  imports: [ExpensesTableComponent, HeaderComponent],
+  imports: [RouterOutlet, HeaderComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

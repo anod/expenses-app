@@ -1,7 +1,7 @@
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
   padding: 0.75rem 1rem;
   background: #1f2937;
   color: #f9fafb;
@@ -11,6 +11,31 @@
 .brand {
   font-weight: 600;
   font-size: 1.1rem;
+}
+
+.nav {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+  margin-left: 1rem;
+}
+
+.nav a {
+  color: #d1d5db;
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+}
+
+.nav a:hover {
+  background: #374151;
+  color: #f9fafb;
+}
+
+.nav a.active {
+  background: #2563eb;
+  color: #fff;
 }
 
 .user {

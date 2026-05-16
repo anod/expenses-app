@@ -1,0 +1,30 @@
+.page {
+  padding: 1rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  margin: 1rem 0;
+}
+
+dt {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+dd {
+  margin: 0;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #991b1b;
+}

@@ -1,0 +1,68 @@
+.forecast-home {
+  padding: 1rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.status {
+  font-weight: 700;
+  font-size: 1rem;
+  text-transform: uppercase;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.status-safe .status { background: #d1fae5; color: #065f46; }
+.status-warning .status { background: #fef3c7; color: #92400e; }
+.status-breach .status { background: #fee2e2; color: #991b1b; }
+
+.kpi .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.04em;
+}
+
+.kpi .value {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.anchors {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.anchors th,
+.anchors td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.anchors td.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  color: #991b1b;
+}
+
+@media (max-width: 600px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}
