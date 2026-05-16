@@ -251,6 +251,15 @@
               <div class="charge-amount" [class.is-negative]="item.amount < 0">
                 {{ fmt(item.amount) }}
               </div>
+              @if (item.entryId; as id) {
+                <button type="button"
+                        class="m3-btn m3-btn--icon clear-btn"
+                        title="Mark as cleared"
+                        (click)="clearCharge(id)"
+                        [disabled]="isAnyEdit()">
+                  <span class="material-symbols-outlined">check_circle</span>
+                </button>
+              }
             </li>
           }
         } @empty {
@@ -260,3 +269,14 @@
     </section>
   }
 </section>
+
+@if (snackbar(); as snack) {
+  <div class="snackbar" role="status" aria-live="polite">
+    <span class="snackbar-message">{{ snack.message }}</span>
+    <button type="button" class="snackbar-action" (click)="undoClear()">Undo</button>
+    <button type="button" class="m3-btn m3-btn--icon snackbar-close" (click)="dismissSnackbar()"
+            title="Dismiss">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+}

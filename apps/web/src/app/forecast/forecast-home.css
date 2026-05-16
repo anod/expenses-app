@@ -440,3 +440,59 @@
   gap: 0.5rem;
   margin-top: 0.25rem;
 }
+
+/* ---------- Timeline clear button ---------- */
+
+.timeline-charge .clear-btn {
+  margin-left: 0.5rem;
+  opacity: 0.55;
+  transition: opacity 150ms var(--md-sys-motion-standard);
+}
+.timeline-charge:hover .clear-btn,
+.timeline-charge .clear-btn:focus-visible {
+  opacity: 1;
+}
+
+/* ---------- Snackbar (Material 3 style) ---------- */
+
+.snackbar {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: var(--md-sys-color-inverse-surface, #303030);
+  color: var(--md-sys-color-inverse-on-surface, #f1f1f1);
+  box-shadow: var(--md-sys-elevation-3, 0 4px 12px rgba(0,0,0,0.25));
+  min-width: min(560px, 90vw);
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.snackbar-message { flex: 1; }
+
+.snackbar-action {
+  background: transparent;
+  border: none;
+  color: var(--md-sys-color-inverse-primary, #b6c7ff);
+  font: var(--md-sys-typescale-label-large);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-full);
+  cursor: pointer;
+}
+.snackbar-action:hover {
+  background: color-mix(in srgb, var(--md-sys-color-inverse-primary, #b6c7ff) 12%, transparent);
+}
+
+.snackbar-close {
+  color: var(--md-sys-color-inverse-on-surface, #f1f1f1) !important;
+}
+.snackbar-close:hover {
+  background: color-mix(in srgb, var(--md-sys-color-inverse-on-surface, #f1f1f1) 12%, transparent) !important;
+}

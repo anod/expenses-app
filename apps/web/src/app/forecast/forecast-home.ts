@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { ForecastResult, Settings, ProjectionCharge } from '@expenses/shared';
+import type { ForecastResult, LedgerEntry, Settings, ProjectionCharge } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
@@ -12,6 +12,8 @@ interface ChargeItem {
   amount: number;
   channel: 'bank' | 'cc';
   cardId?: string;
+  /** Set for bank-channel charges (single ledger entry). Absent for cc-bill rollups. */
+  entryId?: string;
 }
 
 interface AnchorItem {
@@ -64,6 +66,13 @@ export class ForecastHomeComponent {
     currentDebit: [0, [Validators.required, Validators.min(0)]],
     asOf: ['', [Validators.required]],
   });
+
+  /** Snackbar for clear/undo. Holds the cleared entry so we can restore it. */
+  protected readonly snackbar = signal<{
+    message: string;
+    entry: LedgerEntry;
+  } | null>(null);
+  private snackbarTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly statusCopy = computed(() => {
     const status = this.forecast()?.status;
@@ -265,6 +274,56 @@ export class ForecastHomeComponent {
     }
   }
 
+  // ---------- Clear / undo ----------
+
+  protected async clearCharge(entryId: string): Promise<void> {
+    if (this.isAnyEdit()) return;
+    this.error.set(null);
+    try {
+      const res = await firstValueFrom(this.api.clearLedger(entryId));
+      this.forecast.set(res.forecast);
+      this.showSnackbar(`Cleared “${res.entity.description}”`, res.entity);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected async undoClear(): Promise<void> {
+    const snack = this.snackbar();
+    if (!snack) return;
+    this.dismissSnackbar();
+    const e = snack.entry;
+    try {
+      const body = {
+        description: e.description,
+        amount: e.amount,
+        channel: e.channel,
+        date: e.date,
+        status: 'pending' as const,
+        ...(e.recurringId != null ? { recurringId: e.recurringId } : {}),
+        ...(e.occurrenceKey != null ? { occurrenceKey: e.occurrenceKey } : {}),
+      };
+      const res = await firstValueFrom(this.api.updateLedger(e.id, body));
+      this.forecast.set(res.forecast);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected dismissSnackbar(): void {
+    if (this.snackbarTimer) {
+      clearTimeout(this.snackbarTimer);
+      this.snackbarTimer = null;
+    }
+    this.snackbar.set(null);
+  }
+
+  private showSnackbar(message: string, entry: LedgerEntry): void {
+    if (this.snackbarTimer) clearTimeout(this.snackbarTimer);
+    this.snackbar.set({ message, entry });
+    this.snackbarTimer = setTimeout(() => this.snackbar.set(null), 6000);
+  }
+
   private toChargeItem(date: string, c: ProjectionCharge): ChargeItem {
     if (c.source.kind === 'cc-bill') {
       return {
@@ -282,6 +341,7 @@ export class ForecastHomeComponent {
       description: c.description,
       amount: c.amount,
       channel: 'bank',
+      entryId: c.source.entryId,
     };
   }
 }
