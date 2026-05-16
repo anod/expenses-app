@@ -107,6 +107,12 @@ verbatim to Microsoft Graph. **No tokens are stored server-side.**
 | `npm test` | Run all workspace tests (shared parser + API graph layer) |
 | `npm run build` | Build all workspaces |
 | `npm run test:connection` | Smoke-test the Microsoft Graph connection (no dump) |
+| `npm --workspace @expenses/api run backup:db` | Online SQLite backup (used by deploy cron) |
+
+## Deployment
+
+Production deployment is covered in [`docs/deploy.md`](docs/deploy.md):
+Docker image, Proxmox LXC bootstrap, Tailscale-served TLS, and backups.
 
 ## Roadmap
 

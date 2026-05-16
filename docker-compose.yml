@@ -1,6 +1,8 @@
 services:
   graph-tester:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.graph-tester
     image: expenses-graph-tester:latest
     env_file: .env
     # Device code flow prints a URL+code and waits for browser sign-in.

@@ -10,6 +10,15 @@ const Common = z.object({
     .union([z.string(), z.boolean()])
     .default(false)
     .transform((v) => v === true || /^(1|true|yes|on)$/i.test(String(v))),
+  SERVE_SPA: z
+    .union([z.string(), z.boolean()])
+    .default(false)
+    .transform((v) => v === true || /^(1|true|yes|on)$/i.test(String(v))),
+  SPA_DIR: z.string().min(1).default('./apps/web/dist/web/browser'),
+  REQUIRE_AUTH: z
+    .union([z.string(), z.boolean()])
+    .default(false)
+    .transform((v) => v === true || /^(1|true|yes|on)$/i.test(String(v))),
 });
 
 const DumpFields = z.object({

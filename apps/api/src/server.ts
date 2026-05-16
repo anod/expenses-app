@@ -158,8 +158,15 @@ app.get('/api/config', (_req, res) => {
   }
 });
 
-app.use('/api', buildForecastRoutes(stateRepo));
-app.use('/api', buildSyncRoutes(stateRepo, excelWriter));
+const protectApi = config.REQUIRE_AUTH && isGraphConfig(config) && !config.DEMO_MODE;
+if (protectApi) {
+  app.use('/api', requireBearer, buildForecastRoutes(stateRepo));
+  app.use('/api', requireBearer, buildSyncRoutes(stateRepo, excelWriter));
+  log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer');
+} else {
+  app.use('/api', buildForecastRoutes(stateRepo));
+  app.use('/api', buildSyncRoutes(stateRepo, excelWriter));
+}
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
   try {
@@ -196,6 +203,23 @@ app.get('/api/workbook/status', graphOrDump(), async (req, res, next) => {
     next(err);
   }
 });
+
+if (config.SERVE_SPA) {
+  const spaDir = resolve(repoRoot, config.SPA_DIR);
+  log.info({ spaDir }, 'serving SPA static files');
+  // Hashed assets — long cache; index.html served separately with no-cache.
+  app.use(express.static(spaDir, { index: false, maxAge: '1y', fallthrough: true }));
+  app.get(/.*/, (req, res, next) => {
+    // Don't shadow API or healthz; only serve SPA for navigation requests.
+    if (req.path.startsWith('/api/') || req.path === '/healthz') return next();
+    // Looks like a missing asset (has a file extension) -> 404 instead of index.
+    if (/\.[a-zA-Z0-9]{1,8}$/.test(req.path)) return next();
+    res.set('Cache-Control', 'no-cache');
+    res.sendFile('index.html', { root: spaDir }, (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 const errorHandler: ErrorRequestHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof NoDumpFoundError) {
