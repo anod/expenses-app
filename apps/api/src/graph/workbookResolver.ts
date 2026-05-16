@@ -23,20 +23,28 @@ export function encodeSharingUrl(url: string): string {
 
 export class WorkbookResolver {
   private cached: DriveItemRef | null = null;
+  private cachedUrl: string | null = null;
 
   constructor(
     private readonly client: GraphClient,
-    private readonly sharingUrl: string,
+    private readonly getSharingUrl: () => string | undefined,
     private readonly log: Logger,
   ) {}
 
   invalidate(): void {
     this.cached = null;
+    this.cachedUrl = null;
   }
 
   async resolve(accessToken: string): Promise<DriveItemRef> {
-    if (this.cached) return this.cached;
-    const token = encodeSharingUrl(this.sharingUrl);
+    const url = this.getSharingUrl();
+    if (!url) {
+      throw new Error(
+        'No OneDrive workbook URL configured. Set it in Settings or via ONEDRIVE_WORKBOOK_URL.',
+      );
+    }
+    if (this.cached && this.cachedUrl === url) return this.cached;
+    const token = encodeSharingUrl(url);
     try {
       const item = await this.client.request<RawDriveItem>({
         path: `/shares/${token}/driveItem?$select=id,name,parentReference,lastModifiedDateTime,webUrl`,
@@ -53,6 +61,7 @@ export class WorkbookResolver {
         throw new Error('driveItem response missing driveId or itemId');
       }
       this.cached = ref;
+      this.cachedUrl = url;
       this.log.debug({ driveId: ref.driveId, itemId: ref.itemId }, 'resolved workbook');
       return ref;
     } catch (err) {

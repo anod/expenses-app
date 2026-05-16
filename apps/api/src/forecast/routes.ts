@@ -189,7 +189,12 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.patch('/settings', (req, res) => {
     try {
       const input = SettingsInput.parse(req.body);
-      getRepo().upsertSettings(input);
+      const { workbookUrl, ...rest } = input;
+      getRepo().upsertSettings(
+        workbookUrl && workbookUrl.trim() !== ''
+          ? { ...rest, workbookUrl: workbookUrl.trim() }
+          : rest,
+      );
       withForecast(res, getRepo().getSettings());
     } catch (err) {
       if (!handleZod(err, res)) throw err;

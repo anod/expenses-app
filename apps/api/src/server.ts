@@ -24,6 +24,7 @@ import { buildDemoRoutes } from './demo/routes.js';
 import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
 import { buildSyncRoutes } from './sync/routes.js';
+import { buildImportRoutes } from './import/routes.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -87,20 +88,29 @@ const isDemo = (): boolean => demoController.isActive();
 
 let graphReader: GraphReader | null = null;
 let excelWriter: ExcelWriter | null = null;
+let graphResolver: WorkbookResolver | null = null;
+let graphClient: GraphClient | null = null;
 if (isGraphConfig(config)) {
-  const graphClient = new GraphClient({
+  graphClient = new GraphClient({
     baseUrl: config.GRAPH_BASE_URL,
     log,
     timeoutMs: config.GRAPH_TIMEOUT_MS,
   });
-  const resolver = new WorkbookResolver(graphClient, config.ONEDRIVE_WORKBOOK_URL, log);
+  // URL priority: settings.workbookUrl > env ONEDRIVE_WORKBOOK_URL. Read at
+  // each resolve so edits in Settings take effect without a server restart.
+  const getWorkbookUrl = (): string | undefined => {
+    const fromDb = getRepo().getSettings().workbookUrl;
+    if (fromDb && fromDb.trim() !== '') return fromDb.trim();
+    return config.ONEDRIVE_WORKBOOK_URL;
+  };
+  graphResolver = new WorkbookResolver(graphClient, getWorkbookUrl, log);
   graphReader = new GraphReader({
     client: graphClient,
-    resolver,
+    resolver: graphResolver,
     worksheetName: config.WORKSHEET_NAME,
     log,
   });
-  excelWriter = new ExcelWriter({ client: graphClient, resolver, log });
+  excelWriter = new ExcelWriter({ client: graphClient, resolver: graphResolver, log });
 }
 
 const app = express();
@@ -159,10 +169,13 @@ const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
 if (protectApi) {
   app.use('/api', requireBearer, buildForecastRoutes(getRepo));
   app.use('/api', requireBearer, buildSyncRoutes(getRepo, excelWriter, isDemo));
+  app.use('/api', requireBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
   log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer');
 } else {
   app.use('/api', buildForecastRoutes(getRepo));
   app.use('/api', buildSyncRoutes(getRepo, excelWriter, isDemo));
+  // Import always requires a Bearer (Graph needs the user's token).
+  app.use('/api', requireBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
 }
 
 app.get('/api/expenses', graphOrDump(), async (req, res, next) => {

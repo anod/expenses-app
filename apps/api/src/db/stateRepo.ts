@@ -192,25 +192,37 @@ export class StateRepo {
         timezone: string;
         horizon_months: number;
         currency: string;
-      }>('SELECT threshold, timezone, horizon_months, currency FROM settings WHERE id = 1')
+        workbook_url: string | null;
+      }>('SELECT threshold, timezone, horizon_months, currency, workbook_url FROM settings WHERE id = 1')
       .get();
     if (!row) return DEFAULT_SETTINGS;
-    return {
+    const s: Settings = {
       threshold: row.threshold,
       timezone: row.timezone,
       horizonMonths: row.horizon_months,
       currency: row.currency as 'ILS',
     };
+    if (row.workbook_url != null && row.workbook_url !== '') {
+      s.workbookUrl = row.workbook_url;
+    }
+    return s;
   }
 
   upsertSettings(s: Settings): void {
     this.db
       .prepare(
-        'INSERT INTO settings(id, threshold, timezone, horizon_months, currency) ' +
-        'VALUES (1, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ' +
+        'INSERT INTO settings(id, threshold, timezone, horizon_months, currency, workbook_url) ' +
+        'VALUES (1, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ' +
         'threshold=excluded.threshold, timezone=excluded.timezone, ' +
-        'horizon_months=excluded.horizon_months, currency=excluded.currency',
+        'horizon_months=excluded.horizon_months, currency=excluded.currency, ' +
+        'workbook_url=excluded.workbook_url',
       )
-      .run(s.threshold, s.timezone, s.horizonMonths, s.currency);
+      .run(
+        s.threshold,
+        s.timezone,
+        s.horizonMonths,
+        s.currency,
+        s.workbookUrl && s.workbookUrl.trim() !== '' ? s.workbookUrl.trim() : null,
+      );
   }
 }

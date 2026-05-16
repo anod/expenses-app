@@ -29,7 +29,11 @@ const GraphFields = z.object({
     .string()
     .default('Files.ReadWrite,User.Read')
     .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
-  ONEDRIVE_WORKBOOK_URL: z.string().url('ONEDRIVE_WORKBOOK_URL must be a URL'),
+  ONEDRIVE_WORKBOOK_URL: z
+    .string()
+    .url('ONEDRIVE_WORKBOOK_URL must be a URL')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   WORKSHEET_NAME: z.string().min(1).default('Sheet1'),
   GRAPH_BASE_URL: z.string().url().default('https://graph.microsoft.com/v1.0'),
   GRAPH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),

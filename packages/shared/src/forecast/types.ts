@@ -70,6 +70,13 @@ export interface Settings {
   timezone: string;
   horizonMonths: number;
   currency: 'ILS';
+  /**
+   * OneDrive Excel workbook share URL used for Graph reads / sync / import.
+   * When empty/undefined, the server falls back to the ONEDRIVE_WORKBOOK_URL
+   * env var. Stored in DB so it can be edited from the Settings UI without
+   * touching .env.
+   */
+  workbookUrl?: string;
 }
 
 export type ChargeSource =

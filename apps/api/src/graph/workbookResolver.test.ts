@@ -42,7 +42,7 @@ describe('WorkbookResolver', () => {
         webUrl: 'https://example/x',
       };
     });
-    const r = new WorkbookResolver(client, 'https://onedrive/x', log);
+    const r = new WorkbookResolver(client, () => 'https://onedrive/x', log);
     const a = await r.resolve('tok');
     const b = await r.resolve('tok');
     expect(a).toEqual(b);
@@ -55,7 +55,7 @@ describe('WorkbookResolver', () => {
     const client = fakeClient(() => {
       throw new GraphError(404, 'itemNotFound', 'gone', false);
     });
-    const r = new WorkbookResolver(client, 'https://onedrive/x', log);
+    const r = new WorkbookResolver(client, () => 'https://onedrive/x', log);
     await expect(r.resolve('tok')).rejects.toBeInstanceOf(GraphError);
     // After invalidation, the next call should also try (and fail again).
     await expect(r.resolve('tok')).rejects.toBeInstanceOf(GraphError);
@@ -63,7 +63,7 @@ describe('WorkbookResolver', () => {
 
   it('rejects responses missing driveId or itemId', async () => {
     const client = fakeClient(() => ({ id: 'x', name: 'n', parentReference: {} }));
-    const r = new WorkbookResolver(client, 'https://onedrive/x', log);
+    const r = new WorkbookResolver(client, () => 'https://onedrive/x', log);
     await expect(r.resolve('tok')).rejects.toThrow(/missing driveId or itemId/);
   });
 
@@ -77,7 +77,7 @@ describe('WorkbookResolver', () => {
         parentReference: { driveId: 'drive-1' },
       };
     });
-    const r = new WorkbookResolver(client, 'https://onedrive/x', log);
+    const r = new WorkbookResolver(client, () => 'https://onedrive/x', log);
     await r.resolve('tok');
     r.invalidate();
     await r.resolve('tok');

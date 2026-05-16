@@ -53,6 +53,7 @@ export const SettingsInput = z.object({
   timezone: z.string().min(1).max(64),
   horizonMonths: z.number().int().min(1).max(24),
   currency: z.literal('ILS'),
+  workbookUrl: z.string().trim().max(2048).optional().or(z.literal('')),
 });
 
 export type AccountInputT = z.infer<typeof AccountInput>;

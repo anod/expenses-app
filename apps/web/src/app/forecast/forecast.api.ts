@@ -86,4 +86,24 @@ export class ForecastApi {
   setDemo(enabled: boolean) {
     return this.http.post<{ enabled: boolean }>('/api/demo', { enabled });
   }
+
+  importExcel() {
+    return this.http.post<{
+      summary: {
+        workbook: string;
+        worksheet: string;
+        monthsParsed: number;
+        startDate: string;
+        startBalance: number;
+        cardsCreated: number;
+        recurringCreated: number;
+        ledgerCreated: number;
+        orphanedLedger: number;
+        orphanedRecurring: number;
+        warnings: string[];
+        skippedRows: { label: string; reason: string }[];
+      };
+      forecast: ForecastResult;
+    }>('/api/import/excel', {});
+  }
 }

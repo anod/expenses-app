@@ -4,7 +4,7 @@
       <span class="material-symbols-outlined">tune</span>
       Settings
     </h1>
-    <p class="subtitle">Forecasting preferences and Excel sync.</p>
+    <p class="subtitle">Forecasting preferences, OneDrive integration, and import / sync.</p>
   </header>
 
   @if (loading()) {
@@ -17,112 +17,206 @@
       <span class="material-symbols-outlined">error</span>
       {{ e }}
     </div>
-  } @else if (settings(); as s) {
-    <div class="settings-grid">
-      <div class="m3-card setting">
-        <span class="material-symbols-outlined setting-icon">shield</span>
+  } @else {
+    <!-- Forecast preferences -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">tune</span>
         <div>
-          <div class="setting-label">Safety threshold</div>
-          <div class="setting-value">{{ s.threshold }}</div>
-        </div>
-      </div>
-      <div class="m3-card setting">
-        <span class="material-symbols-outlined setting-icon">schedule</span>
-        <div>
-          <div class="setting-label">Timezone</div>
-          <div class="setting-value">{{ s.timezone }}</div>
-        </div>
-      </div>
-      <div class="m3-card setting">
-        <span class="material-symbols-outlined setting-icon">date_range</span>
-        <div>
-          <div class="setting-label">Horizon</div>
-          <div class="setting-value">{{ s.horizonMonths }} months</div>
-        </div>
-      </div>
-      <div class="m3-card setting">
-        <span class="material-symbols-outlined setting-icon">payments</span>
-        <div>
-          <div class="setting-label">Currency</div>
-          <div class="setting-value">{{ s.currency }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="m3-card demo-card">
-      <header class="sync-head">
-        <span class="material-symbols-outlined sync-icon">science</span>
-        <div>
-          <h2>Demo mode</h2>
-          <p>Replace the live data with deterministic fake data (in-memory only). Your real database is not touched. Toggling will reload the app.</p>
+          <h2>Forecast preferences</h2>
+          <p>Threshold, timezone and horizon for the projection.</p>
         </div>
       </header>
-      <label class="demo-toggle">
-        <input
-          type="checkbox"
-          [checked]="demoEnabled()"
-          [disabled]="demoBusy()"
-          (change)="toggleDemo($any($event.target).checked)"
-        />
-        <span>{{ demoEnabled() ? 'Demo mode is ON' : 'Demo mode is OFF' }}</span>
-      </label>
-      @if (demoError(); as e) {
-        <div class="sync-status error">
-          <span class="material-symbols-outlined">error</span>
-          {{ e }}
+      <form [formGroup]="prefsForm" (ngSubmit)="savePrefs()" class="form-grid">
+        <label class="field">
+          <span>Safety threshold</span>
+          <input type="number" min="0" step="50" formControlName="threshold" />
+        </label>
+        <label class="field">
+          <span>Timezone</span>
+          <input type="text" formControlName="timezone" placeholder="Asia/Jerusalem" />
+        </label>
+        <label class="field">
+          <span>Horizon (months)</span>
+          <input type="number" min="1" max="24" formControlName="horizonMonths" />
+        </label>
+        <label class="field">
+          <span>Currency</span>
+          <input type="text" formControlName="currency" readonly />
+        </label>
+        <label class="field field-wide">
+          <span>OneDrive workbook URL</span>
+          <input
+            type="url"
+            formControlName="workbookUrl"
+            placeholder="https://1drv.ms/x/..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <small>Used by Import &amp; Sync. Leave empty to fall back to <code>ONEDRIVE_WORKBOOK_URL</code> env.</small>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="m3-btn primary" [disabled]="savingPrefs() || prefsForm.invalid || prefsForm.pristine">
+            @if (savingPrefs()) {
+              <span class="material-symbols-outlined spin">progress_activity</span> Saving…
+            } @else {
+              <span class="material-symbols-outlined">save</span> Save
+            }
+          </button>
+          @if (prefsSaved()) {
+            <span class="inline-status success">
+              <span class="material-symbols-outlined">check_circle</span> Saved
+            </span>
+          }
+          @if (prefsError(); as e) {
+            <span class="inline-status error">
+              <span class="material-symbols-outlined">error</span> {{ e }}
+            </span>
+          }
         </div>
-      }
+      </form>
     </div>
 
-    <div class="m3-card sync-card">
-      <header class="sync-head">
-        <span class="material-symbols-outlined sync-icon">cloud_upload</span>
+    <!-- Import from Excel -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">cloud_download</span>
         <div>
-          <h2>Sync to Excel</h2>
-          <p>Write the current state to your OneDrive workbook. Choose a target sheet and whether to overwrite it or create a new sheet alongside. A supplementary <code>StateRaw</code> sheet is always written with the flat tables for round-trip debugging.</p>
+          <h2>Import from OneDrive</h2>
+          <p>Re-read the workbook and reconcile recurring templates, ledger entries and credit-card snapshots. User-created rows survive; cleared status is preserved.</p>
         </div>
       </header>
       @if (auth.isDemo()) {
-        <div class="sync-status info">
+        <div class="status-banner info">
           <span class="material-symbols-outlined">info</span>
-          Excel sync is disabled in demo mode.
+          Disabled in demo mode.
         </div>
       } @else {
-      <form [formGroup]="syncForm" (ngSubmit)="sync()" class="sync-form">
-        <label class="field">
-          <span>Target sheet</span>
-          <input formControlName="targetSheet" type="text" maxlength="31" />
-        </label>
-        <div class="mode-group" role="radiogroup" aria-label="Mode">
-          <label class="m3-chip mode-chip">
-            <input type="radio" formControlName="mode" value="overwrite" />
-            <span>Overwrite</span>
-          </label>
-          <label class="m3-chip mode-chip">
-            <input type="radio" formControlName="mode" value="new" />
-            <span>New sheet (auto-suffix if name taken)</span>
-          </label>
+        <div class="form-actions">
+          <button type="button" class="m3-btn primary" (click)="runImport()" [disabled]="importing()">
+            @if (importing()) {
+              <span class="material-symbols-outlined spin">progress_activity</span> Importing…
+            } @else {
+              <span class="material-symbols-outlined">download</span> Import now
+            }
+          </button>
         </div>
-        <button type="submit" class="m3-btn primary" [disabled]="syncing() || syncForm.invalid">
-          @if (syncing()) {
-            <span class="material-symbols-outlined spin">progress_activity</span> Syncing…
-          } @else {
-            <span class="material-symbols-outlined">cloud_sync</span> Sync now
-          }
-        </button>
-      </form>
-      @if (syncResult(); as r) {
-        <div class="sync-status success">
-          <span class="material-symbols-outlined">check_circle</span>
-          Wrote <strong>{{ r.targetSheet }}</strong> and <strong>{{ r.rawSheet }}</strong> to <em>{{ r.workbook }}</em> at {{ r.syncedAt | date:'mediumTime' }}.
-        </div>
+        @if (importResult(); as r) {
+          <div class="status-banner success">
+            <span class="material-symbols-outlined">check_circle</span>
+            <div>
+              Imported <strong>{{ r.workbook }}</strong> / <em>{{ r.worksheet }}</em>
+              at {{ r.importedAt | date:'mediumTime' }}.
+              <div class="muted small">
+                {{ r.monthsParsed }} months · {{ r.cardsCreated }} cards · {{ r.recurringCreated }} recurring · {{ r.ledgerCreated }} ledger
+                @if (r.orphanedLedger > 0 || r.orphanedRecurring > 0) {
+                  · removed {{ r.orphanedLedger }} stale ledger / {{ r.orphanedRecurring }} recurring
+                }
+              </div>
+            </div>
+          </div>
+        }
+        @if (importError(); as e) {
+          <div class="status-banner error">
+            <span class="material-symbols-outlined">error</span>
+            {{ e }}
+          </div>
+        }
       }
-      @if (syncError(); as e) {
-        <div class="sync-status error">
+    </div>
+
+    <!-- Sync to Excel -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">cloud_upload</span>
+        <div>
+          <h2>Sync to Excel</h2>
+          <p>Write current state to a sheet in your OneDrive workbook. <code>StateRaw</code> is always written alongside for round-trip debugging.</p>
+        </div>
+      </header>
+      @if (auth.isDemo()) {
+        <div class="status-banner info">
+          <span class="material-symbols-outlined">info</span>
+          Disabled in demo mode.
+        </div>
+      } @else {
+        <form [formGroup]="syncForm" (ngSubmit)="sync()" class="form-grid">
+          <label class="field">
+            <span>Target sheet</span>
+            <input formControlName="targetSheet" type="text" maxlength="31" />
+          </label>
+          <div class="field">
+            <span>Mode</span>
+            <div class="mode-group" role="radiogroup">
+              <label class="m3-chip mode-chip">
+                <input type="radio" formControlName="mode" value="overwrite" />
+                <span>Overwrite</span>
+              </label>
+              <label class="m3-chip mode-chip">
+                <input type="radio" formControlName="mode" value="new" />
+                <span>New sheet</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="m3-btn primary" [disabled]="syncing() || syncForm.invalid">
+              @if (syncing()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Syncing…
+              } @else {
+                <span class="material-symbols-outlined">cloud_sync</span> Sync now
+              }
+            </button>
+          </div>
+        </form>
+        @if (syncResult(); as r) {
+          <div class="status-banner success">
+            <span class="material-symbols-outlined">check_circle</span>
+            Wrote <strong>{{ r.targetSheet }}</strong> &amp; <strong>{{ r.rawSheet }}</strong> to <em>{{ r.workbook }}</em> at {{ r.syncedAt | date:'mediumTime' }}.
+          </div>
+        }
+        @if (syncError(); as e) {
+          <div class="status-banner error">
+            <span class="material-symbols-outlined">error</span>
+            {{ e }}
+          </div>
+        }
+      }
+    </div>
+
+    <!-- Demo mode -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">science</span>
+        <div>
+          <h2>Demo mode</h2>
+          <p>Swap live data with deterministic fake data (in-memory). Your real DB stays untouched. Toggling reloads the app.</p>
+        </div>
+      </header>
+      <div class="toggle-row">
+        <button
+          type="button"
+          class="m3-switch"
+          role="switch"
+          [attr.aria-checked]="demoEnabled()"
+          [class.on]="demoEnabled()"
+          [disabled]="demoBusy()"
+          (click)="toggleDemo(!demoEnabled())"
+        >
+          <span class="m3-switch-track">
+            <span class="m3-switch-thumb">
+              @if (demoEnabled()) {
+                <span class="material-symbols-outlined">check</span>
+              }
+            </span>
+          </span>
+        </button>
+        <span class="toggle-label">{{ demoEnabled() ? 'Demo mode is ON' : 'Demo mode is OFF' }}</span>
+      </div>
+      @if (demoError(); as e) {
+        <div class="status-banner error">
           <span class="material-symbols-outlined">error</span>
           {{ e }}
         </div>
-      }
       }
     </div>
   }
