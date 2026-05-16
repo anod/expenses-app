@@ -88,6 +88,16 @@ const nextOccurrence = (current: IsoDate, day: number): IsoDate => {
  *     bank channel:    date >= account.asOf
  *     cc:<cardId>:     date >  card.asOf  (strictly after)
  */
+/**
+ * Strip overrides + filter to "pending after asOf" entries.
+ *
+ * - account.bankBalance is the balance at the END of account.asOf, so bank
+ *   entries dated ≤ asOf are dropped (already reflected in the balance).
+ *     bank:           date >  account.asOf  (strictly after)
+ * - card.currentDebit is the outstanding at END of card.asOf, so cc entries
+ *   dated ≤ asOf are dropped (already reflected in currentDebit).
+ *     cc:<cardId>:    date >  card.asOf     (strictly after)
+ */
 export const mergeWithOverrides = (
   virtuals: ReadonlyArray<LedgerEntry>,
   persisted: ReadonlyArray<LedgerEntry>,
@@ -113,7 +123,7 @@ export const mergeWithOverrides = (
 
   const keep = (e: LedgerEntry): boolean => {
     if (e.status !== 'pending') return false;
-    if (e.channel === 'bank') return compareIso(e.date, account.asOf) >= 0;
+    if (e.channel === 'bank') return compareIso(e.date, account.asOf) > 0;
     const cardId = e.channel.slice(3);
     const card = cardById.get(cardId);
     if (!card) {
@@ -154,8 +164,9 @@ export const project = (
     assertBillingDay(c.billingDayOfMonth, `card ${c.id}`);
   }
 
-  const startDate = compareIso(account.asOf, today) > 0 ? account.asOf : today;
-  const endDate = addMonths(startDate, settings.horizonMonths);
+  const visibleStart = compareIso(account.asOf, today) > 0 ? account.asOf : today;
+  const walkStart = account.asOf;
+  const endDate = addMonths(visibleStart, settings.horizonMonths);
 
   // Bucket charges by date.
   const bankByDate = new Map<IsoDate, ProjectionCharge[]>();
@@ -191,7 +202,7 @@ export const project = (
     if (e.status !== 'pending') continue;
     if (compareIso(e.date, endDate) > 0) continue;
     if (e.channel === 'bank') {
-      if (compareIso(e.date, startDate) < 0) continue;
+      if (compareIso(e.date, walkStart) <= 0) continue;
       pushBank(e.date, {
         description: e.description,
         amount: e.amount,
@@ -202,7 +213,7 @@ export const project = (
       const card = cardById.get(cardId);
       if (!card) throw new Error(`unknown card ${cardId} on entry ${e.id}`);
       const billDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
-      if (compareIso(billDate, startDate) < 0) continue;
+      if (compareIso(billDate, walkStart) < 0) continue;
       if (compareIso(billDate, endDate) > 0) continue;
       pushCc(cardId, billDate, e);
     }
@@ -212,7 +223,7 @@ export const project = (
   for (const card of cards) {
     if (card.currentDebit === 0) continue;
     const billDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
-    if (compareIso(billDate, startDate) < 0) continue;
+    if (compareIso(billDate, walkStart) < 0) continue;
     if (compareIso(billDate, endDate) > 0) continue;
     pushBank(billDate, {
       description: `Credit card opening balance (${card.name})`,
@@ -235,28 +246,32 @@ export const project = (
     }
   }
 
-  // Walk days.
+  // Walk from walkStart (the asOf date) so charges between asOf and today are
+  // applied to the bank balance, but only emit days from visibleStart onward
+  // (we don't show historical days in the UI; they've already happened).
   const days: DailyProjection[] = [];
   let balance = account.bankBalance;
-  let cur = startDate;
+  let cur = walkStart;
   while (compareIso(cur, endDate) <= 0) {
     const charges = bankByDate.get(cur) ?? [];
     const delta = charges.reduce((s, c) => s + c.amount, 0);
     balance += delta;
-    const { d } = parseIso(cur);
-    days.push({
-      date: cur,
-      balance,
-      delta,
-      charges,
-      isAnchor: d === 10,
-    });
+    if (compareIso(cur, visibleStart) >= 0) {
+      const { d } = parseIso(cur);
+      days.push({
+        date: cur,
+        balance,
+        delta,
+        charges,
+        isAnchor: d === 10,
+      });
+    }
     cur = addDays(cur, 1);
   }
 
   // Status from min balance.
   let minBalance = Number.POSITIVE_INFINITY;
-  let minBalanceDate = startDate;
+  let minBalanceDate = visibleStart;
   for (const day of days) {
     if (day.balance < minBalance) {
       minBalance = day.balance;
@@ -290,24 +305,12 @@ export const project = (
 
   const cardForecasts: CardForecast[] = cards.map((card) => {
     const dayList: CardDailyBalance[] = [];
-    let outstanding = 0;
-    let openingDebit = card.currentDebit;
-    let openingBillDate: IsoDate | null = null;
-    if (card.currentDebit > 0) {
-      openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
-    }
-    // The "opening debit" was accrued before startDate; if startDate is past
-    // the opening bill date, the debt was already paid before we begin.
-    if (openingBillDate && compareIso(openingBillDate, startDate) < 0) {
-      openingDebit = 0;
-      openingBillDate = null;
-    }
-    outstanding = openingDebit;
+    let outstanding = card.currentDebit;
 
     const perDate = ccChargesByCardDate.get(card.id);
-    let cur = startDate;
+    let cur = walkStart;
+    let openingDebitForResult = card.currentDebit;
     while (compareIso(cur, endDate) <= 0) {
-      // Accrue any cc-charges with this exact date.
       const accrued = perDate?.get(cur) ?? 0;
       outstanding += accrued;
       const { d } = parseIso(cur);
@@ -316,7 +319,12 @@ export const project = (
       if (isBillingDay && compareIso(cur, card.asOf) > 0) {
         outstanding = 0;
       }
-      dayList.push({ date: cur, outstanding, isBillingDay });
+      if (compareIso(cur, visibleStart) >= 0) {
+        // Capture the outstanding balance the first time we hit visibleStart;
+        // that is the "opening debit" the UI shows as "current debit".
+        if (dayList.length === 0) openingDebitForResult = outstanding;
+        dayList.push({ date: cur, outstanding, isBillingDay });
+      }
       cur = addDays(cur, 1);
     }
 
@@ -325,12 +333,12 @@ export const project = (
       name: card.name,
       billingDayOfMonth: card.billingDayOfMonth,
       asOf: card.asOf,
-      openingDebit: card.currentDebit,
+      openingDebit: openingDebitForResult,
       days: dayList,
     };
   });
 
-  return { startDate, endDate, days, status, minBalance, minBalanceDate, cards: cardForecasts };
+  return { startDate: visibleStart, endDate, days, status, minBalance, minBalanceDate, cards: cardForecasts };
 };
 
 /** End-to-end convenience: virtuals → merge → project. */
@@ -342,11 +350,13 @@ export const forecast = (input: {
   settings: Settings;
   today: IsoDate;
 }): ForecastResult => {
-  const startDate = compareIso(input.account.asOf, input.today) > 0
+  // Walk from asOf (so charges between asOf and today affect today's balance)
+  // but compute horizon endDate from the visible window start.
+  const visibleStart = compareIso(input.account.asOf, input.today) > 0
     ? input.account.asOf
     : input.today;
-  const endDate = addMonths(startDate, input.settings.horizonMonths);
-  const virtuals = generateVirtualOccurrences(input.templates, startDate, endDate);
+  const endDate = addMonths(visibleStart, input.settings.horizonMonths);
+  const virtuals = generateVirtualOccurrences(input.templates, input.account.asOf, endDate);
   const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards);
   return project(effective, input.account, input.cards, input.settings, input.today);
 };

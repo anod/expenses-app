@@ -387,6 +387,9 @@ const main = async (): Promise<void> => {
 
   const channelForRow = (row: ExpenseRow): 'bank' | `cc:${string}` => {
     const src = row.source.toLowerCase();
+    // "{source} debt" rows are direct bank-to-card installment/debt payments,
+    // not card purchases, so they hit the bank directly on row.day.
+    if (/\bdebt\b/i.test(row.labelTrimmed)) return 'bank';
     if (src in CREDIT_CARD_SOURCES && cardSourcesPresent.has(src)) {
       return `cc:${src}`;
     }
@@ -436,10 +439,6 @@ const main = async (): Promise<void> => {
     for (const m of snap.months) {
       const v = row.amounts[m.key]?.value;
       if (typeof v !== 'number' || v === 0) continue;
-      // For cc-channel ledger entries, skip occurrences on/before card.asOf
-      // because they're already represented in currentDebit and the pipeline
-      // would otherwise drop them anyway (strictly-after filter).
-      if (channel !== 'bank' && m.key <= firstMonth.key) continue;
       const date = clampedDate(m.key, row.day);
       const id = uniqueId(`l-${sanitizeId(row.labelTrimmed)}-${m.key.slice(0, 7)}`);
       const entry: LedgerEntry = {

@@ -105,6 +105,14 @@ export class ForecastHomeComponent {
     const filter = this.channelFilter();
     const items: TimelineItem[] = [];
     for (const day of f.days) {
+      // Charges first, then anchor at the end of the day. This makes the
+      // anchor row visually the "closing balance" after the day's expenses.
+      for (const c of day.charges) {
+        const row = this.toChargeItem(day.date, c);
+        if (filter === 'all' || row.channel === filter) {
+          items.push(row);
+        }
+      }
       if (day.isAnchor) {
         items.push({
           kind: 'anchor',
@@ -112,12 +120,6 @@ export class ForecastHomeComponent {
           balance: day.balance,
           belowThreshold: day.balance < threshold,
         });
-      }
-      for (const c of day.charges) {
-        const row = this.toChargeItem(day.date, c);
-        if (filter === 'all' || row.channel === filter) {
-          items.push(row);
-        }
       }
     }
     return items;
