@@ -1,0 +1,11 @@
+# Overlay for compose.deploy.yml that re-enables a local image build.
+# Use when GHCR is unreachable, when iterating on uncommitted changes,
+# or for the very first build before the CI pipeline has run.
+#
+#   docker compose -f compose.deploy.yml -f compose.build.yml up -d --build
+services:
+  expenses:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: expenses-app:local

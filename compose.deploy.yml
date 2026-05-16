@@ -1,16 +1,19 @@
 # Production compose file for the LXC deployment.
-# Usage:
-#   docker compose -f compose.deploy.yml up -d --build
+#
+# Default usage (pulls pre-built image from GHCR):
+#   docker compose -f compose.deploy.yml pull && \
+#     docker compose -f compose.deploy.yml up -d
+#
+# Local-build usage (fallback when GHCR is unreachable or for testing
+# uncommitted changes):
+#   docker compose -f compose.deploy.yml -f compose.build.yml up -d --build
 #
 # The app listens on 4000 inside the LXC and is exposed only on loopback.
 # Tailscale's `tailscale serve` (or a local reverse proxy) handles TLS and
 # tailnet exposure on top.
 services:
   expenses:
-    build:
-      context: .
-      dockerfile: Dockerfile.app
-    image: expenses-app:latest
+    image: ${EXPENSES_IMAGE:-ghcr.io/anod/expenses-app:latest}
     container_name: expenses
     restart: unless-stopped
     env_file:

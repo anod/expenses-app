@@ -43,106 +43,129 @@ Caveat: Docker-in-unprivileged-LXC is mostly fine on ext4-backed storage. If
 overlayfs fights ZFS/btrfs, the script will configure `fuse-overlayfs`
 automatically. If issues persist, fall back to a small VM with Docker.
 
-## 2. Join the tailnet
+## 2. Reach the LXC
 
-Inside the LXC (`pct enter <id>`):
+The bootstrap script in §4 installs Tailscale and runs `tailscale up`
+itself. If you'd rather pre-join the tailnet manually (e.g. to confirm
+the hostname before deploying), open a shell into the LXC (`pct enter
+<id>`) and run:
 
 ```sh
 curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up
+tailscale up --hostname alex-expenses --ssh
 ```
 
-Follow the printed URL to authenticate the node. Note the MagicDNS name
-(e.g. `expenses-host.<your-tailnet>.ts.net`).
+The `--ssh` flag enables Tailscale SSH so you can `ssh` into the LXC
+from any tailnet device without exposing port 22 publicly.
 
 ## 3. Update the Azure app registration
 
 In the Azure portal → your app registration → **Authentication** → add an
-SPA redirect URI:
+SPA redirect URI matching the tailnet hostname you'll give the LXC. For
+example, with `TS_HOSTNAME=alex-expenses`:
 
 ```
-https://expenses-host.<your-tailnet>.ts.net
+https://alex-expenses.<your-tailnet>.ts.net
 ```
 
 MSAL uses `window.location.origin`, so no SPA code change is needed.
 
-## 4. Clone & configure
+## 4. One-shot bootstrap
+
+The `scripts/bootstrap-lxc.sh` script installs Tailscale, fetches
+`compose.deploy.yml` + `.env.prod.example` straight from GitHub, pulls
+the pre-built image from GHCR, brings the stack up, configures
+`tailscale serve`, and installs the daily backup cron.
+
+Inside the LXC (`pct enter <id>`):
 
 ```sh
-cd /opt
-git clone https://github.com/anod/expenses-app.git expenses
-cd expenses
-cp .env.prod.example .env.prod
-# edit .env.prod: set MICROSOFT_CLIENT_ID, ONEDRIVE_WORKBOOK_URL
-mkdir -p data data/dumps data/backups
-chown -R 1000:1000 data    # match the `node` user inside the container
+curl -fsSL https://raw.githubusercontent.com/anod/expenses-app/main/scripts/bootstrap-lxc.sh \
+  | TS_HOSTNAME=alex-expenses bash
 ```
 
-Required edits in `.env.prod`:
+On first run the script will stop after creating `/opt/expenses/.env.prod`
+from the template, so you can fill in:
 
 - `MICROSOFT_CLIENT_ID` — the SPA client ID from Azure.
 - `ONEDRIVE_WORKBOOK_URL` — the share URL of your Excel workbook.
 - `WORKSHEET_NAME` — usually `Sheet1`.
 - Leave `REQUIRE_AUTH=true` and `SERVE_SPA=true` as shipped.
 
-## 5. Build + run
+Then re-run the same command; it picks up where it left off (idempotent).
+
+### If the GHCR package is still private
+
+Either flip the package to public in GitHub → Packages → your image →
+Settings → Change visibility (recommended for personal use), or pass a
+PAT with `read:packages` to the script:
 
 ```sh
-docker compose -f compose.deploy.yml up -d --build
-docker compose -f compose.deploy.yml logs -f
+GHCR_USER=anod GHCR_PAT=ghp_xxx \
+  TS_HOSTNAME=alex-expenses \
+  bash bootstrap-lxc.sh
 ```
 
-Smoke-check on the LXC:
+### Local-build fallback
+
+If you want to build inside the LXC instead of pulling from GHCR (e.g.
+testing uncommitted changes), clone the repo and use the build overlay:
+
+```sh
+git clone https://github.com/anod/expenses-app.git /opt/expenses
+cd /opt/expenses && cp .env.prod.example .env.prod   # edit
+mkdir -p data && chown -R 1000:1000 data
+docker compose -f compose.deploy.yml -f compose.build.yml up -d --build
+```
+
+## 5. Verify
 
 ```sh
 curl -s http://127.0.0.1:4000/healthz
 curl -s http://127.0.0.1:4000/api/config
-```
-
-## 6. Expose via Tailscale Serve
-
-```sh
-sudo tailscale serve --bg --https=443 http://127.0.0.1:4000
 tailscale serve status
 ```
 
-Open `https://expenses-host.<tailnet>.ts.net` from any tailnet device. Sign
-in with Microsoft when prompted; the SPA will load the forecast page.
+Open `https://alex-expenses.<your-tailnet>.ts.net` from any tailnet
+device and sign in with Microsoft.
 
-**Do not run `tailscale funnel`** unless you intend to expose the app to the
-public internet. The default plan keeps the app tailnet-only.
+**Do not run `tailscale funnel`** unless you intend to expose the app to
+the public internet. The default plan keeps the app tailnet-only.
 
-## 7. Backups (local rollback)
+## 6. Backups (local rollback)
 
-The backup script writes an online SQLite snapshot to `/data/backups/`.
-Schedule a daily cron on the **LXC host** (not inside the container):
+The bootstrap script installs a daily cron at 03:00 UTC that runs
+`backup-db.js` inside the container, writing online SQLite snapshots to
+`/opt/expenses/data/backups/`. Retention defaults to the last 14 files
+(override with `BACKUP_RETENTION` in `.env.prod`).
+
+To restore: `docker compose -f compose.deploy.yml stop`, copy the chosen
+backup over `data/expenses.db`, then `up -d`.
+
+**Disaster recovery is out of scope here** — `/data/backups` lives on
+the same volume as the live DB, so an LXC/disk loss takes both. If you
+need real DR, add Proxmox `vzdump`, rsync to a NAS, or restic on top.
+
+## 7. Updates
+
+Image releases are built automatically by `.github/workflows/build-image.yml`
+on every push to `main` and on `v*.*.*` tags, and pushed to
+`ghcr.io/anod/expenses-app`. To deploy the latest:
 
 ```sh
-crontab -e
-# add:
-0 3 * * * docker exec expenses node /app/apps/api/dist/scripts/backup-db.js
+cd /opt/expenses && bash <(curl -fsSL https://raw.githubusercontent.com/anod/expenses-app/main/scripts/update.sh)
 ```
 
-Retention defaults to the last 14 files (override with `BACKUP_RETENTION`
-in `.env.prod`). To restore: `docker compose -f compose.deploy.yml stop`,
-copy the chosen backup over `/data/expenses.db`, then `up -d`.
-
-**Disaster recovery is out of scope here** — `/data/backups` lives on the
-same volume as the live DB, so an LXC/disk loss takes both. If you need
-real DR, add Proxmox `vzdump`, rsync to a NAS, or restic on top.
-
-## 8. Updates
+Or, if the repo is checked out on the LXC:
 
 ```sh
-cd /opt/expenses
-git pull
-docker compose -f compose.deploy.yml up -d --build
+cd /opt/expenses && ./scripts/update.sh
 ```
 
-Compose rebuilds the image and replaces the container; the `/data` volume
-persists. The migrations runner reapplies any new schema files on boot.
+The `/data` volume persists across updates; the migrations runner
+reapplies any new schema files on boot.
 
-## 9. Demo mode
+## 8. Demo mode
 
 Demo mode is toggled from the in-app **Settings** page. When on, the API
 serves deterministic funny fake data from an in-memory SQLite; the real
@@ -167,8 +190,16 @@ or to take screenshots. Excel sync is disabled while demo mode is on.
 
 - `Dockerfile.app` — multi-stage build (build → prune → runtime).
 - `Dockerfile.graph-tester` — renamed Phase-0 file (graph connection test).
-- `compose.deploy.yml` — production compose with healthcheck + log rotation.
+- `compose.deploy.yml` — production compose (image from GHCR, healthcheck,
+  log rotation).
+- `compose.build.yml` — overlay re-enabling a local build.
 - `.env.prod.example` — documented production env template.
+- `.github/workflows/build-image.yml` — CI that builds and publishes
+  `ghcr.io/anod/expenses-app` on every push to `main` and on `v*.*.*`
+  tags.
+- `scripts/bootstrap-lxc.sh` — one-shot idempotent LXC setup (Tailscale,
+  app dir, pull, run, serve, cron).
+- `scripts/update.sh` — pull + restart for routine updates.
 - `apps/api/src/scripts/backup-db.ts` — online SQLite backup script.
 - `apps/api/src/server.ts` — added `SERVE_SPA` static middleware +
   `REQUIRE_AUTH` flag.
