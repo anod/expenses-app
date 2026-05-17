@@ -253,7 +253,8 @@
           } @else if (isCharge(item)) {
             <li class="timeline-charge"
                 [class.is-past]="item.past"
-                [class.is-cleared]="item.cleared">
+                [class.is-cleared]="item.cleared"
+                [class.is-bill]="item.billedEntries">
               <span class="row-icon"
                     [class.row-icon--cc]="item.channel === 'cc'">
                 <span class="material-symbols-outlined">{{ iconFor(item.channel) }}</span>
@@ -265,7 +266,17 @@
               <span class="charge-amount" [class.is-negative]="item.amount < 0">
                 {{ fmt(item.amount) }}
               </span>
-              @if (!item.past && item.entryId; as id) {
+              @if (item.billKey; as bk) {
+                <button type="button"
+                        class="clear-btn"
+                        [title]="isBillExpanded(bk) ? 'Hide contributing charges' : 'Show contributing charges'"
+                        [attr.aria-expanded]="isBillExpanded(bk)"
+                        (click)="toggleBill(bk)">
+                  <span class="material-symbols-outlined">
+                    {{ isBillExpanded(bk) ? 'expand_less' : 'expand_more' }}
+                  </span>
+                </button>
+              } @else if (!item.past && item.entryId; as id) {
                 <button type="button"
                         class="clear-btn"
                         title="Mark as cleared"
@@ -277,6 +288,24 @@
                 <span class="clear-btn-placeholder" aria-hidden="true"></span>
               }
             </li>
+            @if (item.billKey && isBillExpanded(item.billKey) && item.billedEntries) {
+              @for (sub of item.billedEntries; track sub.date + sub.description + sub.amount) {
+                <li class="timeline-charge timeline-charge--sub"
+                    [class.is-past]="item.past">
+                  <span class="row-icon row-icon--cc">
+                    <span class="material-symbols-outlined">subdirectory_arrow_right</span>
+                  </span>
+                  <div class="charge-main">
+                    <span class="charge-date">{{ fmtDate(sub.date) }}</span>
+                    <span class="charge-desc">{{ sub.description }}</span>
+                  </div>
+                  <span class="charge-amount" [class.is-negative]="sub.amount < 0">
+                    {{ fmt(sub.amount) }}
+                  </span>
+                  <span class="clear-btn-placeholder" aria-hidden="true"></span>
+                </li>
+              }
+            }
           }
         } @empty {
           <li class="empty">Nothing scheduled in the horizon.</li>

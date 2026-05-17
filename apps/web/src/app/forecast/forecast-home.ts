@@ -6,6 +6,12 @@ import { forecast as runForecast } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
+interface BilledChargeRow {
+  date: string;
+  description: string;
+  amount: number;
+}
+
 interface ChargeItem {
   kind: 'charge';
   date: string;
@@ -19,6 +25,10 @@ interface ChargeItem {
   past?: boolean;
   /** True for past entries that were cleared (status === 'cleared'). */
   cleared?: boolean;
+  /** Individual charges aggregated into this cc-bill (chronological). */
+  billedEntries?: BilledChargeRow[];
+  /** Stable key for the expand/collapse toggle of a cc-bill. */
+  billKey?: string;
 }
 
 interface AnchorItem {
@@ -60,6 +70,19 @@ export class ForecastHomeComponent {
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
+  /** Set of billKeys currently expanded to show their contributing charges. */
+  protected readonly expandedBills = signal<ReadonlySet<string>>(new Set());
+
+  protected toggleBill(key: string): void {
+    const cur = this.expandedBills();
+    const next = new Set(cur);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    this.expandedBills.set(next);
+  }
+
+  protected isBillExpanded(key: string): boolean {
+    return this.expandedBills().has(key);
+  }
 
   /** Which snapshot is being edited: 'bank', a cardId, or null. */
   protected readonly editing = signal<string | null>(null);
@@ -407,7 +430,10 @@ export class ForecastHomeComponent {
 
   private toChargeItem(date: string, c: ProjectionCharge): ChargeItem {
     if (c.source.kind === 'cc-bill') {
-      return {
+      const billed: BilledChargeRow[] = (c.source.billedEntries ?? [])
+        .map((e) => ({ date: e.date, description: e.description, amount: e.amount }))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      const item: ChargeItem = {
         kind: 'charge',
         date,
         description: c.description,
@@ -415,6 +441,11 @@ export class ForecastHomeComponent {
         channel: 'cc',
         cardId: c.source.cardId,
       };
+      if (billed.length > 0) {
+        item.billedEntries = billed;
+        item.billKey = `${date}:${c.source.cardId}`;
+      }
+      return item;
     }
     return {
       kind: 'charge',
