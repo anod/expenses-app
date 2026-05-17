@@ -4,6 +4,7 @@ import { z, ZodError } from 'zod';
 import {
   occurrenceKeyOf,
   todayInZone,
+  type CreditCard,
   type LedgerEntry,
   type RecurringTemplate,
 } from '@expenses/shared';
@@ -69,7 +70,13 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
       validateNoFutureAsOf(input.asOf, today(), 'card');
       // User-created cards are NOT excel_owned; the importer must not
       // wipe them on re-import.
-      const card = { ...input, id: input.id ?? randomUUID(), excelOwned: false };
+      const { mode, ...rest } = input;
+      const card: CreditCard = {
+        ...rest,
+        id: input.id ?? randomUUID(),
+        excelOwned: false,
+        ...(mode ? { mode } : {}),
+      };
       getRepo().upsertCard(card);
       withForecast(res, card);
     } catch (err) {
@@ -80,13 +87,13 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
     try {
       const input = CreditCardInput.parse({ ...req.body, id: req.params.id });
       validateNoFutureAsOf(input.asOf, today(), 'card');
-      // Preserve excelOwned across PATCH so editing a card's debit/name
-      // doesn't accidentally "claim" it on either side of the boundary.
       const existing = getRepo().listCards().find((c) => c.id === req.params.id);
+      const { mode, ...rest } = input;
       getRepo().upsertCard({
-        ...input,
+        ...rest,
         id: req.params.id,
         excelOwned: existing?.excelOwned ?? false,
+        ...(mode ? { mode } : {}),
       });
       withForecast(res, getRepo().listCards().find((c) => c.id === req.params.id) ?? null);
     } catch (err) {
