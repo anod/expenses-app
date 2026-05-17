@@ -232,31 +232,63 @@ export const project = (
     }
   }
 
-  // Roll up current debit of each card → bank debit on next strictly-after billing day.
-  // Skipped for debit cards (no outstanding-debt concept).
+  // For each card, emit a single bank row per billing date that combines
+  // (a) the rolled-up opening currentDebit (if it falls on that date) with
+  // (b) any individual cc-channel charges from the ledger billing that date.
+  // Emitting them as one row prevents two confusing entries on the same day
+  // for the same card, while keeping the per-charge breakdown attached via
+  // billedEntries (rendered as expandable sub-rows in the UI).
+  type CardBillBucket = { entries: LedgerEntry[]; openingDebit: number };
+  const cardBills = new Map<string, Map<IsoDate, CardBillBucket>>();
+  const getBucket = (cardId: string, billDate: IsoDate): CardBillBucket => {
+    let perDate = cardBills.get(cardId);
+    if (!perDate) {
+      perDate = new Map();
+      cardBills.set(cardId, perDate);
+    }
+    let b = perDate.get(billDate);
+    if (!b) {
+      b = { entries: [], openingDebit: 0 };
+      perDate.set(billDate, b);
+    }
+    return b;
+  };
+
+  // Seed buckets with currentDebit rollups (credit cards only).
   for (const card of cards) {
     if (card.mode === 'debit') continue;
     if (card.currentDebit === 0) continue;
     const billDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
     if (compareIso(billDate, walkStart) < 0) continue;
     if (compareIso(billDate, endDate) > 0) continue;
-    pushBank(billDate, {
-      description: `Credit card opening balance (${card.name})`,
-      amount: -card.currentDebit,
-      source: { kind: 'cc-bill', cardId: card.id, billedEntries: [] },
-    });
+    getBucket(card.id, billDate).openingDebit += card.currentDebit;
   }
 
-  // Flatten cc-by-card → synthetic bank entries.
+  // Pour per-card cc charges into the same buckets.
   for (const [cardId, perDate] of ccByCardBillDate.entries()) {
+    for (const [billDate, entries] of perDate.entries()) {
+      const b = getBucket(cardId, billDate);
+      for (const e of entries) b.entries.push(e);
+    }
+  }
+
+  // Emit one consolidated cc-bill row per (card, billDate).
+  for (const [cardId, perDate] of cardBills.entries()) {
     const card = cardById.get(cardId);
     if (!card) continue;
-    for (const [billDate, entries] of perDate.entries()) {
-      const total = entries.reduce((s, e) => s + e.amount, 0);
+    for (const [billDate, b] of perDate.entries()) {
+      const entriesTotal = b.entries.reduce((s, e) => s + e.amount, 0);
+      const amount = entriesTotal - b.openingDebit;
+      const parts: string[] = [];
+      if (b.openingDebit > 0) parts.push('opening balance');
+      if (b.entries.length > 0) {
+        parts.push(`${b.entries.length} charge${b.entries.length === 1 ? '' : 's'}`);
+      }
+      const summary = parts.length > 0 ? parts.join(' + ') : '0 charges';
       pushBank(billDate, {
-        description: `Credit card bill (${card.name}, ${entries.length} charge${entries.length === 1 ? '' : 's'})`,
-        amount: total,
-        source: { kind: 'cc-bill', cardId, billedEntries: entries.slice() },
+        description: `Credit card bill (${card.name}, ${summary})`,
+        amount,
+        source: { kind: 'cc-bill', cardId, billedEntries: b.entries.slice() },
       });
     }
   }

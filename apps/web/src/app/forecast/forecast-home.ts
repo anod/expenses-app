@@ -433,27 +433,37 @@ export class ForecastHomeComponent {
       const billed: BilledChargeRow[] = (c.source.billedEntries ?? [])
         .map((e) => ({ date: e.date, description: e.description, amount: e.amount }))
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-      const item: ChargeItem = {
+      const entriesTotal = billed.reduce((s, e) => s + e.amount, 0);
+      // Any residual between the bill amount and the sum of itemized charges
+      // is the rolled-up opening balance from the snapshot. Surface it as a
+      // synthetic top sub-row so the breakdown stays consistent.
+      const opening = c.amount - entriesTotal;
+      const sub: BilledChargeRow[] = [];
+      if (Math.abs(opening) > 0.005) {
+        sub.push({
+          date,
+          description: 'Opening balance (from Excel snapshot)',
+          amount: opening,
+        });
+      }
+      for (const b of billed) sub.push(b);
+      if (sub.length === 0) {
+        sub.push({
+          date,
+          description: 'No itemized charges in this cycle.',
+          amount: c.amount,
+        });
+      }
+      return {
         kind: 'charge',
         date,
         description: c.description,
         amount: c.amount,
         channel: 'cc',
         cardId: c.source.cardId,
-        billedEntries:
-          billed.length > 0
-            ? billed
-            : [
-                {
-                  date,
-                  description:
-                    'Opening balance carried over from Excel snapshot — no per-charge breakdown available.',
-                  amount: c.amount,
-                },
-              ],
-        billKey: `${date}:${c.source.cardId}:${c.description}`,
+        billedEntries: sub,
+        billKey: `${date}:${c.source.cardId}`,
       };
-      return item;
     }
     return {
       kind: 'charge',
