@@ -280,9 +280,11 @@ describe('importFromSnapshot — channel routing', () => {
     const recurring = repo.listRecurring();
     expect(recurring.length).toBeGreaterThan(0);
     expect(recurring.every((t) => t.channel === 'cc:isra')).toBe(true);
-    // cc recurring starts on the SECOND month to avoid double-billing
-    // the first-month occurrence (already part of currentDebit).
-    expect(recurring[0]!.startDate).toBe('2026-06-20');
+    // cc recurring anchors at the first month; the pipeline's keep()
+    // filter drops pre-asOf occurrences so currentDebit is not
+    // double-counted, while post-asOf same-month occurrences (which
+    // roll into the very next bill) remain visible.
+    expect(recurring[0]!.startDate).toBe('2026-05-20');
   });
 
   it('routes non-cc sources (cash, onezero, …) to bank', () => {

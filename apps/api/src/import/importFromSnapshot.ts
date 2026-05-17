@@ -291,7 +291,6 @@ export function importFromSnapshot(
     row.source.toLowerCase() in CREDIT_CARD_SOURCES;
 
   const firstMonthKey = firstMonth.key;
-  const secondMonth = snap.months[1];
 
   const { recurringRows, variableRows, skipped } = partitionRows(
     snap.rows,
@@ -327,18 +326,17 @@ export function importFromSnapshot(
   for (const row of recurringRows) {
     const amount = row.amounts[firstMonth.key]?.value;
     if (typeof amount !== 'number' || row.day == null) continue;
-    // For cc recurring, start at the SECOND month so the first
-    // occurrence (which is part of «карта потрачено» → currentDebit)
-    // isn't double-billed. Fall back to first month if the workbook
-    // only has one (in practice partitionRows requires ≥2 months,
-    // but this keeps the function total).
-    const startAnchor = isCcRow(row) && secondMonth ? secondMonth.key : firstMonthKey;
+    // Always anchor at firstMonth so the partial first-month cycle is
+    // populated. The forecast pipeline's keep() filters cc entries with
+    // date <= card.asOf, which prevents double-counting against currentDebit
+    // (i.e. pre-asOf occurrences are dropped). Post-asOf occurrences in the
+    // same month must be visible because they roll into the very next bill.
     upsertImportedRecurring(excelRecurringId(row), {
       description: describe(row),
       amount,
       channel: channelForRow(row),
       day: row.day,
-      startDate: clampedDate(startAnchor, row.day),
+      startDate: clampedDate(firstMonthKey, row.day),
       monthEndPolicy: 'clamp',
     });
   }
