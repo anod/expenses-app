@@ -109,7 +109,12 @@ SCOPE_ID=$(az ad app show --id "$APP_ID" --query "api.oauth2PermissionScopes[?va
 if [[ -z "$SCOPE_ID" ]]; then
   echo "• Exposing API scope 'access' (api://$APP_ID/access)..."
   SCOPE_ID=$(uuidgen | tr 'A-Z' 'a-z')
-  API_BODY=$(SCOPE_ID="$SCOPE_ID" APP_ID="$APP_ID" python3 -c "
+  # Microsoft Graph rejects creating the scope and the
+  # preAuthorizedApplications entry in one PATCH (the scope id isn't yet
+  # known to the AppPermissions set at validation time). Do it in two
+  # PATCHes: first register the scope + identifier URI, then add the
+  # SPA pre-authorization referencing the now-existent scope id.
+  SCOPE_BODY=$(SCOPE_ID="$SCOPE_ID" APP_ID="$APP_ID" python3 -c "
 import json, os
 body = {
   'identifierUris': ['api://' + os.environ['APP_ID']],
@@ -125,6 +130,22 @@ body = {
       'type': 'User',
       'isEnabled': True,
     }],
+  },
+}
+print(json.dumps(body))
+")
+  TMP=$(mktemp)
+  echo "$SCOPE_BODY" > "$TMP"
+  az rest --method PATCH \
+    --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
+    --headers "Content-Type=application/json" \
+    --body "@$TMP" >/dev/null
+  rm -f "$TMP"
+
+  PREAUTH_BODY=$(SCOPE_ID="$SCOPE_ID" APP_ID="$APP_ID" python3 -c "
+import json, os
+body = {
+  'api': {
     'preAuthorizedApplications': [{
       'appId': os.environ['APP_ID'],
       'delegatedPermissionIds': [os.environ['SCOPE_ID']],
@@ -134,7 +155,7 @@ body = {
 print(json.dumps(body))
 ")
   TMP=$(mktemp)
-  echo "$API_BODY" > "$TMP"
+  echo "$PREAUTH_BODY" > "$TMP"
   az rest --method PATCH \
     --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
     --headers "Content-Type=application/json" \
