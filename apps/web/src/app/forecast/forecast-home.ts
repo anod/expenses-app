@@ -14,6 +14,10 @@ interface ChargeItem {
   cardId?: string;
   /** Set for bank-channel charges (single ledger entry). Absent for cc-bill rollups. */
   entryId?: string;
+  /** True for entries that already happened (date earlier than account asOf). */
+  past?: boolean;
+  /** True for past entries that were cleared (status === 'cleared'). */
+  cleared?: boolean;
 }
 
 interface AnchorItem {
@@ -49,6 +53,7 @@ export class ForecastHomeComponent {
 
   protected readonly forecast = signal<ForecastResult | null>(null);
   protected readonly settings = signal<Settings | null>(null);
+  protected readonly ledger = signal<LedgerEntry[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
@@ -122,13 +127,35 @@ export class ForecastHomeComponent {
     });
   });
 
-  /** Charges + anchors interleaved chronologically. Anchors render as separators. */
+  /** Charges + anchors interleaved chronologically. Anchors render as separators.
+   * Includes month-to-date past entries from the persisted ledger so the
+   * user can see what already cleared / hit the account this month
+   * alongside the future forecast. Past rows are styled muted in the UI.
+   */
   protected readonly timeline = computed<TimelineItem[]>(() => {
     const f = this.forecast();
     if (!f) return [];
     const threshold = this.settings()?.threshold ?? 0;
     const filter = this.channelFilter();
     const items: TimelineItem[] = [];
+
+    // ---- Past (month-to-date, strictly before account.asOf) ----
+    if (filter !== 'anchors') {
+      const asOf = f.account.asOf;
+      const monthStart = asOf.slice(0, 8) + '01'; // YYYY-MM-01
+      const past = this.ledger()
+        .filter((e) => e.date >= monthStart && e.date < asOf)
+        .slice()
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      for (const e of past) {
+        const item = this.toPastChargeItem(e);
+        if (filter === 'all' || item.channel === filter) {
+          items.push(item);
+        }
+      }
+    }
+
+    // ---- Forecast (asOf and forward) ----
     for (const day of f.days) {
       if (filter !== 'anchors') {
         for (const c of day.charges) {
@@ -158,12 +185,14 @@ export class ForecastHomeComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [result, settings] = await Promise.all([
+      const [result, settings, ledger] = await Promise.all([
         firstValueFrom(this.api.getForecast()),
         firstValueFrom(this.api.getSettings()),
+        firstValueFrom(this.api.listLedger()),
       ]);
       this.forecast.set(result);
       this.settings.set(settings);
+      this.ledger.set(ledger);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
@@ -204,7 +233,9 @@ export class ForecastHomeComponent {
   }
 
   protected trackTimeline = (_: number, i: TimelineItem): string =>
-    i.kind === 'anchor' ? `a:${i.date}` : `c:${i.date}:${i.description}`;
+    i.kind === 'anchor'
+      ? `a:${i.date}`
+      : `c:${i.date}:${i.entryId ?? i.description}:${i.past ? 'p' : 'f'}`;
 
   // ---------- Snapshot editing ----------
 
@@ -343,5 +374,22 @@ export class ForecastHomeComponent {
       channel: 'bank',
       entryId: c.source.entryId,
     };
+  }
+
+  private toPastChargeItem(e: LedgerEntry): ChargeItem {
+    const isCc = e.channel.startsWith('cc:');
+    const cardId = isCc ? e.channel.slice(3) : undefined;
+    const item: ChargeItem = {
+      kind: 'charge',
+      date: e.date,
+      description: e.description,
+      amount: e.amount,
+      channel: isCc ? 'cc' : 'bank',
+      entryId: e.id,
+      past: true,
+      cleared: e.status === 'cleared',
+    };
+    if (cardId) item.cardId = cardId;
+    return item;
   }
 }

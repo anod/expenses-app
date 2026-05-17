@@ -244,7 +244,9 @@
               <span class="anchor-balance">{{ fmt(item.balance) }}</span>
             </li>
           } @else if (isCharge(item)) {
-            <li class="timeline-charge">
+            <li class="timeline-charge"
+                [class.is-past]="item.past"
+                [class.is-cleared]="item.cleared">
               <span class="row-icon"
                     [class.row-icon--cc]="item.channel === 'cc'">
                 <span class="material-symbols-outlined">{{ iconFor(item.channel) }}</span>
@@ -256,7 +258,7 @@
               <span class="charge-amount" [class.is-negative]="item.amount < 0">
                 {{ fmt(item.amount) }}
               </span>
-              @if (item.entryId; as id) {
+              @if (!item.past && item.entryId; as id) {
                 <button type="button"
                         class="clear-btn"
                         title="Mark as cleared"
