@@ -117,6 +117,16 @@ export const buildBearerGuard = (opts: BearerGuardOptions): RequestHandler => {
     const oid = typeof payload.oid === 'string' ? payload.oid : '';
     if (!oid || !allowedOids.has(oid)) {
       // 403 (not 401) — token is valid but the principal is not authorised.
+      // Log the offending oid so an operator can decide whether to add it
+      // to ALLOWED_OIDS (personal-MSA tokens carry a different oid than
+      // the org-tenant view returned by `az ad signed-in-user show`).
+      // Names + tenant ids are non-secret; OK to log.
+      const tid = typeof payload.tid === 'string' ? payload.tid : undefined;
+      const name = typeof payload.name === 'string' ? payload.name : undefined;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[auth] rejected: oid=${oid || '(missing)'} tid=${tid ?? '(missing)'} name=${name ?? '(missing)'}`,
+      );
       res
         .status(403)
         .json({ error: 'FORBIDDEN', message: 'Account is not on the allowlist' });
