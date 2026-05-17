@@ -43,6 +43,18 @@ describe('loadConfig', () => {
     expect(c.MICROSOFT_AUTHORITY).toBe('https://login.microsoftonline.com/consumers');
     expect(c.WORKSHEET_NAME).toBe('Sheet1');
   });
+
+  it('treats empty API_AUDIENCE as undefined (regression: scope was "/access")', () => {
+    const c = loadConfig({
+      ...baseEnv,
+      EXPENSES_SOURCE: 'graph',
+      MICROSOFT_CLIENT_ID: '00000000-0000-0000-0000-000000000001',
+      ONEDRIVE_WORKBOOK_URL: 'https://onedrive.live.com/edit?something',
+      API_AUDIENCE: '',
+    } as NodeJS.ProcessEnv);
+    if (!isGraphConfig(c)) throw new Error('expected graph');
+    expect(c.API_AUDIENCE).toBeUndefined();
+  });
 });
 
 function mockExit() {

@@ -148,7 +148,7 @@ app.get('/api/config', (_req, res) => {
     return;
   }
   if (isGraphConfig(config)) {
-    const apiScope = (config.API_AUDIENCE ?? `api://${config.MICROSOFT_CLIENT_ID}`) + '/access';
+    const apiScope = (config.API_AUDIENCE || `api://${config.MICROSOFT_CLIENT_ID}`) + '/access';
     res.json({
       source: 'graph',
       auth: {
@@ -187,7 +187,7 @@ const bearerGuard: RequestHandler | null = protectApi
       tenantId: config.MICROSOFT_TENANT_ID,
       audiences: [
         // Conventional API audience.
-        config.API_AUDIENCE ?? `api://${(config as GraphConfig).MICROSOFT_CLIENT_ID}`,
+        config.API_AUDIENCE || `api://${(config as GraphConfig).MICROSOFT_CLIENT_ID}`,
         // MSAL.js may emit the bare clientId GUID as `aud` on personal MSA tokens.
         (config as GraphConfig).MICROSOFT_CLIENT_ID,
       ],

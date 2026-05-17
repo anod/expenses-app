@@ -54,7 +54,7 @@ const GraphFields = z.object({
   API_AUDIENCE: z
     .string()
     .optional()
-    .or(z.literal('').transform(() => undefined)),
+    .transform((s) => (s && s.length > 0 ? s : undefined)),
 });
 
 export type CommonConfig = z.infer<typeof Common>;
