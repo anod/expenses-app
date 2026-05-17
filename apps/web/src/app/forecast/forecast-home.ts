@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { ForecastResult, LedgerEntry, Settings, ProjectionCharge } from '@expenses/shared';
+import type { ForecastResult, LedgerEntry, Settings, ProjectionCharge, RecurringTemplate, CreditCard, Account } from '@expenses/shared';
+import { forecast as runForecast } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
@@ -54,6 +55,8 @@ export class ForecastHomeComponent {
   protected readonly forecast = signal<ForecastResult | null>(null);
   protected readonly settings = signal<Settings | null>(null);
   protected readonly ledger = signal<LedgerEntry[]>([]);
+  protected readonly templates = signal<RecurringTemplate[]>([]);
+  protected readonly cards = signal<CreditCard[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
@@ -127,17 +130,14 @@ export class ForecastHomeComponent {
     });
   });
 
-  /** Charges + anchors interleaved chronologically. Anchors render as separators.
+  /** Charges + anchors interleaved chronologically.
    *
-   * The window starts at the most recent past *anchor* (the 10th of a month —
-   * the same period boundary the forecast uses, see pipeline.ts `isAnchor`).
-   * That means the timeline always shows what's happened since the last
-   * period boundary plus what's projected ahead.
-   *
-   * Past rows are sourced from the persisted ledger (real transactions),
-   * which is also why we suppress forecast charges before today: those are
-   * projected duplicates of pending ledger entries. Anchors from the
-   * forecast are always included.
+   * The server forecast trims its `days` to start at max(asOf, today), so
+   * past-but-after-asOf days never make it to the client. To show what
+   * happened since the last period anchor we re-run the shared pipeline
+   * locally with `today = windowStart`, then take only the days strictly
+   * before the real today from that secondary projection. Forecast rows
+   * from the real (server) result are appended as-is.
    */
   protected readonly timeline = computed<TimelineItem[]>(() => {
     const f = this.forecast();
@@ -149,25 +149,47 @@ export class ForecastHomeComponent {
     const today = todayIsoLocal();
     const windowStart = lastPastAnchor(today);
 
-    // ---- Past: persisted ledger entries since the last anchor, up to today ----
-    if (filter !== 'anchors') {
-      const past = this.ledger()
-        .filter((e) => e.date >= windowStart && e.date < today)
-        .slice()
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-      for (const e of past) {
-        const item = this.toPastChargeItem(e);
-        if (filter === 'all' || item.channel === filter) {
-          items.push(item);
+    // ---- Past projection: rerun pipeline with today = windowStart ----
+    const settings = this.settings();
+    if (settings && windowStart < today) {
+      try {
+        const past = runForecast({
+          templates: this.templates(),
+          persisted: this.ledger(),
+          account: f.account as Account,
+          cards: this.cards(),
+          settings,
+          today: windowStart,
+        });
+        for (const day of past.days) {
+          if (day.date >= today) break;
+          if (filter !== 'anchors') {
+            for (const c of day.charges) {
+              const row = this.toChargeItem(day.date, c);
+              row.past = true;
+              if (filter === 'all' || row.channel === filter) {
+                items.push(row);
+              }
+            }
+          }
+          if (day.isAnchor) {
+            items.push({
+              kind: 'anchor',
+              date: day.date,
+              balance: day.balance,
+              belowThreshold: day.balance < threshold,
+            });
+          }
         }
+      } catch {
+        // If past projection fails (e.g. inconsistent data), skip silently —
+        // the future forecast is still shown.
       }
     }
 
-    // ---- Forecast: skip charge rows before today (they're already shown
-    // from the persisted ledger above), but always keep anchors. ----
+    // ---- Future forecast from the server ----
     for (const day of f.days) {
-      const isPastDay = day.date < today;
-      if (filter !== 'anchors' && !isPastDay) {
+      if (filter !== 'anchors') {
         for (const c of day.charges) {
           const row = this.toChargeItem(day.date, c);
           if (filter === 'all' || row.channel === filter) {
@@ -195,14 +217,18 @@ export class ForecastHomeComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [result, settings, ledger] = await Promise.all([
+      const [result, settings, ledger, templates, cards] = await Promise.all([
         firstValueFrom(this.api.getForecast()),
         firstValueFrom(this.api.getSettings()),
         firstValueFrom(this.api.listLedger()),
+        firstValueFrom(this.api.listRecurring()),
+        firstValueFrom(this.api.listCards()),
       ]);
       this.forecast.set(result);
       this.settings.set(settings);
       this.ledger.set(ledger);
+      this.templates.set(templates);
+      this.cards.set(cards);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
