@@ -93,11 +93,20 @@ https://expenses.<your-tailnet>.ts.net
 
 MSAL uses `window.location.origin`, so no SPA code change is needed.
 
-> Finding your `oid` for a personal Microsoft account: if
-> `az ad signed-in-user show` doesn't return an id (it usually won't for
-> a pure personal MSA with no associated subscription), sign into
-> https://jwt.ms once with the SPA and copy the `oid` claim from the
-> decoded token. Paste it into `.env.prod` as `ALLOWED_OIDS=<your-oid>`.
+> Finding your `oid` for a personal Microsoft account: `az ad
+> signed-in-user show` returns the **org-tenant** view of your oid,
+> which is **not** what appears on tokens issued for personal MSAs
+> (the consumer tenant uses a different oid for the same identity).
+> The reliable approach:
+> 1. Set `ALLOWED_OIDS` to a placeholder and start the API.
+> 2. Sign in once; the SPA will get a 403.
+> 3. Check `docker logs expenses` — the API logs the rejected
+>    `oid=… tid=… name=…` on every 403. Copy that `oid`.
+> 4. `sed -i 's|^ALLOWED_OIDS=.*|ALLOWED_OIDS=<your-oid>|' .env.prod`,
+>    `docker compose up -d`, reload the SPA.
+>
+> Alternative: sign into https://jwt.ms with the SPA and copy the
+> `oid` claim from the decoded token.
 
 ## 4. One-shot bootstrap
 
