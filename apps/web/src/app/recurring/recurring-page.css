@@ -135,3 +135,22 @@ tr.is-editing td {
   gap: 0.5rem;
   margin-top: 1rem;
 }
+
+/* Sortable column headers */
+.m3-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.m3-table th.sortable:hover {
+  background: var(--md-sys-color-surface-container-high);
+}
+.m3-table th.sortable .sort-icon {
+  font-size: 1rem;
+  vertical-align: middle;
+  margin-inline-start: 0.25rem;
+  opacity: 0.6;
+}
+.m3-table th.sortable:hover .sort-icon {
+  opacity: 1;
+}

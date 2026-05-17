@@ -6,6 +6,9 @@ import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 
+type SortColumn = 'description' | 'channel' | 'day' | 'amount' | 'startDate' | 'endDate';
+type SortDir = 'asc' | 'desc';
+
 @Component({
   selector: 'app-recurring-page',
   standalone: true,
@@ -24,6 +27,53 @@ export class RecurringPageComponent {
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly edit = signal<EditState>({ kind: 'idle' });
+  protected readonly sortColumn = signal<SortColumn>('day');
+  protected readonly sortDir = signal<SortDir>('asc');
+
+  /** Templates sorted by the current column / direction. Channel sorts by
+   * the resolved label so CC cards group naturally with their bank name. */
+  protected readonly sortedTemplates = computed<RecurringTemplate[]>(() => {
+    const col = this.sortColumn();
+    const dir = this.sortDir() === 'asc' ? 1 : -1;
+    const arr = this.templates().slice();
+    arr.sort((a, b) => dir * this.compareBy(col, a, b));
+    return arr;
+  });
+
+  protected toggleSort(col: SortColumn): void {
+    if (this.sortColumn() === col) {
+      this.sortDir.set(this.sortDir() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sortColumn.set(col);
+      this.sortDir.set('asc');
+    }
+  }
+
+  protected sortIcon(col: SortColumn): string {
+    if (this.sortColumn() !== col) return 'unfold_more';
+    return this.sortDir() === 'asc' ? 'arrow_upward' : 'arrow_downward';
+  }
+
+  private compareBy(col: SortColumn, a: RecurringTemplate, b: RecurringTemplate): number {
+    switch (col) {
+      case 'description':
+        return a.description.localeCompare(b.description);
+      case 'channel':
+        return this.channelLabel(a.channel).localeCompare(this.channelLabel(b.channel));
+      case 'day':
+        return a.day - b.day;
+      case 'amount':
+        return a.amount - b.amount;
+      case 'startDate':
+        return a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0;
+      case 'endDate': {
+        // null end-date sorts last in ascending order.
+        const ax = a.endDate ?? '\uffff';
+        const bx = b.endDate ?? '\uffff';
+        return ax < bx ? -1 : ax > bx ? 1 : 0;
+      }
+    }
+  }
 
   /** Channel options for the form select: bank + every card. */
   protected readonly channelOptions = computed<Array<{ value: Channel; label: string }>>(() => [

@@ -95,17 +95,35 @@
       <table class="m3-table">
         <thead>
           <tr>
-            <th>Description</th>
-            <th>Channel</th>
-            <th>Day</th>
-            <th class="amount">Amount</th>
-            <th>Start</th>
-            <th>End</th>
+            <th class="sortable" (click)="toggleSort('description')">
+              Description
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('description') }}</span>
+            </th>
+            <th class="sortable" (click)="toggleSort('channel')">
+              Channel
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('channel') }}</span>
+            </th>
+            <th class="sortable" (click)="toggleSort('day')">
+              Day
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('day') }}</span>
+            </th>
+            <th class="sortable amount" (click)="toggleSort('amount')">
+              Amount
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('amount') }}</span>
+            </th>
+            <th class="sortable" (click)="toggleSort('startDate')">
+              Start
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('startDate') }}</span>
+            </th>
+            <th class="sortable" (click)="toggleSort('endDate')">
+              End
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('endDate') }}</span>
+            </th>
             <th class="actions-col"></th>
           </tr>
         </thead>
         <tbody>
-          @for (t of templates(); track t.id) {
+          @for (t of sortedTemplates(); track t.id) {
             <tr [class.is-editing]="isEditing(t.id)">
               <td>{{ t.description }}</td>
               <td>
