@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z, ZodError } from 'zod';
-import { todayInZone, type LedgerEntry } from '@expenses/shared';
+import {
+  occurrenceKeyOf,
+  todayInZone,
+  type LedgerEntry,
+  type RecurringTemplate,
+} from '@expenses/shared';
 import type { StateRepo } from '../db/stateRepo.js';
 import { computeForecast } from './computeForecast.js';
 import {
@@ -125,14 +130,50 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
     }
   });
   router.post('/ledger/:id/clear', (req, res) => {
+    const id = req.params.id;
+
+    // Persisted ledger row: flip status to cleared.
     const all = getRepo().listLedger();
-    const found = all.find((e) => e.id === req.params.id);
-    if (!found) {
-      res.status(404).json({ error: 'NOT_FOUND' });
+    const found = all.find((e) => e.id === id);
+    if (found) {
+      const cleared: LedgerEntry = { ...found, status: 'cleared' };
+      getRepo().upsertLedger(cleared);
+      withForecast(res, cleared);
       return;
     }
-    getRepo().upsertLedger({ ...found, status: 'cleared' });
-    withForecast(res, { ...found, status: 'cleared' });
+
+    // Virtual recurring occurrence: materialize a cleared override.
+    // Virtual IDs are `virtual:<recurringId>:<isoDate>` — derive the template
+    // and date, then create a persisted ledger row that mergeWithOverrides()
+    // will pick up via `occurrenceKey` and which will hide the virtual from
+    // future forecasts.
+    const virtualMatch = /^virtual:(.+):(\d{4}-\d{2}-\d{2})$/.exec(id);
+    if (virtualMatch) {
+      const recurringId = virtualMatch[1]!;
+      const date = virtualMatch[2]!;
+      const template = getRepo()
+        .listRecurring()
+        .find((t: RecurringTemplate) => t.id === recurringId);
+      if (!template) {
+        res.status(404).json({ error: 'NOT_FOUND', message: 'recurring template missing' });
+        return;
+      }
+      const override: LedgerEntry = {
+        id: randomUUID(),
+        description: template.description,
+        amount: template.amount,
+        channel: template.channel,
+        date,
+        status: 'cleared',
+        recurringId,
+        occurrenceKey: occurrenceKeyOf(recurringId, date),
+      };
+      getRepo().upsertLedger(override);
+      withForecast(res, override);
+      return;
+    }
+
+    res.status(404).json({ error: 'NOT_FOUND' });
   });
   router.delete('/ledger/:id', (req, res) => {
     getRepo().deleteLedger(req.params.id);

@@ -126,6 +126,53 @@ describe('forecast routes', () => {
     await request(app).post('/api/ledger/does-not-exist/clear').expect(404);
   });
 
+  it('POST /api/ledger/:id/clear materializes override for VIRTUAL recurring occurrence', async () => {
+    // Reproduces a real bug: the timeline shows virtual recurring entries
+    // with ids `virtual:<templateId>:<date>`, but the clear handler used to
+    // only search persisted rows → silent 404 on the most common case.
+    await request(app)
+      .patch('/api/account').send({ bankBalance: 10_000, asOf: '2026-05-01' }).expect(200);
+    const tpl = await request(app)
+      .post('/api/recurring')
+      .send({
+        description: 'rent', amount: -2000, channel: 'bank',
+        day: 15, startDate: '2026-05-01',
+      })
+      .expect(200);
+    const recurringId = tpl.body.entity.id;
+
+    const fc = await request(app).get('/api/forecast').expect(200);
+    // Sanity: forecast has charges on Jun 15 from the virtual recurring.
+    const jun15Before = fc.body.days.find((d: { date: string }) => d.date === '2026-06-15');
+    expect(jun15Before.delta).toBe(-2000);
+
+    const cleared = await request(app)
+      .post(`/api/ledger/virtual:${recurringId}:2026-06-15/clear`)
+      .expect(200);
+    expect(cleared.body.entity.status).toBe('cleared');
+    expect(cleared.body.entity.recurringId).toBe(recurringId);
+    expect(cleared.body.entity.occurrenceKey).toBe(`${recurringId}@2026-06-15`);
+
+    // After clearing, the Jun 15 occurrence must be gone but Jul 15 stays.
+    const after = cleared.body.forecast.days;
+    const jun15 = after.find((d: { date: string }) => d.date === '2026-06-15');
+    const jul15 = after.find((d: { date: string }) => d.date === '2026-07-15');
+    expect(jun15.delta).toBe(0);
+    expect(jul15.delta).toBe(-2000);
+
+    // The cleared row is now persisted (so it survives re-import).
+    const persisted = repo.listLedger();
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.status).toBe('cleared');
+    expect(persisted[0]!.occurrenceKey).toBe(`${recurringId}@2026-06-15`);
+  });
+
+  it('POST /api/ledger/:id/clear 404 when virtual references unknown template', async () => {
+    await request(app)
+      .post('/api/ledger/virtual:missing-id:2026-06-15/clear')
+      .expect(404);
+  });
+
   it('POST/PATCH/DELETE /api/recurring lifecycle', async () => {
     const r = await request(app)
       .post('/api/recurring')

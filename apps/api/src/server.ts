@@ -160,12 +160,20 @@ app.get('/api/config', (_req, res) => {
   }
 });
 
-// Demo toggle is intentionally unauthenticated for personal-use simplicity:
-// when REQUIRE_AUTH is on, the tailnet is the perimeter and only the owner
-// can reach the box. Mount before /api auth gating so it stays reachable.
-app.use('/api', buildDemoRoutes(demoController));
-
+// Demo toggle:
+// - GET /api/demo is public (just reports state so SPA can decide whether
+//   to initialize MSAL).
+// - POST /api/demo enabled:true requires a Bearer in protected mode so an
+//   attacker cannot flip a legitimate user into demo mode.
+// - POST /api/demo enabled:false is always allowed (demo bypasses MSAL,
+//   so the SPA holds no Bearer; turning demo OFF only swaps to real
+//   data which is itself protected on every read/write route).
 const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
+app.use(
+  '/api',
+  buildDemoRoutes(demoController, protectApi ? requireBearer : null),
+);
+
 // Bearer is required in graph mode, but transparently skipped while demo
 // mode is active — the SPA does not initialize MSAL in demo, so no token
 // would be sent. Sync/Import additionally 409 in demo (handled in-route).
