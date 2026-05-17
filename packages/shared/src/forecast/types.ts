@@ -30,6 +30,14 @@ export interface CreditCard {
   /** Day of month the bill is debited from the bank. 1..31. */
   billingDayOfMonth: number;
   /**
+   * Card behaviour:
+   * - 'credit' (default): charges accumulate and a single aggregated bill
+   *   hits the bank on `billingDayOfMonth`.
+   * - 'debit': each charge hits the bank on its own date (no aggregation,
+   *   `currentDebit` is ignored, `billingDayOfMonth` is ignored).
+   */
+  mode?: 'credit' | 'debit';
+  /**
    * True when this card was created by the Excel importer. The importer
    * may freely delete/recreate these on re-import. User-created cards
    * (POST /api/cards) have `excelOwned = false` and are preserved

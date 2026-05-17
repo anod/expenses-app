@@ -256,6 +256,35 @@ describe('forecast pipeline', () => {
     }
   });
 
+  // Debit-mode card: charges hit bank on their own date, not aggregated.
+  it('debit card: each charge hits bank on its own date, no aggregation', () => {
+    const debit: CreditCard = {
+      id: 'isra', name: 'Isracard', currentDebit: 999 /* must be ignored */,
+      asOf: '2026-05-10', billingDayOfMonth: 2, mode: 'debit',
+    };
+    const entries: LedgerEntry[] = [
+      { id: 'd1', description: 'A', amount: -100, channel: 'cc:isra', date: '2026-05-20', status: 'pending' },
+      { id: 'd2', description: 'B', amount: -50, channel: 'cc:isra', date: '2026-05-25', status: 'pending' },
+    ];
+    const r = project(entries, acct(20_000, '2026-05-10'), [debit], baseSettings, '2026-05-10');
+    const may20 = r.days.find((x) => x.date === '2026-05-20')!;
+    const may25 = r.days.find((x) => x.date === '2026-05-25')!;
+    const jun02 = r.days.find((x) => x.date === '2026-06-02')!;
+    expect(may20.delta).toBe(-100);
+    expect(may20.charges).toHaveLength(1);
+    expect(may20.charges[0].source.kind).toBe('ledger');
+    expect(may25.delta).toBe(-50);
+    expect(may25.charges).toHaveLength(1);
+    // No aggregated bill, and currentDebit must NOT roll into a bank debit.
+    expect(jun02.delta).toBe(0);
+    expect(jun02.charges).toHaveLength(0);
+    // Card-level outstanding stays at 0 throughout for debit cards.
+    const cf = r.cards.find((c) => c.cardId === 'isra')!;
+    expect(cf.openingDebit).toBe(0);
+    expect(cf.snapshotDebit).toBe(0);
+    for (const d of cf.days) expect(d.outstanding).toBe(0);
+  });
+
   // Invariant: occurrenceKey & recurringId both null or both set
   it('rejects entry with only one of recurringId/occurrenceKey', () => {
     const bad: LedgerEntry = {

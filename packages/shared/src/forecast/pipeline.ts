@@ -129,6 +129,9 @@ export const mergeWithOverrides = (
     if (!card) {
       throw new Error(`ledger entry ${e.id}: unknown card ${cardId}`);
     }
+    // Debit cards behave like bank: filter by account.asOf since the charge
+    // already affected the bank balance on its own date.
+    if (card.mode === 'debit') return compareIso(e.date, account.asOf) > 0;
     return compareIso(e.date, card.asOf) > 0;
   };
 
@@ -212,6 +215,16 @@ export const project = (
       const cardId = e.channel.slice(3);
       const card = cardById.get(cardId);
       if (!card) throw new Error(`unknown card ${cardId} on entry ${e.id}`);
+      if (card.mode === 'debit') {
+        // Debit card: charge hits the bank on its own date, no aggregation.
+        if (compareIso(e.date, walkStart) <= 0) continue;
+        pushBank(e.date, {
+          description: e.description,
+          amount: e.amount,
+          source: { kind: 'ledger', entryId: e.id },
+        });
+        continue;
+      }
       const billDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
       if (compareIso(billDate, walkStart) < 0) continue;
       if (compareIso(billDate, endDate) > 0) continue;
@@ -220,7 +233,9 @@ export const project = (
   }
 
   // Roll up current debit of each card → bank debit on next strictly-after billing day.
+  // Skipped for debit cards (no outstanding-debt concept).
   for (const card of cards) {
+    if (card.mode === 'debit') continue;
     if (card.currentDebit === 0) continue;
     const billDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
     if (compareIso(billDate, walkStart) < 0) continue;
@@ -294,6 +309,9 @@ export const project = (
     if (e.status !== 'pending') continue;
     if (e.channel === 'bank') continue;
     const cardId = e.channel.slice(3);
+    const card = cardById.get(cardId);
+    // Debit cards don't accumulate outstanding — each charge already hit the bank.
+    if (card?.mode === 'debit') continue;
     let m = ccChargesByCardDate.get(cardId);
     if (!m) {
       m = new Map();
@@ -305,23 +323,22 @@ export const project = (
 
   const cardForecasts: CardForecast[] = cards.map((card) => {
     const dayList: CardDailyBalance[] = [];
-    let outstanding = card.currentDebit;
+    const isDebit = card.mode === 'debit';
+    let outstanding = isDebit ? 0 : card.currentDebit;
 
     const perDate = ccChargesByCardDate.get(card.id);
     let cur = walkStart;
-    let openingDebitForResult = card.currentDebit;
+    let openingDebitForResult = isDebit ? 0 : card.currentDebit;
     while (compareIso(cur, endDate) <= 0) {
       const accrued = perDate?.get(cur) ?? 0;
       outstanding += accrued;
       const { d } = parseIso(cur);
-      const isBillingDay = d === card.billingDayOfMonth;
+      const isBillingDay = !isDebit && d === card.billingDayOfMonth;
       // On the billing day, debt is settled at end of day.
       if (isBillingDay && compareIso(cur, card.asOf) > 0) {
         outstanding = 0;
       }
       if (compareIso(cur, visibleStart) >= 0) {
-        // Capture the outstanding balance the first time we hit visibleStart;
-        // that is the "opening debit" the UI shows as "current debit".
         if (dayList.length === 0) openingDebitForResult = outstanding;
         dayList.push({ date: cur, outstanding, isBillingDay });
       }
@@ -333,7 +350,7 @@ export const project = (
       name: card.name,
       billingDayOfMonth: card.billingDayOfMonth,
       asOf: card.asOf,
-      snapshotDebit: card.currentDebit,
+      snapshotDebit: isDebit ? 0 : card.currentDebit,
       openingDebit: openingDebitForResult,
       days: dayList,
     };

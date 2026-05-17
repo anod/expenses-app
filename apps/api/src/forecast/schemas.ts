@@ -19,6 +19,7 @@ export const CreditCardInput = z.object({
   currentDebit: z.number().nonnegative().finite(),
   asOf: isoDate,
   billingDayOfMonth: z.number().int().min(1).max(31),
+  mode: z.enum(['credit', 'debit']).optional(),
 });
 
 export const RecurringInput = z.object({

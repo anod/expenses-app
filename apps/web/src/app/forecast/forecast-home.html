@@ -170,6 +170,13 @@
                   Update {{ card.name }} snapshot
                 </h3>
                 <label class="field">
+                  <span class="field-label">Card type</span>
+                  <select formControlName="mode">
+                    <option value="credit">Credit (monthly bill)</option>
+                    <option value="debit">Debit (charges hit bank immediately)</option>
+                  </select>
+                </label>
+                <label class="field">
                   <span class="field-label">Current debit</span>
                   <input type="number" formControlName="currentDebit" min="0" step="1" />
                 </label>

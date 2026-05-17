@@ -73,6 +73,7 @@ export class ForecastHomeComponent {
   protected readonly cardForm = this.fb.nonNullable.group({
     currentDebit: [0, [Validators.required, Validators.min(0)]],
     asOf: ['', [Validators.required]],
+    mode: ['credit' as 'credit' | 'debit', [Validators.required]],
   });
 
   /** Snackbar for clear/undo. Holds the cleared entry so we can restore it. */
@@ -290,7 +291,12 @@ export class ForecastHomeComponent {
     const f = this.forecast();
     const card = f?.cards.find((c) => c.cardId === cardId);
     if (!card) return;
-    this.cardForm.reset({ currentDebit: card.snapshotDebit, asOf: card.asOf });
+    const full = this.cards().find((c) => c.id === cardId);
+    this.cardForm.reset({
+      currentDebit: card.snapshotDebit,
+      asOf: card.asOf,
+      mode: full?.mode === 'debit' ? 'debit' : 'credit',
+    });
     this.editing.set(cardId);
   }
 
@@ -331,8 +337,16 @@ export class ForecastHomeComponent {
         currentDebit: v.currentDebit,
         asOf: v.asOf,
         billingDayOfMonth: card.billingDayOfMonth,
+        mode: v.mode,
       }));
       this.forecast.set(res.forecast);
+      // Refresh the cards signal so the next edit sees the new mode.
+      try {
+        const cards = await firstValueFrom(this.api.listCards());
+        this.cards.set(cards);
+      } catch {
+        // best-effort refresh; the forecast itself is authoritative
+      }
       this.editing.set(null);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
