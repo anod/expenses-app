@@ -46,7 +46,11 @@ export class StateRepo {
         current_debit: number;
         as_of: string;
         billing_day_of_month: number;
-      }>('SELECT id, name, current_debit, as_of, billing_day_of_month FROM credit_card')
+        excel_owned: number;
+      }>(
+        'SELECT id, name, current_debit, as_of, billing_day_of_month, excel_owned ' +
+        'FROM credit_card',
+      )
       .all()
       .map((r) => ({
         id: r.id,
@@ -54,19 +58,21 @@ export class StateRepo {
         currentDebit: r.current_debit,
         asOf: r.as_of,
         billingDayOfMonth: r.billing_day_of_month,
+        excelOwned: r.excel_owned === 1,
       }));
   }
 
   upsertCard(c: CreditCard): void {
     this.db
       .prepare(
-        'INSERT INTO credit_card(id, name, current_debit, as_of, billing_day_of_month) ' +
-        'VALUES (?, ?, ?, ?, ?) ' +
+        'INSERT INTO credit_card(id, name, current_debit, as_of, billing_day_of_month, excel_owned) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET ' +
         'name=excluded.name, current_debit=excluded.current_debit, ' +
-        'as_of=excluded.as_of, billing_day_of_month=excluded.billing_day_of_month',
+        'as_of=excluded.as_of, billing_day_of_month=excluded.billing_day_of_month, ' +
+        'excel_owned=excluded.excel_owned',
       )
-      .run(c.id, c.name, c.currentDebit, c.asOf, c.billingDayOfMonth);
+      .run(c.id, c.name, c.currentDebit, c.asOf, c.billingDayOfMonth, c.excelOwned ? 1 : 0);
   }
 
   deleteCard(id: string): void {

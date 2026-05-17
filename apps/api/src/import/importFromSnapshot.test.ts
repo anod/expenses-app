@@ -207,10 +207,11 @@ describe('importFromSnapshot — card creation', () => {
     expect(repo.listCards()[0]!.currentDebit).toBe(75);
   });
 
-  it('purges pre-existing cards before recreating', () => {
+  it('purges pre-existing EXCEL-OWNED cards before recreating', () => {
     const repo = newRepo();
     repo.upsertCard({
       id: 'stale', name: 'Stale', currentDebit: 99, asOf: '2020-01-01', billingDayOfMonth: 5,
+      excelOwned: true,
     });
     const cols = months('2026-05-01');
     importFromSnapshot(repo, mkSnap({
@@ -218,6 +219,36 @@ describe('importFromSnapshot — card creation', () => {
       rows: [mkRow(cols, { source: 'cal', day: 15, label: 'x', values: [-100] })],
     }));
     expect(repo.listCards().map((c) => c.id)).toEqual(['cal']);
+  });
+
+  it('PRESERVES user-owned (non-excel) cards across re-import', () => {
+    // Regression guard: import used to wipe ALL cards including user-created
+    // ones, which orphaned any preserved cc:<userCard> ledger/recurring row.
+    const repo = newRepo();
+    repo.upsertCard({
+      id: 'usercard', name: 'My Card', currentDebit: 500, asOf: '2026-04-01',
+      billingDayOfMonth: 20, excelOwned: false,
+    });
+    const cols = months('2026-05-01');
+    importFromSnapshot(repo, mkSnap({
+      cols, balance: [10_000],
+      rows: [mkRow(cols, { source: 'cal', day: 15, label: 'x', values: [-100] })],
+    }));
+    const ids = repo.listCards().map((c) => c.id).sort();
+    expect(ids).toEqual(['cal', 'usercard']);
+    const userCard = repo.listCards().find((c) => c.id === 'usercard');
+    expect(userCard?.currentDebit).toBe(500);
+    expect(userCard?.excelOwned).toBe(false);
+  });
+
+  it('imported cards are marked excel_owned', () => {
+    const repo = newRepo();
+    const cols = months('2026-05-01');
+    importFromSnapshot(repo, mkSnap({
+      cols, balance: [10_000],
+      rows: [mkRow(cols, { source: 'cal', day: 15, label: 'x', values: [-100] })],
+    }));
+    expect(repo.listCards()[0]?.excelOwned).toBe(true);
   });
 });
 

@@ -29,6 +29,13 @@ export interface CreditCard {
   asOf: IsoDate;
   /** Day of month the bill is debited from the bank. 1..31. */
   billingDayOfMonth: number;
+  /**
+   * True when this card was created by the Excel importer. The importer
+   * may freely delete/recreate these on re-import. User-created cards
+   * (POST /api/cards) have `excelOwned = false` and are preserved
+   * across re-imports.
+   */
+  excelOwned?: boolean;
 }
 
 export type MonthEndPolicy = 'clamp';

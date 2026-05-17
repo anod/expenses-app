@@ -65,6 +65,26 @@ describe('StateRepo', () => {
     ).toThrow();
   });
 
+  it('recurring delete cascades to override rows (regression: ON DELETE SET NULL violated CHECK)', () => {
+    repo.upsertRecurring({
+      id: 'rent', description: 'rent', amount: -2000, channel: 'bank',
+      day: 15, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+    });
+    repo.upsertLedger({
+      id: 'override-1', description: 'rent', amount: -2000, channel: 'bank',
+      date: '2026-06-15', status: 'cleared',
+      recurringId: 'rent', occurrenceKey: 'rent@2026-06-15',
+    });
+    expect(repo.listLedger()).toHaveLength(1);
+
+    // Before the migration this threw because ON DELETE SET NULL would
+    // null only recurring_id, violating CHECK ((recurring_id IS NULL) =
+    // (occurrence_key IS NULL)).
+    expect(() => repo.deleteRecurring('rent')).not.toThrow();
+    expect(repo.listRecurring()).toEqual([]);
+    expect(repo.listLedger()).toEqual([]);
+  });
+
   it('settings: default + upsert', () => {
     const s = repo.getSettings();
     expect(s.threshold).toBe(2000);

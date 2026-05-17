@@ -168,7 +168,12 @@ export function importFromSnapshot(
   const touchedLedgerIds = new Set<string>();
   const touchedRecurringIds = new Set<string>();
 
-  for (const c of repo.listCards()) repo.deleteCard(c.id);
+  // Wipe ONLY Excel-owned cards. User-created cards (POST /api/cards)
+  // are preserved across re-imports — if any of their cc:<id> entries
+  // would otherwise orphan when their referenced card is recreated.
+  for (const c of repo.listCards()) {
+    if (c.excelOwned) repo.deleteCard(c.id);
+  }
   repo.upsertAccount({ bankBalance: startBalance, asOf: firstMonth.key });
 
   if (preserveSettings) {
@@ -236,6 +241,7 @@ export function importFromSnapshot(
       currentDebit: debitForCard(cardId),
       asOf: firstMonth.key,
       billingDayOfMonth: def.billingDay,
+      excelOwned: true,
     };
     repo.upsertCard(card);
     cardsCreated++;
