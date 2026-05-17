@@ -84,10 +84,20 @@ export class AuthService {
 
   async signIn(): Promise<void> {
     const pca = this.requirePca();
-    // Request the union of API + Graph scopes up-front so the user only
-    // sees one consent prompt for both audiences.
-    console.log('[auth] loginRedirect() starting, scopes=', this.auth!.scopes);
-    await pca.loginRedirect({ scopes: this.auth!.scopes });
+    // Microsoft Entra requires a single resource per token request:
+    // mixing Graph scopes (Files.ReadWrite/User.Read) with our API scope
+    // (api://<clientId>/access) in one `scopes` list returns AADSTS70011.
+    // Workaround: request Graph as the primary resource and consent to
+    // the API scope via `extraScopesToConsent`. After login, the SPA
+    // acquires each token separately with its own resource scope list.
+    console.log(
+      '[auth] loginRedirect() starting, graph=', this.auth!.graphScopes,
+      'extra=', this.auth!.apiScopes,
+    );
+    await pca.loginRedirect({
+      scopes: this.auth!.graphScopes,
+      extraScopesToConsent: this.auth!.apiScopes,
+    });
     // Page navigates away here; nothing after this line runs.
   }
 

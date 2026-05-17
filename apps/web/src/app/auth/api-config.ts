@@ -2,10 +2,11 @@ export interface AuthConfig {
   clientId: string;
   authority: string;
   /**
-   * Union of all scopes the SPA requests during initial sign-in
-   * (loginRedirect) so the user consents to everything once. Subsequent
-   * token acquisitions split into `apiScopes` / `graphScopes` so each
-   * token has the right `aud`.
+   * Deprecated: union of API + Graph scopes. Kept on the wire only for
+   * backward compatibility; the SPA no longer uses it because Microsoft
+   * Entra rejects multi-resource token requests (AADSTS70011). Login
+   * now passes `graphScopes` as `scopes` and `apiScopes` as
+   * `extraScopesToConsent`.
    */
   scopes: string[];
   /**
