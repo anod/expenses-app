@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import express, { type Express } from 'express';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
-import { SignJWT, exportJWK, generateKeyPair, type JWK } from 'jose';
+import { SignJWT, exportJWK, generateKeyPair, type CryptoKey, type JWK } from 'jose';
 import { buildBearerGuard, requireGraphToken } from './auth.js';
 
 // ---------- mock JWKS HTTP server ----------
@@ -70,8 +70,10 @@ async function sign(opts: SignOpts = {}): Promise<string> {
   else if (!('oid' in opts)) payload.oid = OID_OK;
   if (opts.name) payload.name = opts.name;
 
+  const header: { alg: string; kid?: string } = { alg: 'RS256' };
+  if (!opts.omitKid) header.kid = KID;
   const jwt = new SignJWT(payload)
-    .setProtectedHeader({ alg: 'RS256', kid: opts.omitKid ? undefined : KID })
+    .setProtectedHeader(header as Parameters<SignJWT['setProtectedHeader']>[0])
     .setIssuer(opts.iss ?? ISSUER)
     .setAudience(opts.aud ?? AUD_API)
     .setIssuedAt(now)
