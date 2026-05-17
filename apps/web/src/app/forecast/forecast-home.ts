@@ -128,9 +128,16 @@ export class ForecastHomeComponent {
   });
 
   /** Charges + anchors interleaved chronologically. Anchors render as separators.
-   * Includes month-to-date past entries from the persisted ledger so the
-   * user can see what already cleared / hit the account this month
-   * alongside the future forecast. Past rows are styled muted in the UI.
+   *
+   * The window starts at the most recent past *anchor* (the 10th of a month —
+   * the same period boundary the forecast uses, see pipeline.ts `isAnchor`).
+   * That means the timeline always shows what's happened since the last
+   * period boundary plus what's projected ahead.
+   *
+   * Past rows are sourced from the persisted ledger (real transactions),
+   * which is also why we suppress forecast charges before today: those are
+   * projected duplicates of pending ledger entries. Anchors from the
+   * forecast are always included.
    */
   protected readonly timeline = computed<TimelineItem[]>(() => {
     const f = this.forecast();
@@ -139,12 +146,13 @@ export class ForecastHomeComponent {
     const filter = this.channelFilter();
     const items: TimelineItem[] = [];
 
-    // ---- Past (month-to-date, strictly before account.asOf) ----
+    const today = todayIsoLocal();
+    const windowStart = lastPastAnchor(today);
+
+    // ---- Past: persisted ledger entries since the last anchor, up to today ----
     if (filter !== 'anchors') {
-      const asOf = f.account.asOf;
-      const monthStart = asOf.slice(0, 8) + '01'; // YYYY-MM-01
       const past = this.ledger()
-        .filter((e) => e.date >= monthStart && e.date < asOf)
+        .filter((e) => e.date >= windowStart && e.date < today)
         .slice()
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
       for (const e of past) {
@@ -155,9 +163,11 @@ export class ForecastHomeComponent {
       }
     }
 
-    // ---- Forecast (asOf and forward) ----
+    // ---- Forecast: skip charge rows before today (they're already shown
+    // from the persisted ledger above), but always keep anchors. ----
     for (const day of f.days) {
-      if (filter !== 'anchors') {
+      const isPastDay = day.date < today;
+      if (filter !== 'anchors' && !isPastDay) {
         for (const c of day.charges) {
           const row = this.toChargeItem(day.date, c);
           if (filter === 'all' || row.channel === filter) {
@@ -392,4 +402,33 @@ export class ForecastHomeComponent {
     if (cardId) item.cardId = cardId;
     return item;
   }
+}
+
+/** Today as YYYY-MM-DD in the user's local time zone. */
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Most recent past "anchor" (10th of a month — matches the forecast
+ * pipeline's anchor convention). If today is before the 10th, returns
+ * the 10th of the previous month.
+ */
+function lastPastAnchor(todayIso: string): string {
+  const [yStr, mStr, dStr] = todayIso.split('-');
+  let y = Number(yStr);
+  let m = Number(mStr);
+  const d = Number(dStr);
+  if (d < 10) {
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+  return `${y}-${String(m).padStart(2, '0')}-10`;
 }
