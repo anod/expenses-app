@@ -15,6 +15,16 @@ const Common = z.object({
     .union([z.string(), z.boolean()])
     .default(false)
     .transform((v) => v === true || /^(1|true|yes|on)$/i.test(String(v))),
+  // Personal MSAs always have tid=9188040d-... regardless of which
+  // authority alias the SPA points at. Override for org/multi-tenant.
+  MICROSOFT_TENANT_ID: z.string().min(1).default('9188040d-6c67-4c5b-b112-36a304b66dad'),
+  // CSV list of Microsoft `oid` claims allowed to call the API. Required
+  // when REQUIRE_AUTH=true — otherwise ANY consenting MSA user could
+  // obtain a valid token for our app and call the API.
+  ALLOWED_OIDS: z
+    .string()
+    .default('')
+    .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
 });
 
 const DumpFields = z.object({
@@ -37,6 +47,14 @@ const GraphFields = z.object({
   WORKSHEET_NAME: z.string().min(1).default('Sheet1'),
   GRAPH_BASE_URL: z.string().url().default('https://graph.microsoft.com/v1.0'),
   GRAPH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  // The audience our API expects in incoming Bearer tokens. Defaults to
+  // `api://<MICROSOFT_CLIENT_ID>` (the conventional API scope URI), but
+  // MSAL.js may also emit the bare GUID `aud` for personal MSAs; both
+  // forms are accepted in auth.ts.
+  API_AUDIENCE: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 });
 
 export type CommonConfig = z.infer<typeof Common>;
@@ -60,7 +78,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const graph = GraphFields.safeParse(env);
   if (!graph.success) bail(graph.error, ' (required when EXPENSES_SOURCE=graph)');
-  return { ...base, ...graph.data };
+  const merged: GraphConfig = { ...base, ...graph.data };
+  if (merged.REQUIRE_AUTH && merged.ALLOWED_OIDS.length === 0) {
+    console.error(
+      'Invalid configuration: ALLOWED_OIDS must list at least one Microsoft `oid` ' +
+      'when REQUIRE_AUTH=true. Otherwise any consenting Microsoft account could ' +
+      'obtain a valid token for this app and call the API.',
+    );
+    process.exit(1);
+  }
+  return merged;
 }
 
 function bail(err: z.ZodError, suffix = ''): never {

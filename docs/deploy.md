@@ -23,8 +23,14 @@ Proxmox LXC, exposed only over the user's tailnet via `tailscale serve`.
 ```
 
 - **Auth perimeter**: only tailnet devices can reach the URL.
-- **Defense in depth**: `REQUIRE_AUTH=true` makes every `/api/*` route also
-  require the Microsoft Bearer token the SPA sends after MSAL sign-in.
+- **Defense in depth**: `REQUIRE_AUTH=true` makes every `/api/*` route
+  validate the caller's Microsoft Bearer JWT (signature/iss/aud/exp/nbf
+  against the Microsoft JWKS) and reject any token whose `oid` is not in
+  `ALLOWED_OIDS`. The token must carry the `access` scope from
+  `api://<MICROSOFT_CLIENT_ID>` — Graph tokens are rejected. The SPA
+  acquires this API audience token separately from the Graph token and
+  sends them in different headers (`Authorization: Bearer …` for the API
+  token, `X-MS-Graph-Token: …` for the Graph passthrough).
 - **TLS**: `tailscale serve --https=443` issues a cert for the MagicDNS name.
 
 ## 1. Provision the LXC
@@ -63,15 +69,35 @@ from any tailnet device without exposing port 22 publicly.
 
 ## 3. Update the Azure app registration
 
-In the Azure portal → your app registration → **Authentication** → add an
-SPA redirect URI matching the tailnet hostname you'll give the LXC. For
-example, with `TS_HOSTNAME=expenses`:
+Run `scripts/register-app.sh` locally (or repeat the equivalent steps in
+the Azure portal). The script:
+
+1. Creates / updates the SPA app registration.
+2. Adds Microsoft Graph delegated permissions (`Files.ReadWrite`,
+   `offline_access`, `User.Read`).
+3. Adds SPA redirect URIs for `http://localhost:4200` and `http://127.0.0.1:4200`.
+4. **Exposes a custom API scope `api://<clientId>/access`** and
+   pre-authorizes the SPA (same app id) to call it silently — this is
+   what lets MSAL emit a token with `aud=api://<clientId>` distinct from
+   the Graph token.
+5. Looks up your signed-in user's Microsoft `oid` and writes it to
+   `.env` as `ALLOWED_OIDS=`.
+
+Then in the Azure portal → your app registration → **Authentication** →
+add an SPA redirect URI matching the tailnet hostname you'll give the
+LXC. For example, with `TS_HOSTNAME=expenses`:
 
 ```
 https://expenses.<your-tailnet>.ts.net
 ```
 
 MSAL uses `window.location.origin`, so no SPA code change is needed.
+
+> Finding your `oid` for a personal Microsoft account: if
+> `az ad signed-in-user show` doesn't return an id (it usually won't for
+> a pure personal MSA with no associated subscription), sign into
+> https://jwt.ms once with the SPA and copy the `oid` claim from the
+> decoded token. Paste it into `.env.prod` as `ALLOWED_OIDS=<your-oid>`.
 
 ## 4. One-shot bootstrap
 
@@ -91,9 +117,14 @@ On first run the script will stop after creating `/opt/expenses/.env.prod`
 from the template, so you can fill in:
 
 - `MICROSOFT_CLIENT_ID` — the SPA client ID from Azure.
+- `ALLOWED_OIDS` — your Microsoft `oid` (see §3). Comma-separated for
+  multiple users. **The API refuses to start with `REQUIRE_AUTH=true` and
+  an empty `ALLOWED_OIDS`** — leaving it blank would let anyone with a
+  Microsoft account who consents to the app call the API.
 - `ONEDRIVE_WORKBOOK_URL` — the share URL of your Excel workbook.
 - `WORKSHEET_NAME` — usually `Sheet1`.
-- Leave `REQUIRE_AUTH=true` and `SERVE_SPA=true` as shipped.
+- Leave `REQUIRE_AUTH=true`, `SERVE_SPA=true`, `MICROSOFT_TENANT_ID`, and
+  `API_AUDIENCE` (blank) as shipped.
 
 Then re-run the same command; it picks up where it left off (idempotent).
 

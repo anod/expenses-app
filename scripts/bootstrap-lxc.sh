@@ -68,6 +68,8 @@ if [[ ! -f "$APP_DIR/.env.prod" ]]; then
 
   $APP_DIR/.env.prod was just created from the template. Edit it now:
     - MICROSOFT_CLIENT_ID
+    - ALLOWED_OIDS (your Microsoft 'oid' claim; run scripts/register-app.sh
+      locally to get it, or sign into https://jwt.ms with the SPA)
     - ONEDRIVE_WORKBOOK_URL
   Then re-run this script (it will pick up where it left off).
 EOF

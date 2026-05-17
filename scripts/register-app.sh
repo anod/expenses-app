@@ -95,6 +95,72 @@ echo
 echo "================================================================"
 echo " Application (client) ID: $APP_ID"
 echo "================================================================"
+
+# -----------------------------------------------------------------------------
+# Expose `api://<clientId>/access` as a custom API scope and pre-authorize the
+# SPA (this same app registration) to call it silently. The API audience for
+# server-side Bearer validation is `api://<clientId>` — distinct from the Graph
+# token. See docs/deploy.md "Auth model" for details.
+# -----------------------------------------------------------------------------
+APP_OBJECT_ID=$(az ad app show --id "$APP_ID" --query id -o tsv)
+IDENTIFIER_URI="api://$APP_ID"
+SCOPE_ID=$(az ad app show --id "$APP_ID" --query "api.oauth2PermissionScopes[?value=='access'].id | [0]" -o tsv 2>/dev/null || true)
+
+if [[ -z "$SCOPE_ID" ]]; then
+  echo "• Exposing API scope 'access' (api://$APP_ID/access)..."
+  SCOPE_ID=$(uuidgen | tr 'A-Z' 'a-z')
+  API_BODY=$(SCOPE_ID="$SCOPE_ID" APP_ID="$APP_ID" python3 -c "
+import json, os
+body = {
+  'identifierUris': ['api://' + os.environ['APP_ID']],
+  'api': {
+    'requestedAccessTokenVersion': 2,
+    'oauth2PermissionScopes': [{
+      'id': os.environ['SCOPE_ID'],
+      'adminConsentDescription': 'Allow the application to call the expenses API on behalf of the signed-in user.',
+      'adminConsentDisplayName': 'Access expenses API',
+      'userConsentDescription': 'Allow the app to access the expenses API on your behalf.',
+      'userConsentDisplayName': 'Access expenses API',
+      'value': 'access',
+      'type': 'User',
+      'isEnabled': True,
+    }],
+    'preAuthorizedApplications': [{
+      'appId': os.environ['APP_ID'],
+      'delegatedPermissionIds': [os.environ['SCOPE_ID']],
+    }],
+  },
+}
+print(json.dumps(body))
+")
+  TMP=$(mktemp)
+  echo "$API_BODY" > "$TMP"
+  az rest --method PATCH \
+    --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
+    --headers "Content-Type=application/json" \
+    --body "@$TMP" >/dev/null
+  rm -f "$TMP"
+  echo "  ✓ scope exposed and SPA pre-authorized"
+else
+  echo "  ✓ API scope 'access' already exposed ($SCOPE_ID)"
+fi
+echo "  ✓ Identifier URI: $IDENTIFIER_URI"
+
+# -----------------------------------------------------------------------------
+# Print the signed-in user's Microsoft `oid`. This is the single piece of
+# data the server needs in ALLOWED_OIDS to bind the API to a specific account
+# when REQUIRE_AUTH=true.
+# -----------------------------------------------------------------------------
+echo "• Looking up signed-in user's Microsoft oid..."
+USER_OID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+if [[ -n "$USER_OID" ]]; then
+  echo "  ✓ Your oid: $USER_OID"
+else
+  echo "  ! Could not fetch oid via 'az ad signed-in-user show'."
+  echo "    For personal MSAs, sign in to https://jwt.ms with the SPA once and"
+  echo "    copy the 'oid' claim from the decoded token."
+fi
+
 echo
 echo "Writing MICROSOFT_CLIENT_ID into .env..."
 if grep -q '^MICROSOFT_CLIENT_ID=' .env 2>/dev/null; then
@@ -103,6 +169,17 @@ else
   echo "MICROSOFT_CLIENT_ID=$APP_ID" >> .env
 fi
 echo "  ✓ .env updated"
+
+if [[ -n "$USER_OID" ]]; then
+  if grep -q '^ALLOWED_OIDS=' .env 2>/dev/null; then
+    if ! grep -q "^ALLOWED_OIDS=.*$USER_OID" .env; then
+      echo "  ! ALLOWED_OIDS in .env does not include $USER_OID — leaving as-is."
+    fi
+  else
+    echo "ALLOWED_OIDS=$USER_OID" >> .env
+    echo "  ✓ ALLOWED_OIDS=$USER_OID written to .env"
+  fi
+fi
 
 echo
 echo "Next:  docker compose run --rm graph-tester  # to populate dumps"

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { StateRepo } from '../db/stateRepo.js';
 import type { ExcelWriter, SyncMode } from '../graph/excelWriter.js';
-import { requireBearer } from '../auth.js';
 
 const syncBodySchema = z
   .object({
@@ -19,7 +18,7 @@ export const buildSyncRoutes = (
 ): Router => {
   const router = Router();
 
-  router.post('/sync/excel', requireBearer, async (req, res, next) => {
+  router.post('/sync/excel', async (req, res, next) => {
     try {
       if (isDemo()) {
         res.status(409).json({
@@ -52,7 +51,14 @@ export const buildSyncRoutes = (
       const opts: { targetSheet?: string; rawSheetName?: string; mode: SyncMode } = { mode };
       if (parsed.data.targetSheet !== undefined) opts.targetSheet = parsed.data.targetSheet;
       if (parsed.data.rawSheetName !== undefined) opts.rawSheetName = parsed.data.rawSheetName;
-      const result = await writer.sync(state, req.accessToken!, opts);
+      if (!req.graphToken) {
+        res.status(400).json({
+          error: 'GRAPH_TOKEN_MISSING',
+          message: 'X-MS-Graph-Token header is required for Excel sync',
+        });
+        return;
+      }
+      const result = await writer.sync(state, req.graphToken, opts);
       res.json(result);
     } catch (err) {
       next(err);

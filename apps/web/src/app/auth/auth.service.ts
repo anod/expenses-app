@@ -8,19 +8,29 @@ import {
 } from '@azure/msal-browser';
 import type { ApiConfig, AuthConfig } from './api-config';
 
+type TokenKind = 'api' | 'graph';
+
 /**
  * Wraps MSAL.js for the personal-use case:
  * - One PublicClientApplication, initialized once at bootstrap via initialize().
  * - Signal-based account state for templates.
- * - getToken() does silent → popup fallback so callers (e.g. HTTP interceptor)
- *   can `await` a token without juggling MSAL exceptions themselves.
+ * - getApiToken() / getGraphToken() each do silent → popup fallback so
+ *   callers (e.g. HTTP interceptor) can `await` a token without juggling
+ *   MSAL exceptions themselves. Each token has its own scope list and
+ *   `aud` claim, so we never reuse a Graph token to call the API.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private pca: PublicClientApplication | null = null;
   private auth: AuthConfig | null = null;
-  private inFlightToken: Promise<string | null> | null = null;
-  private inFlightRefresh: Promise<string | null> | null = null;
+  private readonly inFlight: Record<TokenKind, Promise<string | null> | null> = {
+    api: null,
+    graph: null,
+  };
+  private readonly inFlightRefresh: Record<TokenKind, Promise<string | null> | null> = {
+    api: null,
+    graph: null,
+  };
 
   private readonly _account = signal<AccountInfo | null>(null);
   private readonly _initError = signal<string | null>(null);
@@ -61,8 +71,6 @@ export class AuthService {
     if (result?.account) {
       this.pca.setActiveAccount(result.account);
       // Strip the auth code/state from the URL so refreshes don't replay it.
-      // Preserve the path and fragment; only the query string carries the
-      // auth response.
       window.history.replaceState(
         {},
         document.title,
@@ -76,6 +84,8 @@ export class AuthService {
 
   async signIn(): Promise<void> {
     const pca = this.requirePca();
+    // Request the union of API + Graph scopes up-front so the user only
+    // sees one consent prompt for both audiences.
     console.log('[auth] loginRedirect() starting, scopes=', this.auth!.scopes);
     await pca.loginRedirect({ scopes: this.auth!.scopes });
     // Page navigates away here; nothing after this line runs.
@@ -92,16 +102,22 @@ export class AuthService {
   }
 
   /** Silent → popup fallback. Returns null if the user is not signed in. */
-  async getToken(): Promise<string | null> {
-    if (!this.pca || !this.auth) return null;
-    if (this.inFlightToken) return this.inFlightToken;
-    const promise = this.acquireToken();
-    this.inFlightToken = promise;
-    try {
-      return await promise;
-    } finally {
-      this.inFlightToken = null;
-    }
+  getApiToken(): Promise<string | null> {
+    return this.getToken('api');
+  }
+
+  /** Silent → popup fallback. Returns null if the user is not signed in. */
+  getGraphToken(): Promise<string | null> {
+    return this.getToken('graph');
+  }
+
+  /** Force a fresh token (e.g. after a 401). Deduplicated across callers. */
+  refreshApiToken(): Promise<string | null> {
+    return this.refresh('api');
+  }
+
+  refreshGraphToken(): Promise<string | null> {
+    return this.refresh('graph');
   }
 
   /** Marks an init failure so the UI can show a visible error banner. */
@@ -109,63 +125,78 @@ export class AuthService {
     this._initError.set(message);
   }
 
-  /** Force a fresh token (e.g. after a 401). Deduplicated across callers. */
-  async refreshToken(): Promise<string | null> {
+  private async getToken(kind: TokenKind): Promise<string | null> {
     if (!this.pca || !this.auth) return null;
-    if (this.inFlightRefresh) return this.inFlightRefresh;
-    const promise = this.doRefresh();
-    this.inFlightRefresh = promise;
+    if (this.inFlight[kind]) return this.inFlight[kind]!;
+    const promise = this.acquireToken(kind);
+    this.inFlight[kind] = promise;
     try {
       return await promise;
     } finally {
-      this.inFlightRefresh = null;
+      this.inFlight[kind] = null;
     }
   }
 
-  private async doRefresh(): Promise<string | null> {
+  private async refresh(kind: TokenKind): Promise<string | null> {
+    if (!this.pca || !this.auth) return null;
+    if (this.inFlightRefresh[kind]) return this.inFlightRefresh[kind]!;
+    const promise = this.doRefresh(kind);
+    this.inFlightRefresh[kind] = promise;
+    try {
+      return await promise;
+    } finally {
+      this.inFlightRefresh[kind] = null;
+    }
+  }
+
+  private scopesFor(kind: TokenKind): string[] {
+    return kind === 'api' ? this.auth!.apiScopes : this.auth!.graphScopes;
+  }
+
+  private async doRefresh(kind: TokenKind): Promise<string | null> {
     const account = this.pca!.getActiveAccount();
     if (!account) return null;
     try {
       const result = await this.pca!.acquireTokenSilent({
         account,
-        scopes: this.auth!.scopes,
+        scopes: this.scopesFor(kind),
         forceRefresh: true,
       });
       return this.handleResult(result);
     } catch {
-      return this.popupFallback();
+      return this.popupFallback(kind);
     }
   }
 
-  private async acquireToken(): Promise<string | null> {
+  private async acquireToken(kind: TokenKind): Promise<string | null> {
     const pca = this.pca!;
     const account = pca.getActiveAccount();
     if (!account) return null;
     try {
       const result = await pca.acquireTokenSilent({
         account,
-        scopes: this.auth!.scopes,
+        scopes: this.scopesFor(kind),
       });
       return this.handleResult(result);
     } catch (err) {
       if (err instanceof InteractionRequiredAuthError) {
-        return this.popupFallback();
+        return this.popupFallback(kind);
       }
       throw err;
     }
   }
 
-  private async popupFallback(): Promise<string | null> {
+  private async popupFallback(kind: TokenKind): Promise<string | null> {
     const pca = this.requirePca();
     try {
       // Used only for token re-acquisition after the user is already
       // signed in (e.g. expired token). Initial login uses redirect.
-      const result = await pca.acquireTokenPopup({ scopes: this.auth!.scopes });
+      const result = await pca.acquireTokenPopup({ scopes: this.scopesFor(kind) });
       return this.handleResult(result);
     } catch (err) {
       if (err instanceof BrowserAuthError && err.errorCode === 'user_cancelled') return null;
       // If popup is blocked, fall back to a full redirect.
-      await pca.acquireTokenRedirect({ scopes: this.auth!.scopes });
+      await pca.acquireTokenRedirect({ scopes: this.scopesFor(kind) });
       return null;
     }
   }

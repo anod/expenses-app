@@ -4,19 +4,20 @@ import { config as dotenvConfig } from 'dotenv';
 import express, {
   type ErrorRequestHandler,
   type Request,
+  type RequestHandler,
   type Response,
   type NextFunction,
 } from 'express';
 import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 import { findRepoRoot } from './findRepoRoot.js';
-import { loadConfig, isGraphConfig, type Config } from './config.js';
+import { loadConfig, isGraphConfig, type Config, type GraphConfig } from './config.js';
 import { DumpReader, NoDumpFoundError } from './dumpReader.js';
 import { GraphClient, GraphError, GraphTimeoutError } from './graph/graphClient.js';
 import { GraphReader } from './graph/graphReader.js';
 import { WorkbookResolver } from './graph/workbookResolver.js';
 import { ExcelWriter } from './graph/excelWriter.js';
-import { requireBearer } from './auth.js';
+import { buildBearerGuard, requireGraphToken } from './auth.js';
 import { openDb } from './db/openDb.js';
 import { StateRepo } from './db/stateRepo.js';
 import { DemoController } from './demo/demoController.js';
@@ -37,6 +38,7 @@ const log = pino({
   redact: {
     paths: [
       'req.headers.authorization',
+      'req.headers["x-ms-graph-token"]',
       'res.headers["set-cookie"]',
       '*.accessToken',
       '*.access_token',
@@ -146,12 +148,22 @@ app.get('/api/config', (_req, res) => {
     return;
   }
   if (isGraphConfig(config)) {
+    const apiScope = (config.API_AUDIENCE ?? `api://${config.MICROSOFT_CLIENT_ID}`) + '/access';
     res.json({
       source: 'graph',
       auth: {
         clientId: config.MICROSOFT_CLIENT_ID,
         authority: config.MICROSOFT_AUTHORITY,
-        scopes: config.GRAPH_SCOPES,
+        // Back-compat field: union of scopes the SPA needs to acquire on
+        // initial sign-in (Graph + our API). Kept so existing UI code
+        // calling loginRedirect({scopes}) still consents to everything
+        // in one prompt.
+        scopes: [...config.GRAPH_SCOPES, apiScope],
+        // New two-token shape: SPA acquires API token (for /api/*
+        // Authorization) and Graph token (for X-MS-Graph-Token) via
+        // separate acquireTokenSilent calls, each with its own scope list.
+        apiScopes: [apiScope],
+        graphScopes: config.GRAPH_SCOPES,
       },
       demo: false,
     });
@@ -169,9 +181,23 @@ app.get('/api/config', (_req, res) => {
 //   so the SPA holds no Bearer; turning demo OFF only swaps to real
 //   data which is itself protected on every read/write route).
 const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
+
+const bearerGuard: RequestHandler | null = protectApi
+  ? buildBearerGuard({
+      tenantId: config.MICROSOFT_TENANT_ID,
+      audiences: [
+        // Conventional API audience.
+        config.API_AUDIENCE ?? `api://${(config as GraphConfig).MICROSOFT_CLIENT_ID}`,
+        // MSAL.js may emit the bare clientId GUID as `aud` on personal MSA tokens.
+        (config as GraphConfig).MICROSOFT_CLIENT_ID,
+      ],
+      allowedOids: config.ALLOWED_OIDS,
+    })
+  : null;
+
 app.use(
   '/api',
-  buildDemoRoutes(demoController, protectApi ? requireBearer : null),
+  buildDemoRoutes(demoController, bearerGuard),
 );
 
 // Bearer is required in graph mode, but transparently skipped while demo
@@ -182,26 +208,57 @@ const conditionalBearer = (
   res: Response,
   next: NextFunction,
 ): void => {
-  if (isDemo()) {
+  if (isDemo() || !bearerGuard) {
     next();
     return;
   }
-  requireBearer(req, res, next);
+  bearerGuard(req, res, next);
+};
+
+// Graph-passthrough routes additionally need an X-MS-Graph-Token header
+// carrying the user's MS Graph token (acquired by the SPA against the
+// Files.ReadWrite / User.Read scopes). The Bearer alone is for our API
+// audience — it is NOT usable to call Graph.
+const conditionalGraphToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (isDemo() || !isGraphConfig(config)) {
+    next();
+    return;
+  }
+  requireGraphToken(req, res, next);
 };
 if (protectApi) {
   app.use('/api', conditionalBearer, buildForecastRoutes(getRepo));
-  app.use('/api', conditionalBearer, buildSyncRoutes(getRepo, excelWriter, isDemo));
-  app.use('/api', conditionalBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
-  log.info('REQUIRE_AUTH=true: forecast + sync routes gated by Bearer (skipped in demo)');
+  app.use(
+    '/api',
+    conditionalBearer,
+    conditionalGraphToken,
+    buildSyncRoutes(getRepo, excelWriter, isDemo),
+  );
+  app.use(
+    '/api',
+    conditionalBearer,
+    conditionalGraphToken,
+    buildImportRoutes(getRepo, graphReader, isDemo, log),
+  );
+  log.info(
+    { allowedOids: config.ALLOWED_OIDS.length },
+    'REQUIRE_AUTH=true: forecast + sync routes gated by JWKS-validated Bearer',
+  );
 } else {
   app.use('/api', buildForecastRoutes(getRepo));
-  app.use('/api', buildSyncRoutes(getRepo, excelWriter, isDemo));
-  // Import always requires a Bearer (Graph needs the user's token) but
-  // is also conditionally skipped in demo (where it 409s anyway).
-  app.use('/api', conditionalBearer, buildImportRoutes(getRepo, graphReader, isDemo, log));
+  app.use('/api', conditionalGraphToken, buildSyncRoutes(getRepo, excelWriter, isDemo));
+  app.use(
+    '/api',
+    conditionalGraphToken,
+    buildImportRoutes(getRepo, graphReader, isDemo, log),
+  );
 }
 
-app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
+app.get('/api/expenses', graphOrDump(), conditionalGraphToken, async (req, res, next) => {
   try {
     if (isDemo()) {
       res.status(409).json({
@@ -210,8 +267,8 @@ app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
       });
       return;
     }
-    if (graphReader && req.accessToken) {
-      const snapshot = await graphReader.readSnapshot(req.accessToken);
+    if (graphReader && req.graphToken) {
+      const snapshot = await graphReader.readSnapshot(req.graphToken);
       res.json(snapshot);
     } else {
       const snapshot = await dumpReader.readLatestSnapshot();
@@ -222,7 +279,7 @@ app.get('/api/expenses', graphOrDump(), async (req, res, next) => {
   }
 });
 
-app.get('/api/workbook/status', graphOrDump(), async (req, res, next) => {
+app.get('/api/workbook/status', graphOrDump(), conditionalGraphToken, async (req, res, next) => {
   try {
     if (isDemo()) {
       res.status(409).json({
@@ -231,8 +288,8 @@ app.get('/api/workbook/status', graphOrDump(), async (req, res, next) => {
       });
       return;
     }
-    if (graphReader && req.accessToken) {
-      const meta = await graphReader.readMeta(req.accessToken);
+    if (graphReader && req.graphToken) {
+      const meta = await graphReader.readMeta(req.graphToken);
       res.json({
         source: 'graph',
         workbook: meta,

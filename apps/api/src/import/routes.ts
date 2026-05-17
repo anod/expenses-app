@@ -37,14 +37,14 @@ export const buildImportRoutes = (
         });
         return;
       }
-      if (!req.accessToken) {
-        res.status(401).json({
-          error: 'UNAUTHENTICATED',
-          message: 'Missing Bearer token.',
+      if (!req.graphToken) {
+        res.status(400).json({
+          error: 'GRAPH_TOKEN_MISSING',
+          message: 'X-MS-Graph-Token header is required to import from OneDrive.',
         });
         return;
       }
-      const snapshot = await graphReader.readSnapshot(req.accessToken);
+      const snapshot = await graphReader.readSnapshot(req.graphToken);
       const summary = importFromSnapshot(getRepo(), snapshot);
       const forecast = computeForecast(getRepo());
       log.info(
