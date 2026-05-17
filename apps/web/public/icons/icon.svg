@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#6750a4"/>
+  <g fill="#ffffff" font-family="'Inter','Segoe UI',sans-serif" font-weight="700" text-anchor="middle">
+    <text x="256" y="220" font-size="220">₪</text>
+    <text x="256" y="400" font-size="84" letter-spacing="4">CASH</text>
+  </g>
+</svg>

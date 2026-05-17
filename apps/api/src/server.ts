@@ -312,7 +312,30 @@ if (config.SERVE_SPA) {
   const spaDir = resolve(repoRoot, config.SPA_DIR);
   log.info({ spaDir }, 'serving SPA static files');
   // Hashed assets — long cache; index.html served separately with no-cache.
-  app.use(express.static(spaDir, { index: false, maxAge: '1y', fallthrough: true }));
+  app.use(
+    express.static(spaDir, {
+      index: false,
+      maxAge: '1y',
+      fallthrough: true,
+      setHeaders: (res, filePath) => {
+        const base = filePath.split(/[\\/]/).pop() ?? '';
+        // Service-worker entrypoint, ngsw control files, and the manifest must
+        // never be long-cached or the PWA will not pick up new builds.
+        if (
+          base === 'ngsw-worker.js' ||
+          base === 'safety-worker.js' ||
+          base === 'worker-basic.min.js' ||
+          base === 'ngsw.json' ||
+          base === 'manifest.webmanifest'
+        ) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+        if (base === 'manifest.webmanifest') {
+          res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+        }
+      },
+    }),
+  );
   app.get(/.*/, (req, res, next) => {
     // Don't shadow API or healthz; only serve SPA for navigation requests.
     if (req.path.startsWith('/api/') || req.path === '/healthz') return next();
