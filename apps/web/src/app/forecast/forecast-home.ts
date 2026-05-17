@@ -440,11 +440,19 @@ export class ForecastHomeComponent {
         amount: c.amount,
         channel: 'cc',
         cardId: c.source.cardId,
+        billedEntries:
+          billed.length > 0
+            ? billed
+            : [
+                {
+                  date,
+                  description:
+                    'Opening balance carried over from Excel snapshot — no per-charge breakdown available.',
+                  amount: c.amount,
+                },
+              ],
+        billKey: `${date}:${c.source.cardId}:${c.description}`,
       };
-      if (billed.length > 0) {
-        item.billedEntries = billed;
-        item.billKey = `${date}:${c.source.cardId}`;
-      }
       return item;
     }
     return {
