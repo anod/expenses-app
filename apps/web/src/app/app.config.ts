@@ -14,6 +14,7 @@ import { authInterceptor } from './auth/auth.interceptor';
 import { AuthService } from './auth/auth.service';
 import type { ApiConfig } from './auth/api-config';
 import { routes } from './app.routes';
+import { SwUpdaterService } from './core/sw-updater.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -23,7 +24,10 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withComponentInputBinding()),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
-      registrationStrategy: 'registerWhenStable:30000',
+      registrationStrategy: 'registerWhenStable:5000',
+    }),
+    provideAppInitializer(() => {
+      inject(SwUpdaterService).start();
     }),
     provideAppInitializer(async () => {
       const http = inject(HttpClient);
