@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import express, { type Request, type Response, type NextFunction } from 'express';
+import express from 'express';
 import pino from 'pino';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -15,28 +15,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, '..', '..', 'migrations');
 const silentLog = pino({ level: 'silent' });
 
+const ALLOWED_ORIGIN = 'http://localhost:4200';
+
 let tmp: string;
 
-const mkApp = (guard: 'on' | 'off') => {
+const mkApp = () => {
   const db = openDb({ path: ':memory:', migrationsDir });
   const repo = new StateRepo(db);
   // DemoController persists state to demo-mode.json next to the DB path;
   // give each test its own tmp dir so test runs don't leak state.
   const controller = new DemoController(repo, join(tmp, 'expenses.db'), silentLog);
-  const requireBearer = (req: Request, res: Response, next: NextFunction): void => {
-    if (req.header('Authorization')?.startsWith('Bearer ')) {
-      next();
-      return;
-    }
-    res.status(401).json({ error: 'UNAUTHENTICATED' });
-  };
   const app = express();
   app.use(express.json());
-  app.use('/api', buildDemoRoutes(controller, guard === 'on' ? requireBearer : null));
+  app.use('/api', buildDemoRoutes(controller, ALLOWED_ORIGIN));
   return { app, controller };
 };
 
-describe('demo routes auth gating', () => {
+describe('demo routes', () => {
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'demo-routes-'));
   });
@@ -44,54 +39,74 @@ describe('demo routes auth gating', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  describe('with auth guard ON (REQUIRE_AUTH=true)', () => {
-    let app: express.Express;
-    let controller: DemoController;
-    beforeEach(() => {
-      ({ app, controller } = mkApp('on'));
-    });
+  it('GET /api/demo is public', async () => {
+    const { app } = mkApp();
+    const r = await request(app).get('/api/demo').expect(200);
+    expect(r.body).toEqual({ enabled: false });
+  });
 
-    it('GET /api/demo is public', async () => {
-      const r = await request(app).get('/api/demo').expect(200);
-      expect(r.body).toEqual({ enabled: false });
-    });
+  it('POST /api/demo enabled:true is allowed without auth (sign-in landing flow)', async () => {
+    const { app, controller } = mkApp();
+    await request(app).post('/api/demo').send({ enabled: true }).expect(200);
+    expect(controller.isActive()).toBe(true);
+  });
 
-    it('POST /api/demo enabled:true requires Bearer', async () => {
-      await request(app).post('/api/demo').send({ enabled: true }).expect(401);
+  it('POST /api/demo enabled:false is always allowed (escape hatch from demo)', async () => {
+    const { app, controller } = mkApp();
+    controller.setActive(true);
+    const r = await request(app).post('/api/demo').send({ enabled: false }).expect(200);
+    expect(r.body).toEqual({ enabled: false });
+    expect(controller.isActive()).toBe(false);
+  });
+
+  it('POST /api/demo rejects malformed body', async () => {
+    const { app } = mkApp();
+    await request(app).post('/api/demo').send({ enabled: 'yes' }).expect(400);
+  });
+
+  describe('CSRF / origin gate', () => {
+    it('rejects POST with a mismatched Origin header', async () => {
+      const { app, controller } = mkApp();
+      await request(app)
+        .post('/api/demo')
+        .set('Origin', 'http://evil.example')
+        .send({ enabled: true })
+        .expect(403);
       expect(controller.isActive()).toBe(false);
     });
 
-    it('POST /api/demo enabled:true succeeds with Bearer', async () => {
+    it('rejects POST with a mismatched Referer header', async () => {
+      const { app, controller } = mkApp();
       await request(app)
         .post('/api/demo')
-        .set('Authorization', 'Bearer fake')
+        .set('Referer', 'http://evil.example/foo')
+        .send({ enabled: true })
+        .expect(403);
+      expect(controller.isActive()).toBe(false);
+    });
+
+    it('accepts POST with matching Origin', async () => {
+      const { app, controller } = mkApp();
+      await request(app)
+        .post('/api/demo')
+        .set('Origin', ALLOWED_ORIGIN)
         .send({ enabled: true })
         .expect(200);
       expect(controller.isActive()).toBe(true);
     });
 
-    it('POST /api/demo enabled:false is always allowed (escape hatch from demo)', async () => {
-      controller.setActive(true);
-      const r = await request(app)
-        .post('/api/demo')
-        .send({ enabled: false })
-        .expect(200);
-      expect(r.body).toEqual({ enabled: false });
-      expect(controller.isActive()).toBe(false);
-    });
-
-    it('POST /api/demo rejects malformed body', async () => {
+    it('accepts POST with matching Referer prefix', async () => {
+      const { app, controller } = mkApp();
       await request(app)
         .post('/api/demo')
-        .set('Authorization', 'Bearer fake')
-        .send({ enabled: 'yes' })
-        .expect(400);
+        .set('Referer', `${ALLOWED_ORIGIN}/login`)
+        .send({ enabled: true })
+        .expect(200);
+      expect(controller.isActive()).toBe(true);
     });
-  });
 
-  describe('with auth guard OFF (REQUIRE_AUTH=false)', () => {
-    it('POST /api/demo enabled:true is allowed unauthenticated', async () => {
-      const { app, controller } = mkApp('off');
+    it('allows POST without any Origin/Referer (non-browser clients)', async () => {
+      const { app, controller } = mkApp();
       await request(app).post('/api/demo').send({ enabled: true }).expect(200);
       expect(controller.isActive()).toBe(true);
     });

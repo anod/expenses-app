@@ -172,14 +172,6 @@ app.get('/api/config', (_req, res) => {
   }
 });
 
-// Demo toggle:
-// - GET /api/demo is public (just reports state so SPA can decide whether
-//   to initialize MSAL).
-// - POST /api/demo enabled:true requires a Bearer in protected mode so an
-//   attacker cannot flip a legitimate user into demo mode.
-// - POST /api/demo enabled:false is always allowed (demo bypasses MSAL,
-//   so the SPA holds no Bearer; turning demo OFF only swaps to real
-//   data which is itself protected on every read/write route).
 const protectApi = config.REQUIRE_AUTH && isGraphConfig(config);
 
 const bearerGuard: RequestHandler | null = protectApi
@@ -195,10 +187,14 @@ const bearerGuard: RequestHandler | null = protectApi
     })
   : null;
 
-app.use(
-  '/api',
-  buildDemoRoutes(demoController, bearerGuard),
-);
+// Demo toggle:
+// - GET /api/demo is public (just reports state so SPA can decide whether
+//   to initialize MSAL).
+// - POST /api/demo is public in both directions. The "Try demo mode"
+//   button lives on the sign-in landing where the SPA has no Bearer to
+//   send. Browser CSRF is mitigated inside `buildDemoRoutes` by an
+//   Origin/Referer check against `CORS_ORIGIN`.
+app.use('/api', buildDemoRoutes(demoController, config.CORS_ORIGIN));
 
 // Bearer is required in graph mode, but transparently skipped while demo
 // mode is active — the SPA does not initialize MSAL in demo, so no token

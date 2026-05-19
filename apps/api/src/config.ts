@@ -4,7 +4,17 @@ const Common = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  CORS_ORIGIN: z.string().default('http://localhost:4200'),
+  // Single allow-listed origin for browser CORS. `*` is explicitly rejected
+  // because the demo toggle (`POST /api/demo`) is intentionally
+  // unauthenticated and relies on an Origin/Referer match against this
+  // value to prevent cross-origin abuse from arbitrary websites.
+  CORS_ORIGIN: z
+    .string()
+    .default('http://localhost:4200')
+    .refine((v) => v !== '*', {
+      message:
+        'CORS_ORIGIN=* is not allowed; set it to the SPA origin (scheme + host[+port]).',
+    }),
   EXPENSES_SOURCE: z.enum(['graph', 'dump']).default('graph'),
   SERVE_SPA: z
     .union([z.string(), z.boolean()])

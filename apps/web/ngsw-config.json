@@ -39,18 +39,7 @@
       }
     }
   ],
-  "dataGroups": [
-    {
-      "name": "api-config",
-      "urls": ["/api/config"],
-      "cacheConfig": {
-        "strategy": "freshness",
-        "maxSize": 4,
-        "maxAge": "1d",
-        "timeout": "3s"
-      }
-    }
-  ],
+  "dataGroups": [],
   "navigationUrls": [
     "/**",
     "!/**/*.*",

@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import type { DemoController } from './demoController.js';
 
@@ -7,21 +7,19 @@ const body = z.object({ enabled: z.boolean() }).strict();
 /**
  * Demo toggle.
  *
- * - `GET /demo` is always public — it just reports the current mode so the
- *   SPA can decide whether to initialize MSAL.
- * - `POST /demo enabled:true` swaps the live SQLite repo for an in-memory
- *   fake. An attacker flipping this on without auth could confuse a
- *   legitimate signed-in user, so it is gated behind `requireBearer` when
- *   the app runs in protected mode.
- * - `POST /demo enabled:false` is the only escape hatch out of demo mode,
- *   and because demo bypasses MSAL the SPA holds no Bearer token to send.
- *   Allowing the OFF transition unauthenticated is safe: it only swaps
- *   demo data for real data, which is itself protected by the Bearer gate
- *   on every read/write route.
+ * Both GET and POST are public. The "Try demo mode" button on the sign-in
+ * landing has no Bearer to send, so the toggle cannot require auth.
+ *
+ * Browser CSRF (a malicious website coercing a signed-in user's browser
+ * into flipping demo on) is mitigated by an Origin/Referer check against
+ * `allowedOrigin` (the configured `CORS_ORIGIN`). Non-browser clients
+ * (curl, scripts) typically omit `Origin`; those are allowed, on the
+ * understanding that this deployment relies on network-level access
+ * control (e.g. Tailscale) to gate raw HTTP reachability.
  */
 export const buildDemoRoutes = (
   controller: DemoController,
-  guard: RequestHandler | null,
+  allowedOrigin: string,
 ): Router => {
   const router = Router();
 
@@ -29,16 +27,23 @@ export const buildDemoRoutes = (
     res.json({ enabled: controller.isActive() });
   });
 
-  const passthrough: RequestHandler = (_req, _res, next) => next();
-  const requireAuthForEnable: RequestHandler = (req, res, next) => {
-    if (req.body?.enabled === true) {
-      (guard ?? passthrough)(req, res, next);
-      return;
+  router.post('/demo', (req, res) => {
+    const origin = req.header('origin');
+    const referer = req.header('referer');
+    const fromBrowser = origin !== undefined || referer !== undefined;
+    if (fromBrowser) {
+      const originOk = origin !== undefined && origin === allowedOrigin;
+      const refererOk =
+        referer !== undefined &&
+        (referer === allowedOrigin || referer.startsWith(allowedOrigin + '/'));
+      if (!originOk && !refererOk) {
+        res.status(403).json({
+          error: 'FORBIDDEN_ORIGIN',
+          message: 'Origin/Referer does not match the allow-listed SPA origin.',
+        });
+        return;
+      }
     }
-    next();
-  };
-
-  router.post('/demo', requireAuthForEnable, (req, res) => {
     const parsed = body.safeParse(req.body ?? {});
     if (!parsed.success) {
       res.status(400).json({ error: 'BAD_REQUEST', issues: parsed.error.issues });
