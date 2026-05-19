@@ -132,6 +132,10 @@ from the template, so you can fill in:
   Microsoft account who consents to the app call the API.
 - `ONEDRIVE_WORKBOOK_URL` — the share URL of your Excel workbook.
 - `WORKSHEET_NAME` — usually `Sheet1`.
+- `CORS_ORIGIN` — the exact SPA origin, e.g.
+  `https://expenses.<your-tailnet>.ts.net`. `POST /api/demo` enforces an
+  Origin/Referer match against this value, so a wrong value breaks the
+  in-app demo toggle. The API refuses `CORS_ORIGIN=*`.
 - Leave `REQUIRE_AUTH=true`, `SERVE_SPA=true`, `MICROSOFT_TENANT_ID`, and
   `API_AUDIENCE` (blank) as shipped.
 
