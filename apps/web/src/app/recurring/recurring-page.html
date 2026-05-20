@@ -91,6 +91,7 @@
       <p>Use “New template” to add one.</p>
     </div>
   } @else if (templates().length > 0) {
+    <!-- Desktop / tablet: full table with sortable columns. -->
     <div class="m3-card table-card">
       <table class="m3-table">
         <thead>
@@ -125,7 +126,7 @@
         <tbody>
           @for (t of sortedTemplates(); track t.id) {
             <tr [class.is-editing]="isEditing(t.id)">
-              <td>{{ t.description }}</td>
+              <td>{{ displayDesc(t.description) }}</td>
               <td>
                 <span class="m3-chip channel-chip" [class.is-cc]="t.channel !== 'bank'">
                   <span class="material-symbols-outlined">
@@ -137,7 +138,18 @@
               <td>{{ t.day }}</td>
               <td class="amount" [class.is-negative]="t.amount < 0">{{ t.amount }}</td>
               <td>{{ t.startDate }}</td>
-              <td>{{ t.endDate ?? '—' }}</td>
+              <td>
+                @if (t.endDate) {
+                  {{ t.endDate }}
+                  @if (paymentProgressFor(t); as p) {
+                    <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
+                      {{ p.paid }}/{{ p.total }}
+                    </span>
+                  }
+                } @else {
+                  —
+                }
+              </td>
               <td class="actions-col">
                 <button type="button" class="m3-btn m3-btn--icon" title="Edit"
                         (click)="startEdit(t)" [disabled]="!isIdle()">
@@ -153,5 +165,51 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Mobile: stacked cards, no sort headers. Uses the same sortedTemplates
+         signal so any desktop-selected sort still applies if the viewport
+         later narrows. -->
+    <ol class="template-list">
+      @for (t of sortedTemplates(); track t.id) {
+        <li class="m3-card template-row" [class.is-editing]="isEditing(t.id)">
+          <div class="template-row-main">
+            <div class="template-row-icon" [class.is-cc]="t.channel !== 'bank'">
+              <span class="material-symbols-outlined">
+                {{ t.channel === 'bank' ? 'account_balance' : 'credit_card' }}
+              </span>
+            </div>
+            <div class="template-row-body">
+              <div class="template-row-title">{{ displayDesc(t.description) }}</div>
+              <div class="template-row-meta">
+                <span>{{ channelLabel(t.channel) }}</span>
+                <span class="dot">·</span>
+                <span>day {{ t.day }}</span>
+                <span class="dot">·</span>
+                <span>{{ t.startDate }} → {{ t.endDate ?? '∞' }}</span>
+                @if (paymentProgressFor(t); as p) {
+                  <span class="dot">·</span>
+                  <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
+                    {{ p.paid }}/{{ p.total }}
+                  </span>
+                }
+              </div>
+            </div>
+            <div class="template-row-amount" [class.is-negative]="t.amount < 0">
+              {{ t.amount }}
+            </div>
+          </div>
+          <div class="template-row-actions">
+            <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                    (click)="startEdit(t)" [disabled]="!isIdle()">
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+            <button type="button" class="m3-btn m3-btn--icon danger" title="Delete"
+                    (click)="remove(t)" [disabled]="!isIdle()">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </div>
+        </li>
+      }
+    </ol>
   }
 </section>

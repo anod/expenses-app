@@ -563,3 +563,67 @@
 .snackbar-close:hover {
   background: color-mix(in srgb, var(--md-sys-color-inverse-on-surface, #f1f1f1) 12%, transparent) !important;
 }
+
+/* ---------- Mobile: collapse Bank/Card summary cards to a chip ---------- */
+@media (max-width: 600px) {
+  .cards-row {
+    /* On a phone the auto-fit grid otherwise still allocates ~260px columns
+       and leaves a big gap; stack to a single column instead. */
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  /* Apply chip layout only to summary cards that are *not* being edited. */
+  .card-summary:not(:has(.snapshot-form)) {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 2.75rem 0.5rem 0.75rem; /* right pad for absolutely-placed edit btn */
+  }
+  .card-summary:not(:has(.snapshot-form)) .card-header {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: flex-start;
+  }
+  .card-summary:not(:has(.snapshot-form)) h3 {
+    font: var(--md-sys-typescale-title-small);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card-summary:not(:has(.snapshot-form)) .card-meta {
+    display: none;
+  }
+  /* Detach the edit button from the header so the order is
+     [icon name] [value] [edit-btn]. */
+  .card-summary:not(:has(.snapshot-form)) .card-header-actions {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0.25rem;
+    display: flex;
+    align-items: center;
+  }
+  /* Drop the first KPI (Snapshot / Current debit); inline the second
+     (Today / At <next-anchor>) right of the header. */
+  .card-summary:not(:has(.snapshot-form)) .card-grid {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    margin: 0;
+  }
+  .card-summary:not(:has(.snapshot-form)) .card-grid > div:first-child {
+    display: none;
+  }
+  .card-summary:not(:has(.snapshot-form)) .kpi-label {
+    display: none;
+  }
+  .card-summary:not(:has(.snapshot-form)) .kpi-value-sm {
+    font: var(--md-sys-typescale-title-medium);
+  }
+}

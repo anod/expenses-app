@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Channel, CreditCard, RecurringTemplate } from '@expenses/shared';
+import { descriptionLabel, paymentProgress, type PaymentProgress } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
@@ -190,6 +191,21 @@ export class RecurringPageComponent {
     if (channel === 'bank') return 'Bank';
     const id = channel.slice(3);
     return this.cards().find((c) => c.id === id)?.name ?? channel;
+  }
+
+  /** Strip any `[source]` Excel-import prefix from the stored description. */
+  protected displayDesc(desc: string): string {
+    return descriptionLabel(desc);
+  }
+
+  /**
+   * Progress on a fixed-term schedule, computed off `today` so the UI
+   * label refreshes naturally when the component re-renders. Returns
+   * `null` for open-ended (no endDate) templates.
+   */
+  protected paymentProgressFor(t: RecurringTemplate): PaymentProgress | null {
+    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
+    return paymentProgress(t.startDate, t.endDate, t.day, today);
   }
 
   protected isEditing(id: string): boolean {

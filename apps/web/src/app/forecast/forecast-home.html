@@ -261,7 +261,7 @@
               </span>
               <div class="charge-main">
                 <span class="charge-date">{{ fmtDate(item.date) }}</span>
-                <span class="charge-desc">{{ item.description }}</span>
+                <span class="charge-desc">{{ displayDesc(item.description) }}</span>
               </div>
               <span class="charge-amount" [class.is-negative]="item.amount < 0">
                 {{ fmt(item.amount) }}
@@ -297,7 +297,7 @@
                   </span>
                   <div class="charge-main">
                     <span class="charge-date">{{ fmtDate(sub.date) }}</span>
-                    <span class="charge-desc">{{ sub.description }}</span>
+                    <span class="charge-desc">{{ displayDesc(sub.description) }}</span>
                   </div>
                   <span class="charge-amount" [class.is-negative]="sub.amount < 0">
                     {{ fmt(sub.amount) }}

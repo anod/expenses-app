@@ -6,9 +6,12 @@ import type {
   RecurringTemplate,
   Settings,
 } from '@expenses/shared';
+import { parseDescription } from '@expenses/shared';
 import { GraphClient, GraphError } from './graphClient.js';
 import { WorkbookResolver, type DriveItemRef } from './workbookResolver.js';
 import { encodeWorksheetName } from './graphReader.js';
+
+export { parseDescription };
 
 export type CellValue = string | number | null;
 export type SheetGrid = CellValue[][];
@@ -102,13 +105,6 @@ interface AnchorRow {
   /** Value per anchor column (length = anchors.length). */
   values: (number | null)[];
 }
-
-/** Recover (source, label) from a description like `[cal] арнона`. */
-export const parseDescription = (desc: string): { source: string; label: string } => {
-  const m = /^\[([^\]]+)\]\s+(.*)$/.exec(desc);
-  if (m) return { source: m[1]!, label: m[2]! };
-  return { source: '', label: desc };
-};
 
 export interface AnchorLayout {
   anchors: string[]; // ISO dates, ascending — first is the asOf snapshot

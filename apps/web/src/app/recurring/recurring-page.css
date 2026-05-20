@@ -154,3 +154,94 @@ tr.is-editing td {
 .m3-table th.sortable:hover .sort-icon {
   opacity: 1;
 }
+
+/* ---------- Payment progress badge (end-dated templates) ---------- */
+.payment-progress {
+  display: inline-block;
+  margin-inline-start: 0.4rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-small);
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}
+
+/* ---------- Mobile stacked list (alternative to the table) ---------- */
+.template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: none; /* visible only on narrow viewports — see media query below */
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.template-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+}
+.template-row.is-editing {
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 50%, transparent);
+}
+
+.template-row-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.template-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.template-row-icon.is-cc {
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+.template-row-body { min-width: 0; }
+.template-row-title {
+  font: var(--md-sys-typescale-body-large);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.template-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.35rem;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.template-row-meta .dot { opacity: 0.6; }
+
+.template-row-amount {
+  font: var(--md-sys-typescale-title-medium);
+  font-variant-numeric: tabular-nums;
+}
+.template-row-amount.is-negative { color: var(--md-sys-color-error); }
+
+.template-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+.template-row-actions .m3-btn--icon.danger { color: var(--md-sys-color-error); }
+
+/* Toggle table ↔ stacked list at the same breakpoint the form grid uses. */
+@media (max-width: 719px) {
+  .table-card { display: none; }
+  .template-list { display: flex; }
+}

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { ForecastResult, LedgerEntry, Settings, ProjectionCharge, RecurringTemplate, CreditCard, Account } from '@expenses/shared';
-import { forecast as runForecast } from '@expenses/shared';
+import { forecast as runForecast, descriptionLabel } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
@@ -284,6 +284,11 @@ export class ForecastHomeComponent {
     return channel === 'bank' ? 'account_balance' : 'credit_card';
   }
 
+  /** Strip any `[source]` Excel-import prefix from a description. */
+  protected displayDesc(desc: string): string {
+    return descriptionLabel(desc);
+  }
+
   protected isAnchor(i: TimelineItem): i is AnchorItem {
     return i.kind === 'anchor';
   }
@@ -306,7 +311,7 @@ export class ForecastHomeComponent {
   protected startEditBank(): void {
     const f = this.forecast();
     if (!f) return;
-    this.bankForm.reset({ bankBalance: f.account.bankBalance, asOf: f.account.asOf });
+    this.bankForm.reset({ bankBalance: f.account.bankBalance, asOf: this.todayIso() });
     this.editing.set('bank');
   }
 
@@ -317,10 +322,15 @@ export class ForecastHomeComponent {
     const full = this.cards().find((c) => c.id === cardId);
     this.cardForm.reset({
       currentDebit: card.snapshotDebit,
-      asOf: card.asOf,
+      asOf: this.todayIso(),
       mode: full?.mode === 'debit' ? 'debit' : 'credit',
     });
     this.editing.set(cardId);
+  }
+
+  /** Local-time `YYYY-MM-DD` for prefilling date inputs. */
+  private todayIso(): string {
+    return new Date().toLocaleDateString('en-CA');
   }
 
   protected cancelEdit(): void {
