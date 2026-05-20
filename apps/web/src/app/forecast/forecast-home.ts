@@ -134,24 +134,38 @@ export class ForecastHomeComponent {
     };
   });
 
-  /** Per-card summary shown beside the chart: opening debit + next anchor projection. */
+  /** Per-card summary shown beside the chart: opening debit + the amount
+   * this card will bill next, on its own billing day. Debit cards are
+   * excluded — every charge already hit the bank, so there's nothing to
+   * snapshot or schedule. */
   protected readonly cardSummaries = computed<CardSummary[]>(() => {
     const f = this.forecast();
     if (!f) return [];
-    const nextAnchor = f.days.find((d) => d.isAnchor);
-    return f.cards.map((card) => {
-      const anchorDay = nextAnchor
-        ? card.days.find((d) => d.date === nextAnchor.date)
-        : undefined;
-      return {
-        cardId: card.cardId,
-        name: card.name,
-        openingDebit: card.openingDebit,
-        nextAnchorDate: nextAnchor?.date ?? card.asOf,
-        nextAnchorOutstanding: anchorDay?.outstanding ?? 0,
-        billingDay: card.billingDayOfMonth,
-      };
-    });
+    const debitIds = new Set(
+      this.cards().filter((c) => c.mode === 'debit').map((c) => c.id),
+    );
+    return f.cards
+      .filter((card) => !debitIds.has(card.cardId))
+      .map((card) => {
+        // The pipeline records outstanding *after* the billing-day reset
+        // (it zeros at the start of a billing day past asOf, then writes
+        // the row). So the amount that's actually about to be billed is
+        // the outstanding from the day immediately preceding the next
+        // isBillingDay entry. Skip the asOf row itself (idx 0) because
+        // on asOf the pipeline does not reset.
+        const billIdx = card.days.findIndex((d, idx) => idx > 0 && d.isBillingDay);
+        const nextBillDate = billIdx > 0 ? card.days[billIdx]!.date : card.asOf;
+        const nextBillAmount =
+          billIdx > 0 ? card.days[billIdx - 1]!.outstanding : card.openingDebit;
+        return {
+          cardId: card.cardId,
+          name: card.name,
+          openingDebit: card.openingDebit,
+          nextAnchorDate: nextBillDate,
+          nextAnchorOutstanding: nextBillAmount,
+          billingDay: card.billingDayOfMonth,
+        };
+      });
   });
 
   /** Charges + anchors interleaved chronologically.
