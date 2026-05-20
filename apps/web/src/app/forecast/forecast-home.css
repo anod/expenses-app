@@ -266,7 +266,7 @@
 /* Charge row — compact, single-line */
 .timeline-charge {
   display: grid;
-  grid-template-columns: 28px 1fr auto 28px;
+  grid-template-columns: 28px 1fr auto auto;
   align-items: center;
   gap: 0.6rem;
   padding: 0.3rem 0.5rem;
@@ -514,6 +514,12 @@
   margin-left: 0.5rem;
   opacity: 0.55;
   transition: opacity 150ms var(--md-sys-motion-standard);
+}
+.timeline-charge .row-actions {
+  margin-left: 0.5rem;
+}
+.timeline-charge .row-actions .clear-btn {
+  margin-left: 0;
 }
 .timeline-charge:hover .clear-btn,
 .timeline-charge .clear-btn:focus-visible {

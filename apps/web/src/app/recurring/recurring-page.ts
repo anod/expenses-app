@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { Channel, CreditCard, RecurringTemplate } from '@expenses/shared';
+import type { Channel, CreditCard, LedgerEntry, RecurringTemplate } from '@expenses/shared';
 import { descriptionLabel, paymentProgress, type PaymentProgress } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
+type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string };
 
 type CadenceKind = 'monthly' | 'weekly';
 
@@ -28,12 +29,25 @@ export class RecurringPageComponent {
 
   protected readonly templates = signal<RecurringTemplate[]>([]);
   protected readonly cards = signal<CreditCard[]>([]);
+  /** All persisted one-off ledger entries (not generated from a template). */
+  protected readonly ledger = signal<LedgerEntry[]>([]);
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly edit = signal<EditState>({ kind: 'idle' });
+  protected readonly ledgerEdit = signal<LedgerEditState>({ kind: 'idle' });
   protected readonly sortColumn = signal<SortColumn>('day');
   protected readonly sortDir = signal<SortDir>('asc');
+
+  /** Standalone ledger entries: excludes template-bound overrides and
+   * legacy card-bill placeholders that have no useful edit semantics. */
+  protected readonly oneOffLedger = computed<LedgerEntry[]>(() =>
+    this.ledger()
+      .filter((e) => e.recurringId == null)
+      .filter((e) => !e.id.startsWith('excel:l:cardbill:'))
+      .slice()
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+  );
 
   /** Templates sorted by the current column / direction. Channel sorts by
    * the resolved label so CC cards group naturally with their bank name. */
@@ -103,18 +117,28 @@ export class RecurringPageComponent {
 
   protected readonly weekdayOptions = WEEKDAY_LABELS.map((label, value) => ({ value, label }));
 
+  protected readonly ledgerForm = this.fb.nonNullable.group({
+    description: ['', [Validators.required, Validators.maxLength(200)]],
+    amount: [0, [Validators.required]],
+    channel: ['bank' as Channel, [Validators.required]],
+    date: ['', [Validators.required]],
+    status: ['pending' as 'pending' | 'cleared', [Validators.required]],
+  });
+
   constructor() { void this.load(); }
 
   protected async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [tpls, cards] = await Promise.all([
+      const [tpls, cards, ledger] = await Promise.all([
         firstValueFrom(this.api.listRecurring()),
         firstValueFrom(this.api.listCards()),
+        firstValueFrom(this.api.listLedger()),
       ]);
       this.templates.set(tpls);
       this.cards.set(cards);
+      this.ledger.set(ledger);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
@@ -251,4 +275,68 @@ export class RecurringPageComponent {
 
   protected isNew(): boolean { return this.edit().kind === 'new'; }
   protected isIdle(): boolean { return this.edit().kind === 'idle'; }
+
+  // ---------- One-off ledger entries ----------
+
+  protected isLedgerEditing(id: string): boolean {
+    const s = this.ledgerEdit();
+    return s.kind === 'edit' && s.id === id;
+  }
+  protected isLedgerIdle(): boolean { return this.ledgerEdit().kind === 'idle'; }
+
+  protected startEditLedger(e: LedgerEntry): void {
+    this.ledgerForm.reset({
+      description: e.description,
+      amount: e.amount,
+      channel: e.channel,
+      date: e.date,
+      status: e.status,
+    });
+    this.ledgerEdit.set({ kind: 'edit', id: e.id });
+  }
+
+  protected cancelLedger(): void {
+    this.ledgerEdit.set({ kind: 'idle' });
+    this.error.set(null);
+  }
+
+  protected async saveLedger(): Promise<void> {
+    if (this.ledgerForm.invalid) {
+      this.ledgerForm.markAllAsTouched();
+      return;
+    }
+    const state = this.ledgerEdit();
+    if (state.kind !== 'edit') return;
+    const v = this.ledgerForm.getRawValue();
+    const body = {
+      description: v.description.trim(),
+      amount: v.amount,
+      channel: v.channel,
+      date: v.date,
+      status: v.status,
+    };
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const res = await firstValueFrom(this.api.updateLedger(state.id, body));
+      this.ledger.update((arr) => arr.map((e) => (e.id === state.id ? res.entity : e)));
+      this.ledgerEdit.set({ kind: 'idle' });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async removeLedger(e: LedgerEntry): Promise<void> {
+    if (!confirm(`Delete one-off entry “${this.displayDesc(e.description)}”?`)) return;
+    const prev = this.ledger();
+    this.ledger.update((arr) => arr.filter((x) => x.id !== e.id));
+    try {
+      await firstValueFrom(this.api.deleteLedger(e.id));
+    } catch (err) {
+      this.ledger.set(prev);
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
 }

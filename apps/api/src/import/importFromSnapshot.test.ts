@@ -668,6 +668,125 @@ describe('importFromSnapshot — idempotency & cleanup', () => {
 });
 
 // =========================================================================
+// Bounded mid-span recurring detection (fixed-term schedules)
+// =========================================================================
+describe('importFromSnapshot — bounded recurring detection', () => {
+  beforeEach(() => { rowCounter = 0; });
+
+  it('promotes 3+ consecutive equal values mid-span to a bounded recurring template', () => {
+    const repo = newRepo();
+    // 7 months; psy appears only in months 06..10 (5 occurrences) at -820 on day 10.
+    // Last month (2026-11) is blank → bounded.
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01', '2026-10-01', '2026-11-01');
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: 'isra', day: 10, label: 'психолог',
+        values: [null, -820, -820, -820, -820, -820, null],
+      })],
+    }));
+    const tpls = repo.listRecurring();
+    expect(tpls).toHaveLength(1);
+    const t = tpls[0]!;
+    expect(t.amount).toBe(-820);
+    expect(t.channel).toBe('cc:isra');
+    expect(t.startDate).toBe('2026-06-10');
+    expect(t.endDate).toBe('2026-10-10');
+    // ID includes startMonth for bounded windows.
+    expect(t.id).toMatch(/:2026-06-01$/);
+    // No leftover per-month ledger rows for the promoted row.
+    expect(repo.listLedger().filter((e) => e.description.includes('психолог'))).toHaveLength(0);
+  });
+
+  it('leaves 2-occurrence mid-span rows as ledger entries (insufficient evidence)', () => {
+    const repo = newRepo();
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01');
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: '', day: 15, label: 'occasional',
+        values: [null, -100, -100, null],
+      })],
+    }));
+    expect(repo.listRecurring()).toHaveLength(0);
+    expect(repo.listLedger().filter((e) => e.description.includes('occasional'))).toHaveLength(2);
+  });
+
+  it('leaves gappy 3+ rows as ledger entries (no internal gaps allowed)', () => {
+    const repo = newRepo();
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01');
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: '', day: 15, label: 'gappy',
+        values: [-50, null, -50, null, -50],
+      })],
+    }));
+    expect(repo.listRecurring()).toHaveLength(0);
+    expect(repo.listLedger().filter((e) => e.description.includes('gappy'))).toHaveLength(3);
+  });
+
+  it('treats 3+ consecutive equal values reaching workbook end as open-ended (no endDate)', () => {
+    const repo = newRepo();
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01');
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: '', day: 5, label: 'ongoing',
+        values: [null, -200, -200, -200],
+      })],
+    }));
+    const tpls = repo.listRecurring();
+    expect(tpls).toHaveLength(1);
+    expect(tpls[0]!.startDate).toBe('2026-06-05');
+    expect(tpls[0]!.endDate).toBeUndefined();
+    // Open-ended ID has no startMonth suffix.
+    expect(tpls[0]!.id).not.toMatch(/:2026-06-01$/);
+  });
+
+  it('preserves cleared status on migration: cleared old ledger row becomes a cleared override on the new template', () => {
+    const repo = newRepo();
+    // Need trailing blank month so the re-import yields a bounded (endDate-bearing) template.
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01');
+    // First import: row is 2 occurrences only -> 2 ledger entries.
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: '', day: 7, label: 'morphing',
+        values: [null, -300, -300, null, null],
+      })],
+    }));
+    const before = repo.listLedger().filter((e) => e.description.includes('morphing'));
+    expect(before).toHaveLength(2);
+    // User clears one of them.
+    repo.upsertLedger({ ...before[0]!, status: 'cleared' });
+
+    // Re-import: now 3 occurrences -> promoted to recurring template.
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: '', day: 7, label: 'morphing',
+        values: [null, -300, -300, -300, null],
+      })],
+    }));
+    const tpl = repo.listRecurring()[0]!;
+    expect(tpl.endDate).toBe('2026-08-07');
+    // Cleared occurrence survives as an override (recurring_id set, status=cleared).
+    const overrides = repo.listLedger().filter((e) => e.recurringId === tpl.id);
+    expect(overrides).toHaveLength(1);
+    expect(overrides[0]!.status).toBe('cleared');
+    expect(overrides[0]!.date).toBe('2026-06-07');
+    expect(overrides[0]!.occurrenceKey).toBe(`${tpl.id}@2026-06-07`);
+  });
+});
+
+// =========================================================================
 // 8. Settings preservation
 // =========================================================================
 describe('importFromSnapshot — settings', () => {

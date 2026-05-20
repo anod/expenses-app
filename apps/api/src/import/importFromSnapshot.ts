@@ -66,15 +66,34 @@ const excelLedgerId = (row: ExpenseRow, monthKey: string): string =>
 const excelCardBillId = (cardId: string, monthKey: string): string =>
   `${EXCEL_PREFIX}l:cardbill:${cardId}:${monthKey.slice(0, 7)}`;
 
+/**
+ * A row qualifies as a recurring template when it shows the same value
+ * across N consecutive workbook months (N >= 2 covers the legacy
+ * full-span case; N >= 3 covers mid-span bounded schedules). The window
+ * must have no internal gaps — gappy rows fall through to variable
+ * (per-month) ledger entries.
+ *
+ * Returned `firstMonthIdx` / `lastMonthIdx` index into `monthKeys` and
+ * carry the inferred startDate / endDate window. `amount` is read from
+ * the first occurrence (not `firstMonth.key` — relevant when the row
+ * does not cover the entire workbook span).
+ */
+type RecurringCandidate = {
+  row: ExpenseRow;
+  firstMonthIdx: number;
+  lastMonthIdx: number;
+  amount: number;
+};
+
 const partitionRows = (
   rows: ExpenseRow[],
   monthKeys: string[],
 ): {
-  recurringRows: ExpenseRow[];
+  recurringRows: RecurringCandidate[];
   variableRows: ExpenseRow[];
   skipped: { label: string; reason: string }[];
 } => {
-  const recurringRows: ExpenseRow[] = [];
+  const recurringRows: RecurringCandidate[] = [];
   const variableRows: ExpenseRow[] = [];
   const skipped: { label: string; reason: string }[] = [];
   for (const row of rows) {
@@ -86,9 +105,15 @@ const partitionRows = (
       skipped.push({ label: row.labelTrimmed, reason: 'workbook book-keeping row' });
       continue;
     }
-    const nonNullValues = monthKeys
-      .map((k) => row.amounts[k]?.value)
-      .filter((v): v is number => typeof v === 'number');
+    const nonNullValues: number[] = [];
+    const nonNullIndices: number[] = [];
+    for (let i = 0; i < monthKeys.length; i++) {
+      const v = row.amounts[monthKeys[i]!]?.value;
+      if (typeof v === 'number') {
+        nonNullValues.push(v);
+        nonNullIndices.push(i);
+      }
+    }
     if (nonNullValues.length === 0) {
       skipped.push({ label: row.labelTrimmed, reason: 'no values in any month' });
       continue;
@@ -98,11 +123,21 @@ const partitionRows = (
       continue;
     }
     const allEqual = nonNullValues.every((v) => v === nonNullValues[0]);
-    const presentEveryMonth = monthKeys.every(
-      (k) => typeof row.amounts[k]?.value === 'number',
-    );
-    if (row.day != null && allEqual && nonNullValues.length >= 2 && presentEveryMonth) {
-      recurringRows.push(row);
+    const firstIdx = nonNullIndices[0]!;
+    const lastIdx = nonNullIndices[nonNullIndices.length - 1]!;
+    const noGaps = lastIdx - firstIdx + 1 === nonNullIndices.length;
+    // Full-span runs may collapse to 2 occurrences; mid-span bounded
+    // windows need stronger evidence (>=3) to avoid promoting unrelated
+    // pairs (e.g. one-off + a coincidental repeat).
+    const isFullSpan = firstIdx === 0 && lastIdx === monthKeys.length - 1;
+    const enough = isFullSpan ? nonNullValues.length >= 2 : nonNullValues.length >= 3;
+    if (row.day != null && allEqual && noGaps && enough) {
+      recurringRows.push({
+        row,
+        firstMonthIdx: firstIdx,
+        lastMonthIdx: lastIdx,
+        amount: nonNullValues[0]!,
+      });
     } else {
       variableRows.push(row);
     }
@@ -299,7 +334,7 @@ export function importFromSnapshot(
 
   let recurringCreated = 0;
   let ledgerCreated = 0;
-  const upsertImportedLedger = (id: string, entry: Omit<LedgerEntry, 'id' | 'status'>): void => {
+  const upsertImportedLedger = (id: string, entry: Omit<LedgerEntry, 'id' | 'status'>): string => {
     let finalId = id;
     let n = 2;
     while (touchedLedgerIds.has(finalId)) finalId = `${id}:${n++}`;
@@ -307,14 +342,16 @@ export function importFromSnapshot(
     repo.upsertLedger({ ...entry, id: finalId, status });
     touchedLedgerIds.add(finalId);
     ledgerCreated++;
+    return finalId;
   };
-  const upsertImportedRecurring = (id: string, tpl: Omit<RecurringTemplate, 'id'>): void => {
+  const upsertImportedRecurring = (id: string, tpl: Omit<RecurringTemplate, 'id'>): string => {
     let finalId = id;
     let n = 2;
     while (touchedRecurringIds.has(finalId)) finalId = `${id}:${n++}`;
     repo.upsertRecurring({ ...tpl, id: finalId });
     touchedRecurringIds.add(finalId);
     recurringCreated++;
+    return finalId;
   };
 
   // NOTE: we intentionally do NOT generate per-period «карта потрачено»
@@ -323,21 +360,56 @@ export function importFromSnapshot(
   // individual cal/isra rows). Any legacy `excel:l:cardbill:*` entries
   // from earlier imports will be GC'd by the orphan sweep below.
 
-  for (const row of recurringRows) {
-    const amount = row.amounts[firstMonth.key]?.value;
-    if (typeof amount !== 'number' || row.day == null) continue;
-    // Always anchor at firstMonth so the partial first-month cycle is
-    // populated. The forecast pipeline's keep() filters cc entries with
-    // date <= card.asOf, which prevents double-counting against currentDebit
-    // (i.e. pre-asOf occurrences are dropped). Post-asOf occurrences in the
-    // same month must be visible because they roll into the very next bill.
-    upsertImportedRecurring(excelRecurringId(row), {
+  for (const c of recurringRows) {
+    const { row, firstMonthIdx, lastMonthIdx, amount } = c;
+    if (row.day == null) continue;
+    const monthKeys = snap.months.map((m) => m.key);
+    const startMonthKey = monthKeys[firstMonthIdx]!;
+    const endMonthKey = monthKeys[lastMonthIdx]!;
+    const isOpenEnded = lastMonthIdx === monthKeys.length - 1;
+    const startDate = clampedDate(startMonthKey, row.day);
+    const endDate = isOpenEnded ? undefined : clampedDate(endMonthKey, row.day);
+    // Bounded windows include the window start in the ID so two
+    // distinct fixed-term schedules with the same source/label/day
+    // get stable, non-colliding IDs across re-imports.
+    const baseId = excelRecurringId(row);
+    const tplId = isOpenEnded ? baseId : `${baseId}:${startMonthKey}`;
+    const tpl: Omit<RecurringTemplate, 'id'> = {
       description: describe(row),
       amount,
       channel: channelForRow(row),
       cadence: { kind: 'monthly', day: row.day, monthEndPolicy: 'clamp' },
-      startDate: clampedDate(firstMonthKey, row.day),
-    });
+      startDate,
+    };
+    if (endDate) tpl.endDate = endDate;
+    const finalTplId = upsertImportedRecurring(tplId, tpl);
+
+    // Preserve user-cleared state across the migration. If any of the
+    // old per-month ledger rows that this template now subsumes was
+    // marked cleared, materialise an override ledger entry so the new
+    // template's occurrence appears cleared in the timeline.
+    for (let i = firstMonthIdx; i <= lastMonthIdx; i++) {
+      const mKey = monthKeys[i]!;
+      const oldLedgerId = excelLedgerId(row, mKey);
+      if (existingLedgerStatus.get(oldLedgerId) !== 'cleared') continue;
+      const date = clampedDate(mKey, row.day);
+      const overrideId = `${EXCEL_PREFIX}l:override:${finalTplId}:${date}`;
+      const overrideEntry: LedgerEntry = {
+        id: overrideId,
+        description: describe(row),
+        amount,
+        channel: channelForRow(row),
+        date,
+        status: 'cleared',
+        recurringId: finalTplId,
+        occurrenceKey: `${finalTplId}@${date}`,
+      };
+      repo.upsertLedger(overrideEntry);
+      touchedLedgerIds.add(overrideId);
+      // Track so the orphan GC doesn't remove it next run.
+      existingLedgerStatus.set(overrideId, 'cleared');
+      ledgerCreated++;
+    }
   }
 
   for (const row of variableRows) {

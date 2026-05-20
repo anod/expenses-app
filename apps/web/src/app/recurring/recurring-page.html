@@ -243,4 +243,154 @@
       }
     </ol>
   }
+
+  <!-- =========================================================
+       One-off ledger entries (standalone, not generated from a
+       template). Editable amount/description/date/status/channel
+       so user-imported Excel rows that didn't qualify as recurring
+       can still be tweaked from one place.
+       ========================================================= -->
+  @if (oneOffLedger().length > 0) {
+    <header class="page-head" style="margin-top: 2rem;">
+      <div>
+        <h2 style="margin: 0;">
+          <span class="material-symbols-outlined">receipt_long</span>
+          Standalone ledger entries
+        </h2>
+        <p class="subtitle">
+          One-off charges not generated from a recurring template.
+        </p>
+      </div>
+    </header>
+
+    @if (!isLedgerIdle()) {
+      <form class="m3-card edit-form" [formGroup]="ledgerForm" (ngSubmit)="saveLedger()">
+        <h3 class="form-title">
+          <span class="material-symbols-outlined">edit</span>
+          Edit entry
+        </h3>
+        <div class="form-grid">
+          <label class="field field-span-2">
+            <span class="field-label">Description</span>
+            <input type="text" formControlName="description" />
+          </label>
+          <label class="field">
+            <span class="field-label">Amount</span>
+            <input type="number" formControlName="amount" step="1" />
+          </label>
+          <label class="field">
+            <span class="field-label">Channel</span>
+            <select formControlName="channel">
+              @for (opt of channelOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Date</span>
+            <input type="date" formControlName="date" />
+          </label>
+          <label class="field">
+            <span class="field-label">Status</span>
+            <select formControlName="status">
+              <option value="pending">Pending</option>
+              <option value="cleared">Cleared</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="m3-btn" (click)="cancelLedger()" [disabled]="saving()">Cancel</button>
+          <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || ledgerForm.invalid">
+            @if (saving()) {
+              <span class="material-symbols-outlined spin">progress_activity</span>
+            } @else {
+              <span class="material-symbols-outlined">save</span>
+            }
+            Save
+          </button>
+        </div>
+      </form>
+    }
+
+    <div class="m3-card table-card">
+      <table class="m3-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Channel</th>
+            <th class="amount">Amount</th>
+            <th>Status</th>
+            <th class="actions-col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (e of oneOffLedger(); track e.id) {
+            <tr [class.is-editing]="isLedgerEditing(e.id)">
+              <td>{{ e.date }}</td>
+              <td>{{ displayDesc(e.description) }}</td>
+              <td>
+                <span class="m3-chip channel-chip" [class.is-cc]="e.channel !== 'bank'">
+                  <span class="material-symbols-outlined">
+                    {{ e.channel === 'bank' ? 'account_balance' : 'credit_card' }}
+                  </span>
+                  {{ channelLabel(e.channel) }}
+                </span>
+              </td>
+              <td class="amount" [class.is-negative]="e.amount < 0">{{ e.amount }}</td>
+              <td>{{ e.status }}</td>
+              <td class="actions-col">
+                <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                        (click)="startEditLedger(e)" [disabled]="!isIdle() || !isLedgerIdle()">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button type="button" class="m3-btn m3-btn--icon danger" title="Delete"
+                        (click)="removeLedger(e)" [disabled]="!isIdle() || !isLedgerIdle()">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile: stacked cards for the same entries. -->
+    <ol class="template-list">
+      @for (e of oneOffLedger(); track e.id) {
+        <li class="m3-card template-row" [class.is-editing]="isLedgerEditing(e.id)">
+          <div class="template-row-main">
+            <div class="template-row-icon" [class.is-cc]="e.channel !== 'bank'">
+              <span class="material-symbols-outlined">
+                {{ e.channel === 'bank' ? 'account_balance' : 'credit_card' }}
+              </span>
+            </div>
+            <div class="template-row-body">
+              <div class="template-row-title">{{ displayDesc(e.description) }}</div>
+              <div class="template-row-meta">
+                <span>{{ e.date }}</span>
+                <span class="dot">·</span>
+                <span>{{ channelLabel(e.channel) }}</span>
+                <span class="dot">·</span>
+                <span>{{ e.status }}</span>
+              </div>
+            </div>
+            <div class="template-row-amount" [class.is-negative]="e.amount < 0">
+              {{ e.amount }}
+            </div>
+          </div>
+          <div class="template-row-actions">
+            <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                    (click)="startEditLedger(e)" [disabled]="!isIdle() || !isLedgerIdle()">
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+            <button type="button" class="m3-btn m3-btn--icon danger" title="Delete"
+                    (click)="removeLedger(e)" [disabled]="!isIdle() || !isLedgerIdle()">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </div>
+        </li>
+      }
+    </ol>
+  }
 </section>
