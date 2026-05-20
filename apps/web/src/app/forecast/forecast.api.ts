@@ -14,19 +14,22 @@ export interface MutationResult<T> {
   forecast: ForecastResult;
 }
 
-/** Wire shape accepted by the API for recurring templates. The server
- * currently only persists monthly cadence; weekly support is pending a
- * follow-up DB migration. Keep this flat to match the zod schema in
- * apps/api/src/forecast/schemas.ts. */
+/** Wire shape accepted by the API for recurring templates. Mirrors the
+ * zod schema in apps/api/src/forecast/schemas.ts which accepts either
+ * the new discriminated `cadence` object OR the legacy flat
+ * `day`/`monthEndPolicy` fields. */
 export interface RecurringWriteBody {
   id?: string;
   description: string;
   amount: number;
   channel: RecurringTemplate['channel'];
-  day: number;
-  monthEndPolicy: 'clamp';
   startDate: string;
   endDate?: string;
+  cadence?: RecurringTemplate['cadence'];
+  /** Legacy flat field — only used when `cadence` is omitted. */
+  day?: number;
+  /** Legacy flat field — only used when `cadence` is omitted. */
+  monthEndPolicy?: 'clamp';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -74,6 +77,16 @@ export class ForecastApi {
   }
   deleteRecurring(id: string) {
     return this.http.delete<{ forecast: ForecastResult }>(`/api/recurring/${id}`);
+  }
+  addRecurringSkip(id: string, date: string) {
+    return this.http.post<MutationResult<RecurringTemplate>>(
+      `/api/recurring/${id}/skips/${date}`, {},
+    );
+  }
+  removeRecurringSkip(id: string, date: string) {
+    return this.http.delete<MutationResult<RecurringTemplate>>(
+      `/api/recurring/${id}/skips/${date}`,
+    );
   }
 
   getSettings() { return this.http.get<Settings>('/api/settings'); }

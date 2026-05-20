@@ -640,3 +640,8 @@
   font-variant-numeric: tabular-nums;
   vertical-align: 1px;
 }
+
+.row-actions {
+  display: inline-flex;
+  gap: 0.15rem;
+}

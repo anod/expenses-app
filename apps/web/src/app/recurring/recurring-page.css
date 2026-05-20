@@ -245,3 +245,19 @@ tr.is-editing td {
   .table-card { display: none; }
   .template-list { display: flex; }
 }
+
+.skip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-secondary-container, #e8def8);
+  color: var(--md-sys-color-on-secondary-container, #1d192b);
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+.skip-badge .material-symbols-outlined {
+  font-size: 0.95rem;
+}

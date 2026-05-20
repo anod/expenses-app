@@ -7,8 +7,12 @@ import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 
+type CadenceKind = 'monthly' | 'weekly';
+
 type SortColumn = 'description' | 'channel' | 'day' | 'amount' | 'startDate' | 'endDate';
 type SortDir = 'asc' | 'desc';
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 @Component({
   selector: 'app-recurring-page',
@@ -62,9 +66,10 @@ export class RecurringPageComponent {
       case 'channel':
         return this.channelLabel(a.channel).localeCompare(this.channelLabel(b.channel));
       case 'day': {
-        const ad = a.cadence.kind === 'monthly' ? a.cadence.day : 0;
-        const bd = b.cadence.kind === 'monthly' ? b.cadence.day : 0;
-        return ad - bd;
+        // Sort weekly templates after monthly ones, then by day-of-week.
+        const rank = (t: RecurringTemplate): number =>
+          t.cadence.kind === 'monthly' ? t.cadence.day : 100 + t.cadence.dayOfWeek;
+        return rank(a) - rank(b);
       }
       case 'amount':
         return a.amount - b.amount;
@@ -89,10 +94,14 @@ export class RecurringPageComponent {
     description: ['', [Validators.required, Validators.maxLength(200)]],
     amount: [0, [Validators.required]],
     channel: ['bank' as Channel, [Validators.required]],
-    day: [1, [Validators.required, Validators.min(1), Validators.max(31)]],
+    cadenceKind: ['monthly' as CadenceKind, [Validators.required]],
+    day: [1, [Validators.min(1), Validators.max(31)]],
+    dayOfWeek: [5, [Validators.min(0), Validators.max(6)]], // default Fri
     startDate: ['', [Validators.required]],
     endDate: [''],
   });
+
+  protected readonly weekdayOptions = WEEKDAY_LABELS.map((label, value) => ({ value, label }));
 
   constructor() { void this.load(); }
 
@@ -118,7 +127,9 @@ export class RecurringPageComponent {
       description: t.description,
       amount: t.amount,
       channel: t.channel,
+      cadenceKind: t.cadence.kind,
       day: t.cadence.kind === 'monthly' ? t.cadence.day : 1,
+      dayOfWeek: t.cadence.kind === 'weekly' ? t.cadence.dayOfWeek : 5,
       startDate: t.startDate,
       endDate: t.endDate ?? '',
     });
@@ -131,7 +142,9 @@ export class RecurringPageComponent {
       description: '',
       amount: 0,
       channel: 'bank',
+      cadenceKind: 'monthly',
       day: 1,
+      dayOfWeek: 5,
       startDate: today,
       endDate: '',
     });
@@ -151,13 +164,16 @@ export class RecurringPageComponent {
     const state = this.edit();
     if (state.kind === 'idle') return;
     const v = this.form.getRawValue();
+    const cadence =
+      v.cadenceKind === 'weekly'
+        ? { kind: 'weekly' as const, dayOfWeek: v.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
+        : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
     const body = {
       description: v.description.trim(),
       amount: v.amount,
       channel: v.channel,
-      day: v.day,
+      cadence,
       startDate: v.startDate,
-      monthEndPolicy: 'clamp' as const,
       ...(v.endDate ? { endDate: v.endDate } : {}),
     };
     this.saving.set(true);
@@ -204,6 +220,18 @@ export class RecurringPageComponent {
   /** Day-of-month for monthly templates; null for non-monthly. */
   protected dayOfMonth(t: RecurringTemplate): number | null {
     return t.cadence.kind === 'monthly' ? t.cadence.day : null;
+  }
+
+  /** Short label for the cadence column ("12" for monthly day-of-month,
+   * "Fri" for weekly day-of-week). */
+  protected cadenceLabel(t: RecurringTemplate): string {
+    if (t.cadence.kind === 'weekly') return WEEKDAY_LABELS[t.cadence.dayOfWeek] ?? '?';
+    return String(t.cadence.day);
+  }
+
+  /** Number of user-marked skips, for the row badge. */
+  protected skipCount(t: RecurringTemplate): number {
+    return t.skips?.length ?? 0;
   }
 
   /**

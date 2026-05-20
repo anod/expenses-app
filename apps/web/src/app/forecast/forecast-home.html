@@ -282,13 +282,24 @@
                   </span>
                 </button>
               } @else if (!item.past && item.entryId; as id) {
-                <button type="button"
-                        class="clear-btn"
-                        title="Mark as cleared"
-                        (click)="clearCharge(id)"
-                        [disabled]="isAnyEdit()">
-                  <span class="material-symbols-outlined">check_circle</span>
-                </button>
+                <div class="row-actions">
+                  @if (canSkip(item) && item.recurringId; as rid) {
+                    <button type="button"
+                            class="clear-btn"
+                            title="Skip this occurrence"
+                            (click)="skipOccurrence(rid, item.date)"
+                            [disabled]="isAnyEdit()">
+                      <span class="material-symbols-outlined">event_busy</span>
+                    </button>
+                  }
+                  <button type="button"
+                          class="clear-btn"
+                          title="Mark as cleared"
+                          (click)="clearCharge(id)"
+                          [disabled]="isAnyEdit()">
+                    <span class="material-symbols-outlined">check_circle</span>
+                  </button>
+                </div>
               } @else {
                 <span class="clear-btn-placeholder" aria-hidden="true"></span>
               }
@@ -312,7 +323,17 @@
                   <span class="charge-amount" [class.is-negative]="sub.amount < 0">
                     {{ fmt(sub.amount) }}
                   </span>
-                  <span class="clear-btn-placeholder" aria-hidden="true"></span>
+                  @if (canSkipSub(item.cardId, sub) && sub.recurringId; as rid) {
+                    <button type="button"
+                            class="clear-btn"
+                            title="Skip this occurrence"
+                            (click)="skipOccurrence(rid, sub.date)"
+                            [disabled]="isAnyEdit()">
+                      <span class="material-symbols-outlined">event_busy</span>
+                    </button>
+                  } @else {
+                    <span class="clear-btn-placeholder" aria-hidden="true"></span>
+                  }
                 </li>
               }
             }
