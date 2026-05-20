@@ -205,4 +205,97 @@ describe('forecast routes', () => {
     expect(r.body.entity.threshold).toBe(5000);
     expect(r.body.entity.horizonMonths).toBe(3);
   });
+
+  describe('recurring (weekly + skips)', () => {
+    it('POST /api/recurring accepts the new cadence shape (weekly)', async () => {
+      const r = await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'therapy',
+          amount: -205,
+          channel: 'bank',
+          cadence: { kind: 'weekly', dayOfWeek: 5 },
+          startDate: '2026-06-05',
+        })
+        .expect(200);
+      expect(r.body.entity.cadence).toEqual({ kind: 'weekly', dayOfWeek: 5 });
+    });
+
+    it('POST /api/recurring 400 when neither cadence nor day provided', async () => {
+      await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'x', amount: -10, channel: 'bank', startDate: '2026-06-05',
+        })
+        .expect(400);
+    });
+
+    it('POST /api/recurring/:id/skips/:date adds a skip', async () => {
+      const c = await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'therapy', amount: -205, channel: 'bank',
+          cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+        })
+        .expect(200);
+      const id = c.body.entity.id as string;
+      const r = await request(app)
+        .post(`/api/recurring/${id}/skips/2026-06-12`)
+        .expect(200);
+      expect(r.body.entity.skips).toContain('2026-06-12');
+    });
+
+    it('POST /skips/:date drops a pending persisted override', async () => {
+      repo.upsertRecurring({
+        id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+        cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+      });
+      repo.upsertLedger({
+        id: 'ov', description: 'therapy (bumped)', amount: -250, channel: 'bank',
+        date: '2026-06-12', status: 'pending',
+        recurringId: 'therapy', occurrenceKey: 'therapy@2026-06-12',
+      });
+      await request(app)
+        .post('/api/recurring/therapy/skips/2026-06-12')
+        .expect(200);
+      expect(repo.listLedger()).toEqual([]);
+      expect(repo.listRecurring()[0]!.skips).toContain('2026-06-12');
+    });
+
+    it('POST /skips/:date 409 SKIP_CONFLICT_CLEARED when override is cleared', async () => {
+      repo.upsertRecurring({
+        id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+        cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+      });
+      repo.upsertLedger({
+        id: 'ov', description: 'therapy', amount: -205, channel: 'bank',
+        date: '2026-06-12', status: 'cleared',
+        recurringId: 'therapy', occurrenceKey: 'therapy@2026-06-12',
+      });
+      const r = await request(app)
+        .post('/api/recurring/therapy/skips/2026-06-12')
+        .expect(409);
+      expect(r.body.error).toBe('SKIP_CONFLICT_CLEARED');
+      // No skip was recorded; override stays.
+      expect(repo.listRecurring()[0]!.skips).toBeUndefined();
+      expect(repo.listLedger()).toHaveLength(1);
+    });
+
+    it('POST /skips/:date 400 on bad date, 404 on unknown template', async () => {
+      await request(app).post('/api/recurring/x/skips/not-a-date').expect(400);
+      await request(app).post('/api/recurring/missing/skips/2026-06-12').expect(404);
+    });
+
+    it('DELETE /skips/:date removes a skip', async () => {
+      repo.upsertRecurring({
+        id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+        cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+      });
+      repo.addSkip('therapy', '2026-06-12');
+      const r = await request(app)
+        .delete('/api/recurring/therapy/skips/2026-06-12')
+        .expect(200);
+      expect(r.body.entity.skips).toBeUndefined();
+    });
+  });
 });

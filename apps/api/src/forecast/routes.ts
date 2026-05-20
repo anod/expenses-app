@@ -197,21 +197,44 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   });
 
   // --- recurring
+  const cadenceFromInput = (
+    input: import('./schemas.js').RecurringInputT,
+  ): RecurringTemplate['cadence'] => {
+    if (input.cadence) {
+      if (input.cadence.kind === 'weekly') {
+        return {
+          kind: 'weekly',
+          dayOfWeek: input.cadence.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+        };
+      }
+      return {
+        kind: 'monthly',
+        day: input.cadence.day,
+        monthEndPolicy: input.cadence.monthEndPolicy,
+      };
+    }
+    return {
+      kind: 'monthly',
+      day: input.day as number,
+      monthEndPolicy: input.monthEndPolicy,
+    };
+  };
+
   router.get('/recurring', (_req, res) => res.json(getRepo().listRecurring()));
   router.post('/recurring', (req, res) => {
     try {
       const input = RecurringInput.parse(req.body);
-      const tmpl: import('@expenses/shared').RecurringTemplate = {
+      const tmpl: RecurringTemplate = {
         id: input.id ?? randomUUID(),
         description: input.description,
         amount: input.amount,
         channel: input.channel as import('@expenses/shared').Channel,
-        cadence: { kind: 'monthly', day: input.day, monthEndPolicy: input.monthEndPolicy },
+        cadence: cadenceFromInput(input),
         startDate: input.startDate,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
       getRepo().upsertRecurring(tmpl);
-      withForecast(res, tmpl);
+      withForecast(res, getRepo().listRecurring().find((t) => t.id === tmpl.id) ?? tmpl);
     } catch (err) {
       if (!handleZod(err, res)) throw err;
     }
@@ -219,12 +242,12 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.patch('/recurring/:id', (req, res) => {
     try {
       const input = RecurringInput.parse({ ...req.body, id: req.params.id });
-      const tmpl: import('@expenses/shared').RecurringTemplate = {
+      const tmpl: RecurringTemplate = {
         id: req.params.id,
         description: input.description,
         amount: input.amount,
         channel: input.channel as import('@expenses/shared').Channel,
-        cadence: { kind: 'monthly', day: input.day, monthEndPolicy: input.monthEndPolicy },
+        cadence: cadenceFromInput(input),
         startDate: input.startDate,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
@@ -237,6 +260,56 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.delete('/recurring/:id', (req, res) => {
     getRepo().deleteRecurring(req.params.id);
     res.json({ forecast: computeForecast(getRepo()) });
+  });
+
+  // --- recurring skips
+  const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  router.post('/recurring/:id/skips/:date', (req, res) => {
+    const { id, date } = req.params;
+    if (!isoDateRe.test(date)) {
+      res.status(400).json({ error: 'VALIDATION', message: 'date must be YYYY-MM-DD' });
+      return;
+    }
+    const repo = getRepo();
+    const template = repo.listRecurring().find((t) => t.id === id);
+    if (!template) {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    // If a persisted override exists for this occurrence: pending overrides
+    // are safe to drop (user clearly wants the occurrence gone). Cleared
+    // overrides represent a real bank movement — refuse and let the UI ask
+    // the user to first un-clear or accept the data loss.
+    const override = repo.findRecurringOverride(id, date);
+    if (override) {
+      if (override.status === 'cleared') {
+        res.status(409).json({
+          error: 'SKIP_CONFLICT_CLEARED',
+          message:
+            'A cleared ledger override exists for this occurrence. Un-clear it before marking the occurrence as skipped.',
+          overrideId: override.id,
+        });
+        return;
+      }
+      repo.deleteLedger(override.id);
+    }
+    repo.addSkip(id, date);
+    withForecast(res, repo.listRecurring().find((t) => t.id === id) ?? null);
+  });
+  router.delete('/recurring/:id/skips/:date', (req, res) => {
+    const { id, date } = req.params;
+    if (!isoDateRe.test(date)) {
+      res.status(400).json({ error: 'VALIDATION', message: 'date must be YYYY-MM-DD' });
+      return;
+    }
+    const repo = getRepo();
+    const template = repo.listRecurring().find((t) => t.id === id);
+    if (!template) {
+      res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    repo.removeSkip(id, date);
+    withForecast(res, repo.listRecurring().find((t) => t.id === id) ?? null);
   });
 
   // --- settings

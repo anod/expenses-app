@@ -146,54 +146,75 @@ export class StateRepo {
   }
 
   listRecurring(): RecurringTemplate[] {
+    const skipsByTpl = new Map<string, string[]>();
+    for (const s of this.db
+      .prepare<[], { recurring_id: string; occurrence_date: string }>(
+        'SELECT recurring_id, occurrence_date FROM recurring_skip ORDER BY occurrence_date',
+      )
+      .all()) {
+      let arr = skipsByTpl.get(s.recurring_id);
+      if (!arr) {
+        arr = [];
+        skipsByTpl.set(s.recurring_id, arr);
+      }
+      arr.push(s.occurrence_date);
+    }
+
     return this.db
       .prepare<[], {
         id: string;
         description: string;
         amount: number;
         channel: string;
-        day: number;
+        cadence: string;
+        day: number | null;
+        day_of_week: number | null;
         start_date: string;
         end_date: string | null;
         month_end_policy: string;
       }>(
-        'SELECT id, description, amount, channel, day, start_date, end_date, month_end_policy ' +
+        'SELECT id, description, amount, channel, cadence, day, day_of_week, ' +
+        'start_date, end_date, month_end_policy ' +
         'FROM recurring_template',
       )
       .all()
       .map((r) => {
-        // Storage is still monthly-only in this schema version; weekly
-        // support arrives in a follow-up migration. Synthesize the new
-        // discriminated `cadence` shape here so consumers can rely on it.
+        const cadence: RecurringTemplate['cadence'] =
+          r.cadence === 'weekly'
+            ? { kind: 'weekly', dayOfWeek: r.day_of_week as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
+            : {
+                kind: 'monthly',
+                day: r.day as number,
+                monthEndPolicy: r.month_end_policy as 'clamp',
+              };
         const t: RecurringTemplate = {
           id: r.id,
           description: r.description,
           amount: r.amount,
           channel: r.channel as RecurringTemplate['channel'],
-          cadence: {
-            kind: 'monthly',
-            day: r.day,
-            monthEndPolicy: r.month_end_policy as 'clamp',
-          },
+          cadence,
           startDate: r.start_date,
         };
         if (r.end_date != null) t.endDate = r.end_date;
+        const skips = skipsByTpl.get(r.id);
+        if (skips && skips.length > 0) t.skips = skips;
         return t;
       });
   }
 
   upsertRecurring(t: RecurringTemplate): void {
-    if (t.cadence.kind !== 'monthly') {
-      throw new Error(
-        `recurring template ${t.id}: weekly cadence requires a DB migration that has not yet landed`,
-      );
-    }
+    const cadenceKind = t.cadence.kind;
+    const day = t.cadence.kind === 'monthly' ? t.cadence.day : null;
+    const dayOfWeek = t.cadence.kind === 'weekly' ? t.cadence.dayOfWeek : null;
+    const monthEndPolicy =
+      t.cadence.kind === 'monthly' ? t.cadence.monthEndPolicy : 'clamp';
     this.db
       .prepare(
-        'INSERT INTO recurring_template(id, description, amount, channel, day, start_date, end_date, month_end_policy) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
+        'INSERT INTO recurring_template(id, description, amount, channel, cadence, day, day_of_week, start_date, end_date, month_end_policy) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET description=excluded.description, amount=excluded.amount, ' +
-        'channel=excluded.channel, day=excluded.day, start_date=excluded.start_date, ' +
+        'channel=excluded.channel, cadence=excluded.cadence, day=excluded.day, ' +
+        'day_of_week=excluded.day_of_week, start_date=excluded.start_date, ' +
         'end_date=excluded.end_date, month_end_policy=excluded.month_end_policy',
       )
       .run(
@@ -201,15 +222,60 @@ export class StateRepo {
         t.description,
         t.amount,
         t.channel,
-        t.cadence.day,
+        cadenceKind,
+        day,
+        dayOfWeek,
         t.startDate,
         t.endDate ?? null,
-        t.cadence.monthEndPolicy,
+        monthEndPolicy,
       );
+    // Note: skips are intentionally NOT touched here. They are managed
+    // via addSkip/removeSkip so importer re-upserts preserve them.
   }
 
   deleteRecurring(id: string): void {
+    // ON DELETE CASCADE on recurring_skip cleans up any skip rows.
     this.db.prepare('DELETE FROM recurring_template WHERE id = ?').run(id);
+  }
+
+  /**
+   * Mark an occurrence of `recurringId` on `date` as skipped. Idempotent.
+   * Returns true if a new skip was inserted, false if it already existed.
+   */
+  addSkip(recurringId: string, date: string): boolean {
+    const info = this.db
+      .prepare(
+        'INSERT OR IGNORE INTO recurring_skip(recurring_id, occurrence_date) VALUES (?, ?)',
+      )
+      .run(recurringId, date);
+    return info.changes > 0;
+  }
+
+  /**
+   * Remove a skip marker. Idempotent. Returns true if a row was removed.
+   */
+  removeSkip(recurringId: string, date: string): boolean {
+    const info = this.db
+      .prepare('DELETE FROM recurring_skip WHERE recurring_id = ? AND occurrence_date = ?')
+      .run(recurringId, date);
+    return info.changes > 0;
+  }
+
+  /**
+   * Resolve the persisted ledger override (if any) for the given
+   * recurring template occurrence. Used by skip routes to decide
+   * whether to delete a pending override or refuse on a cleared one.
+   */
+  findRecurringOverride(
+    recurringId: string,
+    date: string,
+  ): { id: string; status: 'pending' | 'cleared' } | null {
+    const row = this.db
+      .prepare<[string, string], { id: string; status: string }>(
+        'SELECT id, status FROM ledger_entry WHERE recurring_id = ? AND occurrence_key = ?',
+      )
+      .get(recurringId, `${recurringId}@${date}`);
+    return row ? { id: row.id, status: row.status as 'pending' | 'cleared' } : null;
   }
 
   getSettings(): Settings {

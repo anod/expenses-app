@@ -85,6 +85,70 @@ describe('StateRepo', () => {
     expect(repo.listLedger()).toEqual([]);
   });
 
+  it('recurring: weekly cadence round-trips', () => {
+    repo.upsertRecurring({
+      id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+    });
+    const list = repo.listRecurring();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.cadence).toEqual({ kind: 'weekly', dayOfWeek: 5 });
+  });
+
+  it('recurring skips: add/remove/list, idempotent, preserved across upsert', () => {
+    repo.upsertRecurring({
+      id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+    });
+    expect(repo.addSkip('therapy', '2026-06-12')).toBe(true);
+    expect(repo.addSkip('therapy', '2026-06-12')).toBe(false); // idempotent
+    expect(repo.addSkip('therapy', '2026-06-19')).toBe(true);
+    expect(repo.listRecurring()[0]!.skips).toEqual(['2026-06-12', '2026-06-19']);
+
+    // Re-upsert (e.g. user edits amount): skips MUST survive.
+    repo.upsertRecurring({
+      id: 'therapy', description: 'therapy', amount: -250, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+    });
+    expect(repo.listRecurring()[0]!.skips).toEqual(['2026-06-12', '2026-06-19']);
+
+    expect(repo.removeSkip('therapy', '2026-06-12')).toBe(true);
+    expect(repo.removeSkip('therapy', '2026-06-12')).toBe(false);
+    expect(repo.listRecurring()[0]!.skips).toEqual(['2026-06-19']);
+  });
+
+  it('recurring skips cascade-delete with their template', () => {
+    repo.upsertRecurring({
+      id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+    });
+    repo.addSkip('therapy', '2026-06-12');
+    repo.deleteRecurring('therapy');
+    expect(repo.listRecurring()).toEqual([]);
+    // recreate with same id; skips from before must be gone.
+    repo.upsertRecurring({
+      id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 }, startDate: '2026-06-05',
+    });
+    expect(repo.listRecurring()[0]!.skips).toBeUndefined();
+  });
+
+  it('findRecurringOverride locates persisted overrides by occurrenceKey', () => {
+    repo.upsertRecurring({
+      id: 'rent', description: 'rent', amount: -3000, channel: 'bank',
+      cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
+    });
+    repo.upsertLedger({
+      id: 'ov-1', description: 'rent', amount: -3200, channel: 'bank',
+      date: '2026-06-01', status: 'pending',
+      recurringId: 'rent', occurrenceKey: 'rent@2026-06-01',
+    });
+    expect(repo.findRecurringOverride('rent', '2026-06-01')).toEqual({
+      id: 'ov-1', status: 'pending',
+    });
+    expect(repo.findRecurringOverride('rent', '2026-07-01')).toBeNull();
+  });
+
   it('settings: default + upsert', () => {
     const s = repo.getSettings();
     expect(s.threshold).toBe(2000);

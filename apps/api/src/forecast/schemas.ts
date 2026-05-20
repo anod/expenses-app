@@ -22,16 +22,37 @@ export const CreditCardInput = z.object({
   mode: z.enum(['credit', 'debit']).optional(),
 });
 
-export const RecurringInput = z.object({
-  id: z.string().min(1).max(64).optional(),
-  description: z.string().min(1).max(200),
-  amount: z.number().finite(),
-  channel,
-  day: z.number().int().min(1).max(31),
-  startDate: isoDate,
-  endDate: isoDate.optional(),
-  monthEndPolicy: z.literal('clamp').default('clamp'),
-});
+const cadenceInput = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('monthly'),
+    day: z.number().int().min(1).max(31),
+    monthEndPolicy: z.literal('clamp').default('clamp'),
+  }),
+  z.object({
+    kind: z.literal('weekly'),
+    dayOfWeek: z.number().int().min(0).max(6),
+  }),
+]);
+
+export const RecurringInput = z
+  .object({
+    id: z.string().min(1).max(64).optional(),
+    description: z.string().min(1).max(200),
+    amount: z.number().finite(),
+    channel,
+    startDate: isoDate,
+    endDate: isoDate.optional(),
+    // Either the new discriminated shape OR the legacy flat shape
+    // (kept for backwards-compat with older web clients that send
+    // top-level day + monthEndPolicy and don't know about cadence).
+    cadence: cadenceInput.optional(),
+    day: z.number().int().min(1).max(31).optional(),
+    monthEndPolicy: z.literal('clamp').default('clamp'),
+  })
+  .refine(
+    (v) => v.cadence != null || v.day != null,
+    'either `cadence` or top-level `day` must be provided',
+  );
 
 export const LedgerEntryInput = z
   .object({
