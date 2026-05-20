@@ -636,6 +636,35 @@ describe('importFromSnapshot — idempotency & cleanup', () => {
     importFromSnapshot(repo, mkSnap({ cols, balance: [10_000], rows: [] }));
     expect(repo.listLedger().find((e) => e.id === 'user-1')).toBeDefined();
   });
+
+  it('preserves user-marked skips across Excel re-import (re-upsert keeps skip table)', () => {
+    const repo = newRepo();
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01');
+    // First import creates an Excel-owned monthly template.
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000],
+      rows: [mkRow(cols, { source: '', day: 10, label: 'mortgage', values: [-5_500, -5_500, -5_500] })],
+    }));
+    const tpl = repo.listRecurring()[0]!;
+    expect(tpl.id).toMatch(/^excel:/);
+
+    // User marks an occurrence as skipped (would be done via the skip route).
+    repo.addSkip(tpl.id, '2026-06-10');
+    expect(repo.listRecurring()[0]!.skips).toEqual(['2026-06-10']);
+
+    // Re-import the same workbook — same row, possibly with bumped amount.
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000],
+      rows: [mkRow(cols, { source: '', day: 10, label: 'mortgage', values: [-6_000, -6_000, -6_000] })],
+    }));
+
+    const after = repo.listRecurring()[0]!;
+    expect(after.id).toBe(tpl.id);
+    expect(after.amount).toBe(-6_000); // importer DID update the template
+    expect(after.skips).toEqual(['2026-06-10']); // …but the skip survived
+  });
 });
 
 // =========================================================================
