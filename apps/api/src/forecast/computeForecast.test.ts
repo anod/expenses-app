@@ -29,7 +29,7 @@ describe('computeForecast', () => {
     });
     repo.upsertRecurring({
       id: 'mortgage', description: 'mortgage', amount: -5500, channel: 'bank',
-      day: 10, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
     });
     repo.upsertLedger({
       id: 'inst1', description: 'installment', amount: -200,

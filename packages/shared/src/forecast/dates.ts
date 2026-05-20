@@ -45,6 +45,12 @@ export const addDays = (date: IsoDate, n: number): IsoDate => {
   return formatIso(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
 };
 
+/** Weekday of an ISO date in UTC: 0=Sunday..6=Saturday. */
+export const weekdayOfIso = (date: IsoDate): 0 | 1 | 2 | 3 | 4 | 5 | 6 => {
+  const { y, m, d } = parseIso(date);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+};
+
 export const compareIso = (a: IsoDate, b: IsoDate): number =>
   a < b ? -1 : a > b ? 1 : 0;
 

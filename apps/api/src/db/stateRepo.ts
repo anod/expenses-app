@@ -162,14 +162,20 @@ export class StateRepo {
       )
       .all()
       .map((r) => {
+        // Storage is still monthly-only in this schema version; weekly
+        // support arrives in a follow-up migration. Synthesize the new
+        // discriminated `cadence` shape here so consumers can rely on it.
         const t: RecurringTemplate = {
           id: r.id,
           description: r.description,
           amount: r.amount,
           channel: r.channel as RecurringTemplate['channel'],
-          day: r.day,
+          cadence: {
+            kind: 'monthly',
+            day: r.day,
+            monthEndPolicy: r.month_end_policy as 'clamp',
+          },
           startDate: r.start_date,
-          monthEndPolicy: r.month_end_policy as 'clamp',
         };
         if (r.end_date != null) t.endDate = r.end_date;
         return t;
@@ -177,6 +183,11 @@ export class StateRepo {
   }
 
   upsertRecurring(t: RecurringTemplate): void {
+    if (t.cadence.kind !== 'monthly') {
+      throw new Error(
+        `recurring template ${t.id}: weekly cadence requires a DB migration that has not yet landed`,
+      );
+    }
     this.db
       .prepare(
         'INSERT INTO recurring_template(id, description, amount, channel, day, start_date, end_date, month_end_policy) ' +
@@ -190,10 +201,10 @@ export class StateRepo {
         t.description,
         t.amount,
         t.channel,
-        t.day,
+        t.cadence.day,
         t.startDate,
         t.endDate ?? null,
-        t.monthEndPolicy,
+        t.cadence.monthEndPolicy,
       );
   }
 

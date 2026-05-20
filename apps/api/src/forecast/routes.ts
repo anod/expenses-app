@@ -206,9 +206,8 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
         description: input.description,
         amount: input.amount,
         channel: input.channel as import('@expenses/shared').Channel,
-        day: input.day,
+        cadence: { kind: 'monthly', day: input.day, monthEndPolicy: input.monthEndPolicy },
         startDate: input.startDate,
-        monthEndPolicy: input.monthEndPolicy,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
       getRepo().upsertRecurring(tmpl);
@@ -225,9 +224,8 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
         description: input.description,
         amount: input.amount,
         channel: input.channel as import('@expenses/shared').Channel,
-        day: input.day,
+        cadence: { kind: 'monthly', day: input.day, monthEndPolicy: input.monthEndPolicy },
         startDate: input.startDate,
-        monthEndPolicy: input.monthEndPolicy,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
       };
       getRepo().upsertRecurring(tmpl);

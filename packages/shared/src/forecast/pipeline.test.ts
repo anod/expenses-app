@@ -118,7 +118,7 @@ describe('forecast pipeline', () => {
   it('recurring salary on the 1st raises balance', () => {
     const tmpl: RecurringTemplate = {
       id: 'sal', description: 'salary', amount: 15_000, channel: 'bank',
-      day: 1, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
     };
     const r = forecast({
       templates: [tmpl], persisted: [], account: acct(1000), cards: [],
@@ -131,7 +131,7 @@ describe('forecast pipeline', () => {
   it('recurring day=31 clamps in February', () => {
     const tmpl: RecurringTemplate = {
       id: 't', description: 'end-month', amount: -100, channel: 'bank',
-      day: 31, startDate: '2026-01-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 31, monthEndPolicy: 'clamp' }, startDate: '2026-01-01',
     };
     const virtuals = generateVirtualOccurrences([tmpl], '2026-01-01', '2026-03-31');
     const dates = virtuals.map((v) => v.date);
@@ -142,7 +142,7 @@ describe('forecast pipeline', () => {
   it('persisted override replaces virtual with same occurrenceKey', () => {
     const tmpl: RecurringTemplate = {
       id: 'rent', description: 'rent', amount: -3000, channel: 'bank',
-      day: 1, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
     };
     const persisted: LedgerEntry[] = [{
       id: 'p1', description: 'rent (raised)', amount: -3200, channel: 'bank',
@@ -292,5 +292,72 @@ describe('forecast pipeline', () => {
       date: '2026-06-01', status: 'pending', recurringId: 'r',
     };
     expect(() => mergeWithOverrides([], [bad], acct(), [])).toThrow(/recurringId/);
+  });
+
+  it('weekly cadence: emits every Friday occurrence', () => {
+    // 2026-06-05 is Friday; 5 Fridays through Jul 3.
+    const tmpl: RecurringTemplate = {
+      id: 'rw', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 },
+      startDate: '2026-06-05', endDate: '2026-07-03',
+    };
+    const out = generateVirtualOccurrences([tmpl], '2026-06-01', '2026-07-31');
+    expect(out.map((e) => e.date)).toEqual([
+      '2026-06-05', '2026-06-12', '2026-06-19', '2026-06-26', '2026-07-03',
+    ]);
+    expect(out[0]!.occurrenceKey).toBe(occurrenceKeyOf('rw', '2026-06-05'));
+  });
+
+  it('weekly cadence: skips suppress matching virtual occurrences', () => {
+    const tmpl: RecurringTemplate = {
+      id: 'rw', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 },
+      startDate: '2026-06-05', endDate: '2026-07-03',
+      skips: ['2026-06-19'],
+    };
+    const out = generateVirtualOccurrences([tmpl], '2026-06-01', '2026-07-31');
+    expect(out.map((e) => e.date)).toEqual([
+      '2026-06-05', '2026-06-12', '2026-06-26', '2026-07-03',
+    ]);
+  });
+
+  it('mergeWithOverrides: skipped persisted entry is filtered out', () => {
+    const tmpl: RecurringTemplate = {
+      id: 'rw', description: 'therapy', amount: -205, channel: 'bank',
+      cadence: { kind: 'weekly', dayOfWeek: 5 },
+      startDate: '2026-06-05', endDate: '2026-07-31',
+      skips: ['2026-06-19'],
+    };
+    // A previously-persisted override for the now-skipped Friday must NOT
+    // appear in the merged ledger.
+    const persisted: LedgerEntry[] = [{
+      id: 'p1', description: 'therapy', amount: -205, channel: 'bank',
+      date: '2026-06-19', status: 'pending',
+      recurringId: 'rw', occurrenceKey: occurrenceKeyOf('rw', '2026-06-19'),
+    }];
+    const virtuals = generateVirtualOccurrences([tmpl], '2026-06-01', '2026-07-31');
+    const r = mergeWithOverrides(virtuals, persisted, acct(10_000, '2026-06-01'), [], [tmpl]);
+    expect(r.find((e) => e.date === '2026-06-19')).toBeUndefined();
+    // Other Fridays still present
+    expect(r.find((e) => e.date === '2026-06-26')).toBeDefined();
+  });
+
+  it('weekly cadence: cc-bill routes per-occurrence into matching bill', () => {
+    // 4 Fridays in June 2026 routed through cal (billingDay=2) → all land
+    // on the first cc-bill strictly after each charge, which is Jul 2.
+    const card: CreditCard = { ...visa, id: 'cal', name: 'Cal' };
+    const tmpl: RecurringTemplate = {
+      id: 'rw', description: 'therapy', amount: -205, channel: 'cc:cal',
+      cadence: { kind: 'weekly', dayOfWeek: 5 },
+      startDate: '2026-06-05', endDate: '2026-06-26',
+    };
+    const r = forecast({
+      templates: [tmpl], persisted: [], account: acct(20_000, '2026-05-16'),
+      cards: [card], settings: baseSettings, today: TODAY,
+    });
+    const julBill = r.days.find((d) => d.date === '2026-07-02');
+    expect(julBill).toBeDefined();
+    const ccBill = julBill!.charges.find((c) => c.source.kind === 'cc-bill');
+    expect(ccBill?.amount).toBe(-820); // 4 × -205
   });
 });

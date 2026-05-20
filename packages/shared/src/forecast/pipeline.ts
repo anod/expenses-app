@@ -6,6 +6,7 @@ import {
   firstBillingDayStrictlyAfter,
   formatIso,
   parseIso,
+  weekdayOfIso,
 } from './dates.js';
 import {
   type Account,
@@ -35,6 +36,12 @@ const assertBillingDay = (day: number, ctx: string): void => {
   }
 };
 
+/** First date `>= from` whose weekday is `dayOfWeek` (0=Sun..6=Sat). */
+const firstWeekdayOnOrAfter = (from: IsoDate, dayOfWeek: number): IsoDate => {
+  const diff = (dayOfWeek - weekdayOfIso(from) + 7) % 7;
+  return diff === 0 ? from : addDays(from, diff);
+};
+
 /** Generate all virtual recurring occurrences within [startDate, endDate]. */
 export const generateVirtualOccurrences = (
   templates: ReadonlyArray<RecurringTemplate>,
@@ -43,37 +50,57 @@ export const generateVirtualOccurrences = (
 ): LedgerEntry[] => {
   const out: LedgerEntry[] = [];
   for (const t of templates) {
-    assertBillingDay(t.day, `recurring ${t.id}`);
     const tplEnd = t.endDate ?? endDate;
     const effectiveEnd = compareIso(tplEnd, endDate) < 0 ? tplEnd : endDate;
     if (compareIso(t.startDate, effectiveEnd) > 0) continue;
 
-    // Walk month by month from t.startDate's month forward.
-    const { y, m } = parseIso(t.startDate);
-    let cur = formatIso(y, m, clampDayInMonth(y, m, t.day));
-    // Step backwards to the correct first occurrence if cur < startDate of template.
-    if (compareIso(cur, t.startDate) < 0) cur = nextOccurrence(cur, t.day);
+    const skipSet = new Set(t.skips ?? []);
+    const emit = (date: IsoDate): void => {
+      if (skipSet.has(date)) return;
+      if (compareIso(date, startDate) < 0) return;
+      out.push({
+        id: `virtual:${t.id}:${date}`,
+        description: t.description,
+        amount: t.amount,
+        channel: t.channel,
+        date,
+        status: 'pending',
+        recurringId: t.id,
+        occurrenceKey: occurrenceKeyOf(t.id, date),
+      });
+    };
 
-    while (compareIso(cur, effectiveEnd) <= 0) {
-      if (compareIso(cur, startDate) >= 0) {
-        out.push({
-          id: `virtual:${t.id}:${cur}`,
-          description: t.description,
-          amount: t.amount,
-          channel: t.channel,
-          date: cur,
-          status: 'pending',
-          recurringId: t.id,
-          occurrenceKey: occurrenceKeyOf(t.id, cur),
-        });
+    if (t.cadence.kind === 'monthly') {
+      assertBillingDay(t.cadence.day, `recurring ${t.id}`);
+      const day = t.cadence.day;
+      const { y, m } = parseIso(t.startDate);
+      let cur = formatIso(y, m, clampDayInMonth(y, m, day));
+      if (compareIso(cur, t.startDate) < 0) cur = nextMonthlyOccurrence(cur, day);
+      while (compareIso(cur, effectiveEnd) <= 0) {
+        emit(cur);
+        cur = nextMonthlyOccurrence(cur, day);
       }
-      cur = nextOccurrence(cur, t.day);
+    } else {
+      // Weekly: enumerate every 7 days from the first matching weekday.
+      const dow = t.cadence.dayOfWeek;
+      if (!Number.isInteger(dow) || dow < 0 || dow > 6) {
+        throw new Error(`recurring ${t.id}: invalid dayOfWeek ${dow}`);
+      }
+      let cur = firstWeekdayOnOrAfter(t.startDate, dow);
+      // Safety bound: weekly horizon is bounded by effectiveEnd, but cap
+      // iterations defensively in case of malformed input.
+      let guard = 0;
+      while (compareIso(cur, effectiveEnd) <= 0) {
+        emit(cur);
+        cur = addDays(cur, 7);
+        if (++guard > 20_000) throw new Error(`recurring ${t.id}: weekly expansion runaway`);
+      }
     }
   }
   return out;
 };
 
-const nextOccurrence = (current: IsoDate, day: number): IsoDate => {
+const nextMonthlyOccurrence = (current: IsoDate, day: number): IsoDate => {
   const next = addMonths(current, 1);
   const { y, m } = parseIso(next);
   return formatIso(y, m, clampDayInMonth(y, m, day));
@@ -103,6 +130,7 @@ export const mergeWithOverrides = (
   persisted: ReadonlyArray<LedgerEntry>,
   account: Account,
   cards: ReadonlyArray<CreditCard>,
+  templates: ReadonlyArray<RecurringTemplate> = [],
 ): LedgerEntry[] => {
   // Invariant guard: recurringId IS NULL ⇔ occurrenceKey IS NULL
   for (const e of persisted) {
@@ -113,9 +141,21 @@ export const mergeWithOverrides = (
     }
   }
 
+  // Drop any persisted entry whose occurrence has been skipped by the
+  // template. Virtuals are already filtered by generateVirtualOccurrences.
+  const skippedKeys = new Set<string>();
+  for (const t of templates) {
+    if (!t.skips) continue;
+    for (const date of t.skips) {
+      skippedKeys.add(occurrenceKeyOf(t.id, date));
+    }
+  }
+
   const overrideKeys = new Set<string>();
   for (const e of persisted) {
-    if (e.occurrenceKey != null) overrideKeys.add(e.occurrenceKey);
+    if (e.occurrenceKey != null && !skippedKeys.has(e.occurrenceKey)) {
+      overrideKeys.add(e.occurrenceKey);
+    }
   }
 
   const cardById = new Map<string, CreditCard>();
@@ -141,6 +181,7 @@ export const mergeWithOverrides = (
     if (keep(v)) merged.push(v);
   }
   for (const p of persisted) {
+    if (p.occurrenceKey && skippedKeys.has(p.occurrenceKey)) continue;
     if (keep(p)) merged.push(p);
   }
   return merged;
@@ -209,7 +250,12 @@ export const project = (
       pushBank(e.date, {
         description: e.description,
         amount: e.amount,
-        source: { kind: 'ledger', entryId: e.id },
+        source: {
+          kind: 'ledger',
+          entryId: e.id,
+          ...(e.recurringId ? { recurringId: e.recurringId } : {}),
+          ...(e.occurrenceKey ? { occurrenceKey: e.occurrenceKey } : {}),
+        },
       });
     } else {
       const cardId = e.channel.slice(3);
@@ -221,7 +267,12 @@ export const project = (
         pushBank(e.date, {
           description: e.description,
           amount: e.amount,
-          source: { kind: 'ledger', entryId: e.id },
+          source: {
+            kind: 'ledger',
+            entryId: e.id,
+            ...(e.recurringId ? { recurringId: e.recurringId } : {}),
+            ...(e.occurrenceKey ? { occurrenceKey: e.occurrenceKey } : {}),
+          },
         });
         continue;
       }
@@ -411,6 +462,6 @@ export const forecast = (input: {
     : input.today;
   const endDate = addMonths(visibleStart, input.settings.horizonMonths);
   const virtuals = generateVirtualOccurrences(input.templates, input.account.asOf, endDate);
-  const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards);
+  const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards, input.templates);
   return project(effective, input.account, input.cards, input.settings, input.today);
 };

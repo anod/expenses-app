@@ -14,6 +14,21 @@ export interface MutationResult<T> {
   forecast: ForecastResult;
 }
 
+/** Wire shape accepted by the API for recurring templates. The server
+ * currently only persists monthly cadence; weekly support is pending a
+ * follow-up DB migration. Keep this flat to match the zod schema in
+ * apps/api/src/forecast/schemas.ts. */
+export interface RecurringWriteBody {
+  id?: string;
+  description: string;
+  amount: number;
+  channel: RecurringTemplate['channel'];
+  day: number;
+  monthEndPolicy: 'clamp';
+  startDate: string;
+  endDate?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ForecastApi {
   private readonly http = inject(HttpClient);
@@ -51,10 +66,10 @@ export class ForecastApi {
   }
 
   listRecurring() { return this.http.get<RecurringTemplate[]>('/api/recurring'); }
-  createRecurring(body: Omit<RecurringTemplate, 'id'> & { id?: string }) {
+  createRecurring(body: RecurringWriteBody) {
     return this.http.post<MutationResult<RecurringTemplate>>('/api/recurring', body);
   }
-  updateRecurring(id: string, body: Omit<RecurringTemplate, 'id'>) {
+  updateRecurring(id: string, body: Omit<RecurringWriteBody, 'id'>) {
     return this.http.patch<MutationResult<RecurringTemplate>>(`/api/recurring/${id}`, body);
   }
   deleteRecurring(id: string) {

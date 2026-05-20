@@ -627,3 +627,16 @@
     font: var(--md-sys-typescale-title-medium);
   }
 }
+
+/* Payment progress badge on timeline rows (X of Y for fixed-term templates). */
+.payment-progress {
+  display: inline-block;
+  margin-inline-start: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-small);
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}

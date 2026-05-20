@@ -135,7 +135,7 @@
                   {{ channelLabel(t.channel) }}
                 </span>
               </td>
-              <td>{{ t.day }}</td>
+              <td>{{ dayOfMonth(t) ?? '—' }}</td>
               <td class="amount" [class.is-negative]="t.amount < 0">{{ t.amount }}</td>
               <td>{{ t.startDate }}</td>
               <td>
@@ -183,7 +183,7 @@
               <div class="template-row-meta">
                 <span>{{ channelLabel(t.channel) }}</span>
                 <span class="dot">·</span>
-                <span>day {{ t.day }}</span>
+                <span>day {{ dayOfMonth(t) ?? '—' }}</span>
                 <span class="dot">·</span>
                 <span>{{ t.startDate }} → {{ t.endDate ?? '∞' }}</span>
                 @if (paymentProgressFor(t); as p) {

@@ -385,7 +385,7 @@ describe('importFromSnapshot — recurring vs variable partitioning', () => {
     const r = repo.listRecurring();
     expect(r).toHaveLength(1);
     expect(r[0]!.amount).toBe(-5500);
-    expect(r[0]!.day).toBe(10);
+    expect(r[0]!.cadence).toEqual({ kind: 'monthly', day: 10, monthEndPolicy: 'clamp' });
     expect(repo.listLedger()).toEqual([]);
   });
 
@@ -618,7 +618,7 @@ describe('importFromSnapshot — idempotency & cleanup', () => {
     });
     repo.upsertRecurring({
       id: 'r-legacy', description: 'old', amount: -1, channel: 'bank',
-      day: 1, startDate: '2026-01-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' }, startDate: '2026-01-01',
     });
     const cols = months('2026-05-01');
     importFromSnapshot(repo, mkSnap({ cols, balance: [10_000], rows: [] }));

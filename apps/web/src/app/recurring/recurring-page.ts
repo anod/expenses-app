@@ -61,8 +61,11 @@ export class RecurringPageComponent {
         return a.description.localeCompare(b.description);
       case 'channel':
         return this.channelLabel(a.channel).localeCompare(this.channelLabel(b.channel));
-      case 'day':
-        return a.day - b.day;
+      case 'day': {
+        const ad = a.cadence.kind === 'monthly' ? a.cadence.day : 0;
+        const bd = b.cadence.kind === 'monthly' ? b.cadence.day : 0;
+        return ad - bd;
+      }
       case 'amount':
         return a.amount - b.amount;
       case 'startDate':
@@ -115,7 +118,7 @@ export class RecurringPageComponent {
       description: t.description,
       amount: t.amount,
       channel: t.channel,
-      day: t.day,
+      day: t.cadence.kind === 'monthly' ? t.cadence.day : 1,
       startDate: t.startDate,
       endDate: t.endDate ?? '',
     });
@@ -198,6 +201,11 @@ export class RecurringPageComponent {
     return descriptionLabel(desc);
   }
 
+  /** Day-of-month for monthly templates; null for non-monthly. */
+  protected dayOfMonth(t: RecurringTemplate): number | null {
+    return t.cadence.kind === 'monthly' ? t.cadence.day : null;
+  }
+
   /**
    * Progress on a fixed-term schedule, computed off `today` so the UI
    * label refreshes naturally when the component re-renders. Returns
@@ -205,7 +213,7 @@ export class RecurringPageComponent {
    */
   protected paymentProgressFor(t: RecurringTemplate): PaymentProgress | null {
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
-    return paymentProgress(t.startDate, t.endDate, t.day, today);
+    return paymentProgress(t, today);
   }
 
   protected isEditing(id: string): boolean {

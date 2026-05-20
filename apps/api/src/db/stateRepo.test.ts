@@ -44,7 +44,7 @@ describe('StateRepo', () => {
   it('ledger: override (both recurringId and occurrenceKey)', () => {
     repo.upsertRecurring({
       id: 'r1', description: 'rent', amount: -3000, channel: 'bank',
-      day: 1, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
     });
     repo.upsertLedger({
       id: 'e1', description: 'rent raised', amount: -3200, channel: 'bank',
@@ -68,7 +68,7 @@ describe('StateRepo', () => {
   it('recurring delete cascades to override rows (regression: ON DELETE SET NULL violated CHECK)', () => {
     repo.upsertRecurring({
       id: 'rent', description: 'rent', amount: -2000, channel: 'bank',
-      day: 15, startDate: '2026-05-01', monthEndPolicy: 'clamp',
+      cadence: { kind: 'monthly', day: 15, monthEndPolicy: 'clamp' }, startDate: '2026-05-01',
     });
     repo.upsertLedger({
       id: 'override-1', description: 'rent', amount: -2000, channel: 'bank',

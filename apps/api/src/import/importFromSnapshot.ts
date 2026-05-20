@@ -335,9 +335,8 @@ export function importFromSnapshot(
       description: describe(row),
       amount,
       channel: channelForRow(row),
-      day: row.day,
+      cadence: { kind: 'monthly', day: row.day, monthEndPolicy: 'clamp' },
       startDate: clampedDate(firstMonthKey, row.day),
-      monthEndPolicy: 'clamp',
     });
   }
 

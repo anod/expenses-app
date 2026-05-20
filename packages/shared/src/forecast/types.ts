@@ -48,18 +48,42 @@ export interface CreditCard {
 
 export type MonthEndPolicy = 'clamp';
 
+/** Day-of-week, 0=Sunday..6=Saturday (matches `Date#getUTCDay()`). */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/** Monthly cadence: a single occurrence per calendar month on `day`. */
+export interface MonthlyCadence {
+  kind: 'monthly';
+  /** Day of month, 1..31 (clamped via `monthEndPolicy` when too large). */
+  day: number;
+  monthEndPolicy: MonthEndPolicy;
+}
+
+/** Weekly cadence: an occurrence every `dayOfWeek` (0=Sun..6=Sat). */
+export interface WeeklyCadence {
+  kind: 'weekly';
+  dayOfWeek: Weekday;
+}
+
+export type Cadence = MonthlyCadence | WeeklyCadence;
+
 export interface RecurringTemplate {
   id: string;
   description: string;
   amount: Amount;
   channel: Channel;
-  /** Day of month, 1..31. */
-  day: number;
+  cadence: Cadence;
   /** Inclusive ISO date when the cadence starts. */
   startDate: IsoDate;
   /** Inclusive ISO date when the cadence ends. Omit for open-ended. */
   endDate?: IsoDate;
-  monthEndPolicy: MonthEndPolicy;
+  /**
+   * ISO dates the user has marked as skipped — neither virtual nor
+   * persisted ledger rows with `occurrenceKey === occurrenceKeyOf(id,date)`
+   * appear in any forecast or report. Sorted ascending, deduped.
+   * Only meaningful for `weekly` cadence in v1; monthly stays a no-op.
+   */
+  skips?: IsoDate[];
 }
 
 export interface OccurrenceKey {
@@ -95,7 +119,14 @@ export interface Settings {
 }
 
 export type ChargeSource =
-  | { kind: 'ledger'; entryId: string }
+  | {
+      kind: 'ledger';
+      entryId: string;
+      /** Set IFF the underlying ledger entry is from a recurring template. */
+      recurringId?: string;
+      /** Set IFF `recurringId` is set; format `${recurringId}@${date}`. */
+      occurrenceKey?: string;
+    }
   | { kind: 'cc-bill'; cardId: string; billedEntries: LedgerEntry[] };
 
 export interface ProjectionCharge {
