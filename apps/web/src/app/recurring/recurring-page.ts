@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Channel, CreditCard, LedgerEntry, RecurringTemplate } from '@expenses/shared';
@@ -32,8 +33,11 @@ const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as cons
 export class RecurringPageComponent {
   private readonly api = inject(ForecastApi);
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly editorCard = viewChild<ElementRef<HTMLElement>>('editorCard');
   private readonly descriptionInput = viewChild<ElementRef<HTMLInputElement>>('descriptionInput');
+  private suppressWeeklyStartSync = false;
+  private lastCadenceKind: CadenceKind = 'monthly';
 
   protected readonly templates = signal<RecurringTemplate[]>([]);
   protected readonly cards = signal<CreditCard[]>([]);
@@ -138,7 +142,35 @@ export class RecurringPageComponent {
     status: ['pending' as 'pending' | 'cleared', [Validators.required]],
   });
 
-  constructor() { void this.load(); }
+  constructor() {
+    this.form.controls.cadenceKind.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((kind) => {
+        if (this.suppressWeeklyStartSync) {
+          this.lastCadenceKind = kind;
+          return;
+        }
+        const previous = this.lastCadenceKind;
+        this.lastCadenceKind = kind;
+        if (kind === 'weekly' && previous !== 'weekly') {
+          this.syncWeeklyStartDate(todayIsoLocal());
+        }
+      });
+
+    this.form.controls.dayOfWeek.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((dayOfWeek) => {
+        if (this.suppressWeeklyStartSync || this.form.controls.cadenceKind.value !== 'weekly') return;
+        const baseline = this.lastCadenceKind === 'weekly'
+          ? this.form.controls.startDate.value || todayIsoLocal()
+          : todayIsoLocal();
+        this.form.controls.startDate.setValue(firstWeekdayOnOrAfter(baseline, dayOfWeek), {
+          emitEvent: false,
+        });
+      });
+
+    void this.load();
+  }
 
   protected async load(): Promise<void> {
     this.loading.set(true);
@@ -160,7 +192,7 @@ export class RecurringPageComponent {
   }
 
   protected startEdit(t: RecurringTemplate): void {
-    this.form.reset({
+    this.withSuppressedWeeklyStartSync(() => this.form.reset({
       description: t.description,
       amount: t.amount,
       channel: t.channel,
@@ -171,14 +203,15 @@ export class RecurringPageComponent {
       endDate: t.endDate ?? '',
       paymentCount:
         t.cadence.kind === 'monthly' && t.endDate ? scheduledPaymentCount(t) : null,
-    });
+    }));
+    this.lastCadenceKind = t.cadence.kind;
     this.edit.set({ kind: 'edit', id: t.id });
     this.focusEditor();
   }
 
   protected startNew(): void {
-    const today = new Date().toISOString().slice(0, 10);
-    this.form.reset({
+    const today = todayIsoLocal();
+    this.withSuppressedWeeklyStartSync(() => this.form.reset({
       description: '',
       amount: 0,
       channel: 'bank',
@@ -188,7 +221,8 @@ export class RecurringPageComponent {
       startDate: today,
       endDate: '',
       paymentCount: null,
-    });
+    }));
+    this.lastCadenceKind = 'monthly';
     this.edit.set({ kind: 'new' });
     this.focusEditor();
   }
@@ -262,6 +296,20 @@ export class RecurringPageComponent {
       this.editorCard()?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       this.descriptionInput()?.nativeElement.focus();
     });
+  }
+
+  private withSuppressedWeeklyStartSync(fn: () => void): void {
+    this.suppressWeeklyStartSync = true;
+    try {
+      fn();
+    } finally {
+      this.suppressWeeklyStartSync = false;
+    }
+  }
+
+  private syncWeeklyStartDate(from: string): void {
+    const next = firstWeekdayOnOrAfter(from, this.form.controls.dayOfWeek.value);
+    this.form.controls.startDate.setValue(next, { emitEvent: false });
   }
 
   protected channelLabel(channel: Channel): string {
@@ -374,4 +422,19 @@ export class RecurringPageComponent {
       this.error.set(err instanceof Error ? err.message : String(err));
     }
   }
+}
+
+function todayIsoLocal(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function firstWeekdayOnOrAfter(from: string, dayOfWeek: number): string {
+  const date = new Date(`${from}T00:00:00`);
+  const diff = (dayOfWeek - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + diff);
+  return date.toLocaleDateString('en-CA');
 }
