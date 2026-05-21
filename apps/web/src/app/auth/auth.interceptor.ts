@@ -14,6 +14,7 @@ const GRAPH_PASSTHROUGH_PREFIXES: ReadonlyArray<string> = [
   '/api/workbook/',
   '/api/import/',
   '/api/sync/',
+  '/api/esop',
 ];
 
 function needsGraphToken(url: string): boolean {
