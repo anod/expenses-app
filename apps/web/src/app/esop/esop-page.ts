@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -21,6 +22,7 @@ export class EsopPageComponent {
   protected readonly marketLoading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly marketMessage = signal<string | null>(null);
+  private readonly assumptionChangeTick = signal(0);
 
   protected readonly assumptionsForm = this.fb.nonNullable.group({
     usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
@@ -35,8 +37,24 @@ export class EsopPageComponent {
   });
 
   protected readonly totals = computed(() => this.result()?.totals ?? null);
+  protected readonly hasAssumptionChanges = computed(() => {
+    this.assumptionChangeTick();
+    const assumptions = this.result()?.assumptions;
+    if (!assumptions) return false;
+    const raw = this.assumptionsForm.getRawValue();
+    return (
+      raw.usdNisRate !== assumptions.usdNisRate ||
+      raw.currentPriceUsd !== assumptions.currentPriceUsd ||
+      raw.lockDownDays !== assumptions.lockDownDays ||
+      raw.incomeTaxRate !== assumptions.incomeTaxRate ||
+      raw.asOf !== assumptions.asOf
+    );
+  });
 
   constructor() {
+    this.assumptionsForm.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.assumptionChangeTick.update((value) => value + 1));
     void this.load();
   }
 
@@ -62,7 +80,7 @@ export class EsopPageComponent {
   }
 
   protected async applyOverrides(): Promise<void> {
-    if (this.assumptionsForm.invalid) return;
+    if (this.assumptionsForm.invalid || !this.hasAssumptionChanges()) return;
     await this.load(true);
   }
 
@@ -94,7 +112,7 @@ export class EsopPageComponent {
         asOf: update.esop.assumptions.asOf,
       });
       this.marketMessage.set(
-        `Updated workbook market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
+        `Updated ESOP market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
       );
     } catch (err) {
       this.error.set(errorMessage(err));

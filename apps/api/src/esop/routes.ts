@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z, ZodError } from 'zod';
 import type { GraphEsopReader, EsopOverrides } from './graphEsopReader.js';
+import { calculateDemoEsop } from './demoEsop.js';
 import { fetchYahooQuote } from './marketData.js';
 
 const Query = z.object({
@@ -53,10 +54,28 @@ export const buildEsopRoutes = (
 
   router.post('/esop/market/update', async (req, res, next) => {
     try {
+      const body = MarketUpdateBody.parse(req.body ?? {});
+      const overrides = marketUpdateOverrides(body);
+
       if (isDemo()) {
-        res.status(409).json({
-          error: 'DEMO_MODE_ACTIVE',
-          message: 'ESOP workbook updates are disabled in demo mode.',
+        const [stock, fx] = await Promise.all([
+          fetchYahooQuote(body.stockSymbol),
+          fetchYahooQuote(body.fxSymbol),
+        ]);
+        const esop = calculateDemoEsop({
+          ...overrides,
+          usdNisRate: fx.price,
+          currentPriceUsd: stock.price,
+        });
+        res.json({
+          stock,
+          fx,
+          applied: {
+            usdNisRate: esop.assumptions.usdNisRate,
+            currentPriceUsd: esop.assumptions.currentPriceUsd,
+          },
+          esop,
+          fetchedAt: new Date().toISOString(),
         });
         return;
       }
@@ -70,15 +89,10 @@ export const buildEsopRoutes = (
       const graphToken = graphTokenFromHeader(req, res);
       if (!graphToken) return;
 
-      const body = MarketUpdateBody.parse(req.body ?? {});
       const [stock, fx] = await Promise.all([
         fetchYahooQuote(body.stockSymbol),
         fetchYahooQuote(body.fxSymbol),
       ]);
-      const overrides: Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> = {};
-      if (body.lockDownDays !== undefined) overrides.lockDownDays = body.lockDownDays;
-      if (body.incomeTaxRate !== undefined) overrides.incomeTaxRate = body.incomeTaxRate;
-      if (body.asOf !== undefined) overrides.asOf = body.asOf;
       const esop = await reader.updateMarketValues(
         graphToken,
         { usdNisRate: fx.price, currentPriceUsd: stock.price },
@@ -105,11 +119,9 @@ export const buildEsopRoutes = (
 
   router.get('/esop', async (req, res, next) => {
     try {
+      const overrides = Query.parse(req.query) as EsopOverrides;
       if (isDemo()) {
-        res.status(409).json({
-          error: 'DEMO_MODE_ACTIVE',
-          message: 'ESOP workbook view is disabled in demo mode.',
-        });
+        res.json(calculateDemoEsop(overrides));
         return;
       }
       if (!reader) {
@@ -121,7 +133,6 @@ export const buildEsopRoutes = (
       }
       const graphToken = graphTokenFromHeader(req, res);
       if (!graphToken) return;
-      const overrides = Query.parse(req.query) as EsopOverrides;
       res.json(await reader.read(graphToken, overrides));
     } catch (err) {
       if (err instanceof ZodError) {
@@ -135,9 +146,14 @@ export const buildEsopRoutes = (
   router.get('/esop/status', async (req, res, next) => {
     try {
       if (isDemo()) {
-        res.status(409).json({
-          error: 'DEMO_MODE_ACTIVE',
-          message: 'ESOP workbook status is unavailable in demo mode.',
+        res.json({
+          source: 'demo',
+          workbook: {
+            name: 'Demo ESOP workbook',
+            worksheet: 'ESOP',
+            lastModifiedDateTime: null,
+          },
+          fetchedAt: new Date().toISOString(),
         });
         return;
       }
@@ -170,4 +186,14 @@ function graphTokenFromHeader(req: Request, res: Response): string | null {
     return null;
   }
   return header.trim();
+}
+
+function marketUpdateOverrides(
+  body: z.infer<typeof MarketUpdateBody>,
+): Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> {
+  const overrides: Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> = {};
+  if (body.lockDownDays !== undefined) overrides.lockDownDays = body.lockDownDays;
+  if (body.incomeTaxRate !== undefined) overrides.incomeTaxRate = body.incomeTaxRate;
+  if (body.asOf !== undefined) overrides.asOf = body.asOf;
+  return overrides;
 }

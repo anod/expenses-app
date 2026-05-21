@@ -97,14 +97,17 @@
             <input type="date" formControlName="asOf" />
           </label>
         </div>
+        <div class="actions">
+          <button
+            type="submit"
+            class="m3-btn m3-btn--filled"
+            [disabled]="loading() || assumptionsForm.invalid || !hasAssumptionChanges()"
+          >
+            <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
+            Recalculate
+          </button>
+        </div>
       </details>
-
-      <div class="actions">
-        <button type="submit" class="m3-btn m3-btn--filled" [disabled]="loading() || assumptionsForm.invalid">
-          <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
-          Recalculate
-        </button>
-      </div>
     </form>
 
     <div class="summary-grid">
