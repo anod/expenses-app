@@ -17,6 +17,7 @@ interface ChartModel {
   width: number;
   height: number;
   pad: { top: number; right: number; bottom: number; left: number };
+  anchorBands: { x: number; width: number }[];
   lanes: Lane[];
   xLabels: { x: number; label: string }[];
 }
@@ -33,6 +34,15 @@ interface ChartModel {
       role="img"
       aria-label="Forecast chart with anchor balance, expenses, and debt over time"
     >
+      @for (band of chart().anchorBands; track $index) {
+        <rect
+          [attr.x]="band.x"
+          [attr.y]="0"
+          [attr.width]="band.width"
+          [attr.height]="chart().height - chart().pad.bottom"
+          class="anchor-band"
+        />
+      }
       @for (lane of chart().lanes; track lane.key) {
         <g>
           <line
@@ -83,6 +93,10 @@ interface ChartModel {
     .lane-rule {
       stroke: var(--md-sys-color-outline-variant);
       stroke-width: 1;
+    }
+    .anchor-band {
+      fill: var(--md-sys-color-primary);
+      opacity: 0.06;
     }
     .lane-label,
     .lane-value,
@@ -146,7 +160,7 @@ export class BalanceChartComponent {
     const laneHeight = (innerH - laneGap * (laneCount - 1)) / laneCount;
 
     if (days.length === 0) {
-      return { width, height, pad, lanes: [], xLabels: [] };
+      return { width, height, pad, anchorBands: [], lanes: [], xLabels: [] };
     }
 
     const n = days.length;
@@ -185,6 +199,7 @@ export class BalanceChartComponent {
     const anchorLaneTop = pad.top;
     const anchorSeries = makePath(anchorValues, anchorLaneTop, anchorIndices);
     const lastAnchorIdx = anchorIndices[anchorIndices.length - 1] ?? 0;
+    const anchorBands = anchorIndices.map((idx) => ({ x: xOf(idx) - 10, width: 20 }));
 
     const templateById = new Map(this.templates().map((t) => [t.id, t]));
     let spendInPeriod = 0;
@@ -193,14 +208,22 @@ export class BalanceChartComponent {
     const debtValues = new Array<number>(days.length).fill(0);
     days.forEach((day, i) => {
       for (const charge of day.charges) {
-        if (charge.amount < 0 && charge.source.kind !== 'cc-bill') {
-          const outflow = Math.abs(charge.amount);
-          spendInPeriod += outflow;
-          const recurringId =
-            charge.source.kind === 'ledger' ? charge.source.recurringId : undefined;
-          const template = recurringId ? templateById.get(recurringId) : undefined;
-          if (template && template.channel !== 'bank' && template.endDate) {
-            splitCcInPeriod += outflow;
+        if (charge.amount < 0) {
+          spendInPeriod += Math.abs(charge.amount);
+          if (charge.source.kind === 'cc-bill') {
+            for (const entry of charge.source.billedEntries) {
+              const template = entry.recurringId ? templateById.get(entry.recurringId) : undefined;
+              if (template && template.channel !== 'bank' && template.endDate) {
+                splitCcInPeriod += Math.abs(entry.amount);
+              }
+            }
+          } else {
+            const template = charge.source.recurringId
+              ? templateById.get(charge.source.recurringId)
+              : undefined;
+            if (template && template.channel !== 'bank' && template.endDate) {
+              splitCcInPeriod += Math.abs(charge.amount);
+            }
           }
         }
       }
@@ -263,7 +286,7 @@ export class BalanceChartComponent {
       xLabels.push({ x: xOf(i), label: this.monthLabel(d.date) });
     });
 
-    return { width, height, pad, lanes, xLabels };
+    return { width, height, pad, anchorBands, lanes, xLabels };
   });
 
   protected formatShort(v: number): string {
