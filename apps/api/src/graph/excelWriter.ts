@@ -6,7 +6,7 @@ import type {
   RecurringTemplate,
   Settings,
 } from '@expenses/shared';
-import { parseDescription } from '@expenses/shared';
+import { parseDescription, generateVirtualOccurrences as expandRecurring } from '@expenses/shared';
 import { GraphClient, GraphError } from './graphClient.js';
 import { WorkbookResolver, type DriveItemRef } from './workbookResolver.js';
 import { encodeWorksheetName } from './graphReader.js';
@@ -146,25 +146,26 @@ export const renderAnchorSheet = (state: SyncState): SheetGrid => {
     r.values[colIdx] = (r.values[colIdx] ?? 0) + v;
   };
 
-  // Recurring → emit per-anchor-period value (apply once per period the cadence
-  // day falls into). Day is the row's day.
-  for (const t of state.recurring) {
-    // Only exact monthly day-of-month templates are round-trippable in the
-    // current anchor sheet schema. Skip weekly and monthly-prediction rows
-    // here — live forecast totals remain correct even though they don't
-    // appear in this snapshot export.
-    if (t.cadence.kind !== 'monthly') continue;
+  // Recurring → expand exportable templates to concrete occurrences and bucket
+  // them back into the anchor periods they belong to.
+  const exportableTemplates = state.recurring.filter((t) => t.cadence.kind !== 'weekly');
+  const recurringById = new Map(exportableTemplates.map((t) => [t.id, t]));
+  const recurringOccurrences = expandRecurring(
+    exportableTemplates,
+    anchors[0]!,
+    anchors[anchors.length - 1]!,
+  );
+  for (const e of recurringOccurrences) {
+    if (!e.recurringId) continue;
+    const t = recurringById.get(e.recurringId);
+    if (!t) continue;
     const { source, label } = parseDescription(t.description);
-    const row = ensureRow(source, label, t.cadence.day);
+    const row = ensureRow(source, label, t.cadence.kind === 'monthly' ? t.cadence.day : null);
     for (let i = 0; i < anchors.length - 1; i++) {
-      const periodEnd = anchors[i + 1]!;
-      const periodStart = anchors[i]!;
-      // Place value in column whose period (periodStart, periodEnd] would
-      // contain a day-of-month occurrence of t.day.
-      // Apply once per period unless template start/end excludes it.
-      if (t.startDate && periodEnd < t.startDate) continue;
-      if (t.endDate && periodStart >= t.endDate) continue;
-      addValue(row, i, t.amount);
+      if (inPeriod(e.date, anchors[i]!, anchors[i + 1]!)) {
+        addValue(row, i, e.amount);
+        break;
+      }
     }
   }
 

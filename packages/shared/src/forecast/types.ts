@@ -91,7 +91,7 @@ export interface RecurringTemplate {
    * ISO dates the user has marked as skipped — neither virtual nor
    * persisted ledger rows with `occurrenceKey === occurrenceKeyOf(id,date)`
    * appear in any forecast or report. Sorted ascending, deduped.
-   * Meaningful for `weekly` and `monthly_prediction` virtual occurrences.
+   * Meaningful for any generated cadence whose occurrences should be omitted.
    */
   skips?: IsoDate[];
 }

@@ -400,26 +400,31 @@ describe('importFromSnapshot — recurring vs variable partitioning', () => {
     expect(repo.listLedger()).toHaveLength(3);
   });
 
-  it('row missing a month (gap) → variable, not recurring', () => {
+  it('row missing months but otherwise stable → recurring monthly with skips', () => {
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01');
+    const repo = newRepo();
+    importFromSnapshot(repo, mkSnap({
+      cols, balance: [10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, { source: '', day: 10, label: 'on-off', values: [-100, null, -100, null, -100] })],
+    }));
+    const recurring = repo.listRecurring();
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]!.cadence).toEqual({ kind: 'monthly', day: 10, monthEndPolicy: 'clamp' });
+    expect(recurring[0]!.skips).toEqual(['2026-06-10', '2026-08-10']);
+    expect(repo.listLedger()).toEqual([]);
+  });
+
+  it('row without `day` → monthly prediction when stable', () => {
     const cols = months('2026-05-01', '2026-06-01', '2026-07-01');
     const repo = newRepo();
     importFromSnapshot(repo, mkSnap({
       cols, balance: [10_000, 10_000, 10_000],
-      rows: [mkRow(cols, { source: '', day: 10, label: 'on-off', values: [-100, null, -100] })],
+      rows: [mkRow(cols, { source: '', day: null, label: 'no-day', values: [-100, -100, -100] })],
     }));
-    expect(repo.listRecurring()).toEqual([]);
-    expect(repo.listLedger()).toHaveLength(2);
-  });
-
-  it('row without `day` → variable even if amounts are stable', () => {
-    const cols = months('2026-05-01', '2026-06-01');
-    const repo = newRepo();
-    importFromSnapshot(repo, mkSnap({
-      cols, balance: [10_000, 10_000],
-      rows: [mkRow(cols, { source: '', day: null, label: 'no-day', values: [-100, -100] })],
-    }));
-    expect(repo.listRecurring()).toEqual([]);
-    expect(repo.listLedger()).toHaveLength(2);
+    const recurring = repo.listRecurring();
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]!.cadence).toEqual({ kind: 'monthly_prediction' });
+    expect(repo.listLedger()).toEqual([]);
   });
 
   it('recurring startDate clamps when day exceeds the first month length', () => {
@@ -430,6 +435,54 @@ describe('importFromSnapshot — recurring vs variable partitioning', () => {
       rows: [mkRow(cols, { source: '', day: 31, label: 'end-month', values: [-100, -100, -100] })],
     }));
     expect(repo.listRecurring()[0]!.startDate).toBe('2026-02-28');
+  });
+
+  it('promotes a stable tail of a no-day row and leaves the irregular month as ledger', () => {
+    const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01');
+    const repo = newRepo();
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, { source: '', day: null, label: 'psych', values: [-50, -100, -100, -100] })],
+    }));
+    const recurring = repo.listRecurring();
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]!.cadence).toEqual({ kind: 'monthly_prediction' });
+    expect(recurring[0]!.amount).toBe(-100);
+    expect(recurring[0]!.startDate).toBe('2026-07-10');
+    const ledger = repo.listLedger();
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0]!.amount).toBe(-50);
+    expect(ledger[0]!.date).toBe('2026-06-10');
+  });
+
+  it('splits equal monthly runs with different amounts into distinct templates', () => {
+    const cols = months(
+      '2026-05-01',
+      '2026-06-01',
+      '2026-07-01',
+      '2026-08-01',
+      '2026-09-01',
+      '2026-10-01',
+      '2026-11-01',
+    );
+    const repo = newRepo();
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000],
+      rows: [mkRow(cols, {
+        source: 'cal',
+        day: 2,
+        label: 'cal debt',
+        values: [-1036, -703, -703, -703, -703, -395, -395],
+      })],
+    }));
+    const recurring = repo.listRecurring().sort((a, b) => a.amount - b.amount);
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]!.amount).toBe(-703);
+    expect(recurring[0]!.cadence).toEqual({ kind: 'monthly', day: 2, monthEndPolicy: 'clamp' });
+    const ledger = repo.listLedger().sort((a, b) => a.date.localeCompare(b.date));
+    expect(ledger.map((e) => e.amount)).toEqual([-395, -395]);
   });
 });
 
@@ -733,7 +786,7 @@ describe('importFromSnapshot — bounded recurring detection', () => {
     expect(repo.listLedger().filter((e) => e.description.includes('occasional'))).toHaveLength(2);
   });
 
-  it('leaves gappy 3+ rows as ledger entries (no internal gaps allowed)', () => {
+  it('promotes gappy 3+ equal rows into a monthly template with skips', () => {
     const repo = newRepo();
     const cols = months('2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01');
     importFromSnapshot(repo, mkSnap({
@@ -744,8 +797,10 @@ describe('importFromSnapshot — bounded recurring detection', () => {
         values: [-50, null, -50, null, -50],
       })],
     }));
-    expect(repo.listRecurring()).toHaveLength(0);
-    expect(repo.listLedger().filter((e) => e.description.includes('gappy'))).toHaveLength(3);
+    const recurring = repo.listRecurring();
+    expect(recurring).toHaveLength(1);
+    expect(recurring[0]!.skips).toEqual(['2026-06-15', '2026-08-15']);
+    expect(repo.listLedger().filter((e) => e.description.includes('gappy'))).toHaveLength(0);
   });
 
   it('treats 3+ consecutive equal values reaching workbook end as open-ended (no endDate)', () => {

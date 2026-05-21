@@ -128,6 +128,44 @@ describe('renderAnchorSheet', () => {
     expect(mortgage?.slice(3)).toEqual([-11000, -11000, -11000, '']);
   });
 
+  it('renders monthly prediction templates into anchor periods', () => {
+    const grid = renderAnchorSheet(makeState({
+      recurring: [
+        ...makeState().recurring,
+        {
+          id: 'pred',
+          description: '[cal] супер',
+          amount: -1120,
+          channel: 'cc:cal',
+          cadence: { kind: 'monthly_prediction' },
+          startDate: '2026-06-10',
+        },
+      ],
+    }));
+    const row = grid.find((r) => r[2] === 'супер');
+    expect(row?.[0]).toBe('cal');
+    expect(row?.[1]).toBe('');
+    expect(row?.slice(3)).toEqual([-1120, -1120, -1120, '']);
+  });
+
+  it('respects template skips when rendering anchor periods', () => {
+    const grid = renderAnchorSheet(makeState({
+      recurring: [{
+        id: 'water',
+        description: '[cal] вода',
+        amount: -132,
+        channel: 'cc:cal',
+        cadence: { kind: 'monthly', day: 28, monthEndPolicy: 'clamp' },
+        startDate: '2026-05-28',
+        endDate: '2026-08-28',
+        skips: ['2026-06-28'],
+      }],
+      ledger: [],
+    }));
+    const row = grid.find((r) => r[2] === 'вода');
+    expect(row?.slice(3)).toEqual([-132, '', -132, '']);
+  });
+
   it('balance row carries forward (each anchor = prior + sum of prior column)', () => {
     const s = makeState({
       account: { bankBalance: 1000, asOf: '2026-05-10' },

@@ -83,6 +83,28 @@ export const monthlyPredictionDate = (monthLike: IsoDate): IsoDate => {
   return formatIso(y, m, clampDayInMonth(y, m, PREDICTION_POSTING_DAY));
 };
 
+/**
+ * Resolve an anchor-column workbook month to the concrete posting date used by
+ * the importer/exporter. Days on or before the anchor post in the following
+ * calendar month; day-less rows use the anchor day itself.
+ */
+export const scheduleDateForAnchorColumn = (
+  monthLike: IsoDate,
+  day: number | null,
+): IsoDate => {
+  const anchorDay = PREDICTION_POSTING_DAY;
+  const desiredDay = day ?? anchorDay;
+  let { y, m } = parseIso(monthLike);
+  if (desiredDay <= anchorDay) {
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return formatIso(y, m, clampDayInMonth(y, m, desiredDay));
+};
+
 /** "Today" as an ISO date in the given IANA timezone. */
 export const todayInZone = (timezone: string, now: Date = new Date()): IsoDate => {
   const fmt = new Intl.DateTimeFormat('en-CA', {
