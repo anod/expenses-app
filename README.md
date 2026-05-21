@@ -101,6 +101,17 @@ verbatim to Microsoft Graph. **No tokens are stored server-side.**
 | `GET /api/expenses` | Bearer (graph mode) | Parsed `WorkbookSnapshot` |
 | `GET /api/workbook/status` | Bearer (graph mode) | Workbook metadata only |
 
+Recurring templates support three schedule shapes:
+
+- **Monthly** — exact day-of-month
+- **Weekly** — exact day-of-week
+- **Monthly prediction** — one projected occurrence per month without an exact
+  business day
+
+When syncing back to Excel, only exact monthly day-of-month templates are
+round-trippable in the current workbook format. Weekly and monthly-prediction
+templates are excluded from the export sheets with a warning.
+
 ## Other scripts
 
 | Command | Effect |

@@ -5,6 +5,7 @@ import {
   compareIso,
   firstBillingDayStrictlyAfter,
   formatIso,
+  monthlyPredictionDate,
   parseIso,
   weekdayOfIso,
 } from './dates.js';
@@ -70,30 +71,44 @@ export const generateVirtualOccurrences = (
       });
     };
 
-    if (t.cadence.kind === 'monthly') {
-      assertBillingDay(t.cadence.day, `recurring ${t.id}`);
-      const day = t.cadence.day;
-      const { y, m } = parseIso(t.startDate);
-      let cur = formatIso(y, m, clampDayInMonth(y, m, day));
-      if (compareIso(cur, t.startDate) < 0) cur = nextMonthlyOccurrence(cur, day);
-      while (compareIso(cur, effectiveEnd) <= 0) {
-        emit(cur);
-        cur = nextMonthlyOccurrence(cur, day);
+    switch (t.cadence.kind) {
+      case 'monthly': {
+        assertBillingDay(t.cadence.day, `recurring ${t.id}`);
+        const day = t.cadence.day;
+        const { y, m } = parseIso(t.startDate);
+        let cur = formatIso(y, m, clampDayInMonth(y, m, day));
+        if (compareIso(cur, t.startDate) < 0) cur = nextMonthlyOccurrence(cur, day);
+        while (compareIso(cur, effectiveEnd) <= 0) {
+          emit(cur);
+          cur = nextMonthlyOccurrence(cur, day);
+        }
+        break;
       }
-    } else {
-      // Weekly: enumerate every 7 days from the first matching weekday.
-      const dow = t.cadence.dayOfWeek;
-      if (!Number.isInteger(dow) || dow < 0 || dow > 6) {
-        throw new Error(`recurring ${t.id}: invalid dayOfWeek ${dow}`);
+      case 'monthly_prediction': {
+        let cur = monthlyPredictionDate(t.startDate);
+        if (compareIso(cur, t.startDate) < 0) cur = monthlyPredictionDate(addMonths(t.startDate, 1));
+        while (compareIso(cur, effectiveEnd) <= 0) {
+          emit(cur);
+          cur = monthlyPredictionDate(addMonths(cur, 1));
+        }
+        break;
       }
-      let cur = firstWeekdayOnOrAfter(t.startDate, dow);
-      // Safety bound: weekly horizon is bounded by effectiveEnd, but cap
-      // iterations defensively in case of malformed input.
-      let guard = 0;
-      while (compareIso(cur, effectiveEnd) <= 0) {
-        emit(cur);
-        cur = addDays(cur, 7);
-        if (++guard > 20_000) throw new Error(`recurring ${t.id}: weekly expansion runaway`);
+      case 'weekly': {
+        // Weekly: enumerate every 7 days from the first matching weekday.
+        const dow = t.cadence.dayOfWeek;
+        if (!Number.isInteger(dow) || dow < 0 || dow > 6) {
+          throw new Error(`recurring ${t.id}: invalid dayOfWeek ${dow}`);
+        }
+        let cur = firstWeekdayOnOrAfter(t.startDate, dow);
+        // Safety bound: weekly horizon is bounded by effectiveEnd, but cap
+        // iterations defensively in case of malformed input.
+        let guard = 0;
+        while (compareIso(cur, effectiveEnd) <= 0) {
+          emit(cur);
+          cur = addDays(cur, 7);
+          if (++guard > 20_000) throw new Error(`recurring ${t.id}: weekly expansion runaway`);
+        }
+        break;
       }
     }
   }

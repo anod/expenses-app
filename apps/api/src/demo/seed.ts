@@ -165,6 +165,14 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
       cadence: { kind: 'monthly', day: 8, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
+    {
+      id: `${PREFIX}r:supermarket`,
+      description: 'Supermarket prediction',
+      amount: -1600,
+      channel: 'bank',
+      cadence: { kind: 'monthly_prediction' },
+      startDate: recurringStart,
+    },
   ];
 
   const ledger: LedgerEntry[] = [

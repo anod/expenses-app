@@ -1,6 +1,7 @@
 import type { IsoDate } from './types.js';
 
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+export const PREDICTION_POSTING_DAY = 10;
 
 export const parseIso = (d: IsoDate): { y: number; m: number; d: number } => {
   const match = ISO_RE.exec(d);
@@ -74,6 +75,12 @@ export const firstBillingDayStrictlyAfter = (from: IsoDate, day: number): IsoDat
   const candidate = formatIso(y, m, clampDayInMonth(y, m, day));
   if (compareIso(candidate, from) > 0) return candidate;
   return firstBillingDayStrictlyAfter(addMonths(formatIso(y, m, 1), 1), day);
+};
+
+/** Stable synthetic posting date for a monthly prediction in the given month. */
+export const monthlyPredictionDate = (monthLike: IsoDate): IsoDate => {
+  const { y, m } = parseIso(monthLike);
+  return formatIso(y, m, clampDayInMonth(y, m, PREDICTION_POSTING_DAY));
 };
 
 /** "Today" as an ISO date in the given IANA timezone. */

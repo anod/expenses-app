@@ -149,10 +149,10 @@ export const renderAnchorSheet = (state: SyncState): SheetGrid => {
   // Recurring → emit per-anchor-period value (apply once per period the cadence
   // day falls into). Day is the row's day.
   for (const t of state.recurring) {
-    // Weekly templates are not round-trippable in the anchor sheet schema;
-    // the importer treats anchor rows as monthly-equivalents. Skip them
-    // here — anchor totals from per-occurrence routing remain correct in
-    // the live forecast even though they don't appear in this snapshot.
+    // Only exact monthly day-of-month templates are round-trippable in the
+    // current anchor sheet schema. Skip weekly and monthly-prediction rows
+    // here — live forecast totals remain correct even though they don't
+    // appear in this snapshot export.
     if (t.cadence.kind !== 'monthly') continue;
     const { source, label } = parseDescription(t.description);
     const row = ensureRow(source, label, t.cadence.day);
@@ -269,10 +269,10 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
 
   out.push(pad(['# recurring'], maxW));
   out.push(pad(['id', 'description', 'amount', 'channel', 'day', 'monthEndPolicy', 'startDate', 'endDate'], maxW));
-  let weeklySkipped = 0;
+  let nonMonthlySkipped = 0;
   for (const t of state.recurring) {
     if (t.cadence.kind !== 'monthly') {
-      weeklySkipped++;
+      nonMonthlySkipped++;
       continue;
     }
     out.push(pad([
@@ -286,8 +286,8 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
       t.endDate ?? '',
     ], maxW));
   }
-  if (weeklySkipped > 0) {
-    out.push(pad([`# warning: ${weeklySkipped} weekly templates excluded — not round-trippable in current Excel format`], maxW));
+  if (nonMonthlySkipped > 0) {
+    out.push(pad([`# warning: ${nonMonthlySkipped} non-monthly templates excluded — not round-trippable in current Excel format`], maxW));
   }
   out.push(pad([], maxW));
 

@@ -177,16 +177,18 @@ export class StateRepo {
         'start_date, end_date, month_end_policy ' +
         'FROM recurring_template',
       )
-      .all()
-      .map((r) => {
-        const cadence: RecurringTemplate['cadence'] =
-          r.cadence === 'weekly'
-            ? { kind: 'weekly', dayOfWeek: r.day_of_week as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
-            : {
-                kind: 'monthly',
-                day: r.day as number,
-                monthEndPolicy: r.month_end_policy as 'clamp',
-              };
+        .all()
+        .map((r) => {
+          const cadence: RecurringTemplate['cadence'] =
+            r.cadence === 'weekly'
+              ? { kind: 'weekly', dayOfWeek: r.day_of_week as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
+              : r.cadence === 'monthly_prediction'
+                ? { kind: 'monthly_prediction' }
+              : {
+                  kind: 'monthly',
+                  day: r.day as number,
+                  monthEndPolicy: r.month_end_policy as 'clamp',
+                };
         const t: RecurringTemplate = {
           id: r.id,
           description: r.description,

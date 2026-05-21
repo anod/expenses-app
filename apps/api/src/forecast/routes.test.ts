@@ -221,6 +221,20 @@ describe('forecast routes', () => {
       expect(r.body.entity.cadence).toEqual({ kind: 'weekly', dayOfWeek: 5 });
     });
 
+    it('POST /api/recurring accepts monthly prediction cadence', async () => {
+      const r = await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'supermarket prediction',
+          amount: -1500,
+          channel: 'bank',
+          cadence: { kind: 'monthly_prediction' },
+          startDate: '2026-06-01',
+        })
+        .expect(200);
+      expect(r.body.entity.cadence).toEqual({ kind: 'monthly_prediction' });
+    });
+
     it('POST /api/recurring 400 when neither cadence nor day provided', async () => {
       await request(app)
         .post('/api/recurring')
@@ -243,6 +257,29 @@ describe('forecast routes', () => {
         .post(`/api/recurring/${id}/skips/2026-06-12`)
         .expect(200);
       expect(r.body.entity.skips).toContain('2026-06-12');
+    });
+
+    it('monthly prediction skip only accepts the synthetic occurrence date', async () => {
+      const created = await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'supermarket prediction',
+          amount: -1500,
+          channel: 'bank',
+          cadence: { kind: 'monthly_prediction' },
+          startDate: '2026-06-01',
+        })
+        .expect(200);
+      const id = created.body.entity.id as string;
+
+      await request(app)
+        .post(`/api/recurring/${id}/skips/2026-06-12`)
+        .expect(400);
+
+      const ok = await request(app)
+        .post(`/api/recurring/${id}/skips/2026-06-10`)
+        .expect(200);
+      expect(ok.body.entity.skips).toContain('2026-06-10');
     });
 
     it('POST /skips/:date drops a pending persisted override', async () => {
@@ -296,6 +333,20 @@ describe('forecast routes', () => {
         .delete('/api/recurring/therapy/skips/2026-06-12')
         .expect(200);
       expect(r.body.entity.skips).toBeUndefined();
+    });
+
+    it('DELETE /skips/:date validates monthly prediction occurrence date', async () => {
+      repo.upsertRecurring({
+        id: 'super', description: 'supermarket prediction', amount: -1500, channel: 'bank',
+        cadence: { kind: 'monthly_prediction' }, startDate: '2026-06-01',
+      });
+      repo.addSkip('super', '2026-06-10');
+      await request(app)
+        .delete('/api/recurring/super/skips/2026-06-12')
+        .expect(400);
+      await request(app)
+        .delete('/api/recurring/super/skips/2026-06-10')
+        .expect(200);
     });
   });
 });

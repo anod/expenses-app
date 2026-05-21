@@ -32,6 +32,9 @@ const cadenceInput = z.discriminatedUnion('kind', [
     kind: z.literal('weekly'),
     dayOfWeek: z.number().int().min(0).max(6),
   }),
+  z.object({
+    kind: z.literal('monthly_prediction'),
+  }),
 ]);
 
 export const RecurringInput = z

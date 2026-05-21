@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">event_repeat</span>
         Recurring templates
       </h1>
-      <p class="subtitle">Scheduled income and expenses that repeat every month.</p>
+      <p class="subtitle">Scheduled income and expenses that repeat every month or week.</p>
     </div>
     <button type="button" class="m3-btn m3-btn--filled" (click)="startNew()" [disabled]="!isIdle()">
       <span class="material-symbols-outlined">add</span>
@@ -52,6 +52,7 @@
           <select formControlName="cadenceKind">
             <option value="monthly">Monthly (day of month)</option>
             <option value="weekly">Weekly (day of week)</option>
+            <option value="monthly_prediction">Monthly prediction (no exact date)</option>
           </select>
         </label>
 
@@ -60,6 +61,11 @@
             <span class="field-label">Day of month (1–31)</span>
             <input type="number" formControlName="day" min="1" max="31" />
           </label>
+        } @else if (form.controls.cadenceKind.value === 'monthly_prediction') {
+          <div class="field">
+            <span class="field-label">Posting</span>
+            <div>Projected once per month on the anchor day (10th). Credit-card channels bill from that anchor date.</div>
+          </div>
         } @else {
           <label class="field">
             <span class="field-label">Day of week</span>
@@ -245,20 +251,20 @@
   }
 
   <!-- =========================================================
-       One-off ledger entries (standalone, not generated from a
-       template). Editable amount/description/date/status/channel
-       so user-imported Excel rows that didn't qualify as recurring
-       can still be tweaked from one place.
+       One-time payments. These are concrete dated entries rather than
+       repeating templates. Editable amount/description/date/status/channel
+       so imported or manually-created dated payments can still be tweaked
+       from one place.
        ========================================================= -->
   @if (oneOffLedger().length > 0) {
     <header class="page-head" style="margin-top: 2rem;">
       <div>
         <h2 style="margin: 0;">
           <span class="material-symbols-outlined">receipt_long</span>
-          Standalone ledger entries
+          One-time payments
         </h2>
         <p class="subtitle">
-          One-off charges not generated from a recurring template.
+          Concrete dated payments that are not generated from a recurring template.
         </p>
       </div>
     </header>

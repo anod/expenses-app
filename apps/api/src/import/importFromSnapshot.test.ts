@@ -637,6 +637,25 @@ describe('importFromSnapshot — idempotency & cleanup', () => {
     expect(repo.listLedger().find((e) => e.id === 'user-1')).toBeDefined();
   });
 
+  it('does NOT touch user-created monthly prediction templates or their skips', () => {
+    const repo = newRepo();
+    repo.upsertRecurring({
+      id: 'user-pred',
+      description: 'supermarket prediction',
+      amount: -1500,
+      channel: 'bank',
+      cadence: { kind: 'monthly_prediction' },
+      startDate: '2026-06-01',
+    });
+    repo.addSkip('user-pred', '2026-06-10');
+    const cols = months('2026-05-01');
+    importFromSnapshot(repo, mkSnap({ cols, balance: [10_000], rows: [] }));
+    const after = repo.listRecurring().find((t) => t.id === 'user-pred');
+    expect(after).toBeDefined();
+    expect(after!.cadence).toEqual({ kind: 'monthly_prediction' });
+    expect(after!.skips).toEqual(['2026-06-10']);
+  });
+
   it('preserves user-marked skips across Excel re-import (re-upsert keeps skip table)', () => {
     const repo = newRepo();
     const cols = months('2026-05-01', '2026-06-01', '2026-07-01');

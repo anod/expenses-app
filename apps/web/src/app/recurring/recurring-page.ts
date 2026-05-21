@@ -8,7 +8,7 @@ import { ForecastApi } from '../forecast/forecast.api';
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string };
 
-type CadenceKind = 'monthly' | 'weekly';
+type CadenceKind = 'monthly' | 'weekly' | 'monthly_prediction';
 
 type SortColumn = 'description' | 'channel' | 'day' | 'amount' | 'startDate' | 'endDate';
 type SortDir = 'asc' | 'desc';
@@ -82,7 +82,11 @@ export class RecurringPageComponent {
       case 'day': {
         // Sort weekly templates after monthly ones, then by day-of-week.
         const rank = (t: RecurringTemplate): number =>
-          t.cadence.kind === 'monthly' ? t.cadence.day : 100 + t.cadence.dayOfWeek;
+          t.cadence.kind === 'monthly'
+            ? t.cadence.day
+            : t.cadence.kind === 'weekly'
+              ? 100 + t.cadence.dayOfWeek
+              : 200;
         return rank(a) - rank(b);
       }
       case 'amount':
@@ -191,7 +195,9 @@ export class RecurringPageComponent {
     const cadence =
       v.cadenceKind === 'weekly'
         ? { kind: 'weekly' as const, dayOfWeek: v.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
-        : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
+        : v.cadenceKind === 'monthly_prediction'
+          ? { kind: 'monthly_prediction' as const }
+          : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
     const body = {
       description: v.description.trim(),
       amount: v.amount,
@@ -250,6 +256,7 @@ export class RecurringPageComponent {
    * "Fri" for weekly day-of-week). */
   protected cadenceLabel(t: RecurringTemplate): string {
     if (t.cadence.kind === 'weekly') return WEEKDAY_LABELS[t.cadence.dayOfWeek] ?? '?';
+    if (t.cadence.kind === 'monthly_prediction') return 'Predicted monthly';
     return String(t.cadence.day);
   }
 

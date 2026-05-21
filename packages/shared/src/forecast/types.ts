@@ -65,7 +65,17 @@ export interface WeeklyCadence {
   dayOfWeek: Weekday;
 }
 
-export type Cadence = MonthlyCadence | WeeklyCadence;
+/**
+ * Monthly prediction: one synthetic occurrence per month, used for rows that
+ * conceptually belong to a month/period but do not have an exact business day.
+ * Projection still needs a stable date, so the pipeline posts these on the
+ * anchor day for the month.
+ */
+export interface MonthlyPredictionCadence {
+  kind: 'monthly_prediction';
+}
+
+export type Cadence = MonthlyCadence | WeeklyCadence | MonthlyPredictionCadence;
 
 export interface RecurringTemplate {
   id: string;
@@ -81,7 +91,7 @@ export interface RecurringTemplate {
    * ISO dates the user has marked as skipped — neither virtual nor
    * persisted ledger rows with `occurrenceKey === occurrenceKeyOf(id,date)`
    * appear in any forecast or report. Sorted ascending, deduped.
-   * Only meaningful for `weekly` cadence in v1; monthly stays a no-op.
+   * Meaningful for `weekly` and `monthly_prediction` virtual occurrences.
    */
   skips?: IsoDate[];
 }

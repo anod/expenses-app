@@ -3,6 +3,7 @@ import {
   addMonths,
   compareIso,
   firstBillingDayOnOrAfter,
+  monthlyPredictionDate,
   weekdayOfIso,
 } from './dates.js';
 import type { IsoDate, RecurringTemplate } from './types.js';
@@ -52,6 +53,12 @@ export const paymentProgress = (
       cursor = firstBillingDayOnOrAfter(start, cadence.day);
       return () => {
         cursor = addMonths(cursor, 1);
+      };
+    } else if (cadence.kind === 'monthly_prediction') {
+      cursor = monthlyPredictionDate(start);
+      if (compareIso(cursor, start) < 0) cursor = monthlyPredictionDate(addMonths(start, 1));
+      return () => {
+        cursor = monthlyPredictionDate(addMonths(cursor, 1));
       };
     } else {
       // Step to the first matching weekday on or after `start`.

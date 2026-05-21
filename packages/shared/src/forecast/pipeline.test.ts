@@ -360,4 +360,26 @@ describe('forecast pipeline', () => {
     const ccBill = julBill!.charges.find((c) => c.source.kind === 'cc-bill');
     expect(ccBill?.amount).toBe(-820); // 4 × -205
   });
+
+  it('monthly prediction emits one synthetic occurrence per month', () => {
+    const tmpl: RecurringTemplate = {
+      id: 'pred', description: 'supermarket prediction', amount: -1500, channel: 'bank',
+      cadence: { kind: 'monthly_prediction' },
+      startDate: '2026-05-01', endDate: '2026-07-31',
+    };
+    const out = generateVirtualOccurrences([tmpl], '2026-05-01', '2026-07-31');
+    expect(out.map((e) => e.date)).toEqual(['2026-05-10', '2026-06-10', '2026-07-10']);
+    expect(out.every((e) => e.recurringId === 'pred')).toBe(true);
+  });
+
+  it('monthly prediction skips suppress synthetic monthly occurrences', () => {
+    const tmpl: RecurringTemplate = {
+      id: 'pred', description: 'supermarket prediction', amount: -1500, channel: 'bank',
+      cadence: { kind: 'monthly_prediction' },
+      startDate: '2026-05-01', endDate: '2026-07-31',
+      skips: ['2026-06-10'],
+    };
+    const out = generateVirtualOccurrences([tmpl], '2026-05-01', '2026-07-31');
+    expect(out.map((e) => e.date)).toEqual(['2026-05-10', '2026-07-10']);
+  });
 });

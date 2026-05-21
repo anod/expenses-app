@@ -186,4 +186,23 @@ describe('renderStateRawSheet', () => {
     const w = grid[0]!.length;
     for (const row of grid) expect(row.length).toBe(w);
   });
+
+  it('warns when non-monthly templates are excluded from raw export', () => {
+    const grid = renderStateRawSheet(makeState({
+      recurring: [
+        ...makeState().recurring,
+        {
+          id: 'pred',
+          description: 'supermarket prediction',
+          amount: -1500,
+          channel: 'bank',
+          cadence: { kind: 'monthly_prediction' },
+          startDate: '2026-05-01',
+        },
+      ],
+    }));
+    expect(grid.some((row) =>
+      String(row[0]).includes('non-monthly templates excluded'),
+    )).toBe(true);
+  });
 });

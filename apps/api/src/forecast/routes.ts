@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z, ZodError } from 'zod';
 import {
+  generateVirtualOccurrences,
+  monthlyPredictionDate,
   occurrenceKeyOf,
   todayInZone,
   type CreditCard,
@@ -207,6 +209,9 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
           dayOfWeek: input.cadence.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6,
         };
       }
+      if (input.cadence.kind === 'monthly_prediction') {
+        return { kind: 'monthly_prediction' };
+      }
       return {
         kind: 'monthly',
         day: input.cadence.day,
@@ -264,6 +269,17 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
 
   // --- recurring skips
   const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const validateOccurrenceDate = (template: RecurringTemplate, date: string): string | null => {
+    const { skips: _skips, ...baseTemplate } = template;
+    const matches = generateVirtualOccurrences([baseTemplate], date, date).some((e) => e.date === date);
+    if (!matches) {
+      if (template.cadence.kind === 'monthly_prediction') {
+        return `date must match the synthetic monthly prediction occurrence (${monthlyPredictionDate(date)})`;
+      }
+      return 'date is not a scheduled occurrence for this template';
+    }
+    return null;
+  };
   router.post('/recurring/:id/skips/:date', (req, res) => {
     const { id, date } = req.params;
     if (!isoDateRe.test(date)) {
@@ -274,6 +290,11 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
     const template = repo.listRecurring().find((t) => t.id === id);
     if (!template) {
       res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    const occurrenceError = validateOccurrenceDate(template, date);
+    if (occurrenceError) {
+      res.status(400).json({ error: 'VALIDATION', message: occurrenceError });
       return;
     }
     // If a persisted override exists for this occurrence: pending overrides
@@ -306,6 +327,11 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
     const template = repo.listRecurring().find((t) => t.id === id);
     if (!template) {
       res.status(404).json({ error: 'NOT_FOUND' });
+      return;
+    }
+    const occurrenceError = validateOccurrenceDate(template, date);
+    if (occurrenceError) {
+      res.status(400).json({ error: 'VALIDATION', message: occurrenceError });
       return;
     }
     repo.removeSkip(id, date);

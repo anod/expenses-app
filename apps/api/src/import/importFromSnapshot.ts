@@ -5,13 +5,14 @@
  * idempotent import described in `apps/api/src/scripts/import-excel.ts`,
  * and returns a summary. See that file's header comment for semantics.
  */
-import type {
-  Channel,
-  ExpenseRow,
-  LedgerEntry,
-  RecurringTemplate,
-  CreditCard,
-  WorkbookSnapshot,
+import {
+  PREDICTION_POSTING_DAY,
+  type Channel,
+  type ExpenseRow,
+  type LedgerEntry,
+  type RecurringTemplate,
+  type CreditCard,
+  type WorkbookSnapshot,
 } from '@expenses/shared';
 import type { StateRepo } from '../db/stateRepo.js';
 
@@ -282,7 +283,7 @@ export function importFromSnapshot(
     cardsCreated++;
   }
 
-  const anchorDay = 10;
+  const anchorDay = PREDICTION_POSTING_DAY;
   const scheduleDateForColumn = (monthKey: string, day: number | null): string => {
     const d = day ?? anchorDay;
     const [yStr, mStr] = monthKey.split('-');

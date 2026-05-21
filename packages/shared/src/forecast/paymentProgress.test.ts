@@ -26,6 +26,17 @@ const weekly = (
   ...(skips ? { skips } : {}),
 });
 
+const monthlyPrediction = (
+  startDate: string,
+  endDate: string | undefined,
+  skips?: string[],
+): Pick<RecurringTemplate, 'startDate' | 'endDate' | 'cadence' | 'skips'> => ({
+  startDate,
+  ...(endDate ? { endDate } : {}),
+  cadence: { kind: 'monthly_prediction' },
+  ...(skips ? { skips } : {}),
+});
+
 describe('paymentProgress (monthly)', () => {
   it('returns null when there is no end date', () => {
     expect(paymentProgress(monthly('2024-01-01', undefined, 1), '2024-06-15')).toBeNull();
@@ -115,5 +126,26 @@ describe('paymentProgress (weekly)', () => {
         '2024-01-26',
       ),
     ).toEqual({ total: 4, paid: 4 });
+  });
+});
+
+describe('paymentProgress (monthly prediction)', () => {
+  it('counts one occurrence per month on the anchor day', () => {
+    expect(paymentProgress(monthlyPrediction('2024-01-01', '2024-03-31'), '2024-02-20'))
+      .toEqual({ total: 3, paid: 2 });
+  });
+
+  it('moves the first paid month when startDate is after the anchor day', () => {
+    expect(paymentProgress(monthlyPrediction('2024-01-20', '2024-04-30'), '2024-04-10'))
+      .toEqual({ total: 3, paid: 3 });
+  });
+
+  it('skips shrink both total and paid', () => {
+    expect(
+      paymentProgress(
+        monthlyPrediction('2024-01-01', '2024-03-31', ['2024-02-10']),
+        '2024-03-20',
+      ),
+    ).toEqual({ total: 2, paid: 2 });
   });
 });

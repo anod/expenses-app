@@ -1,7 +1,9 @@
-import { resolve, dirname } from 'node:path';
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from './openDb.js';
+import { applyMigrations, openDb } from './openDb.js';
 import { StateRepo } from './stateRepo.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -95,6 +97,16 @@ describe('StateRepo', () => {
     expect(list[0]!.cadence).toEqual({ kind: 'weekly', dayOfWeek: 5 });
   });
 
+  it('recurring: monthly prediction round-trips', () => {
+    repo.upsertRecurring({
+      id: 'super', description: 'supermarket prediction', amount: -1500, channel: 'bank',
+      cadence: { kind: 'monthly_prediction' }, startDate: '2026-06-01',
+    });
+    const list = repo.listRecurring();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.cadence).toEqual({ kind: 'monthly_prediction' });
+  });
+
   it('recurring skips: add/remove/list, idempotent, preserved across upsert', () => {
     repo.upsertRecurring({
       id: 'therapy', description: 'therapy', amount: -205, channel: 'bank',
@@ -164,5 +176,50 @@ describe('StateRepo', () => {
     // re-open the same DB path runs applyMigrations again
     const db = openDb({ path: ':memory:', migrationsDir });
     expect(() => new StateRepo(db).getAccount()).not.toThrow();
+  });
+
+  it('migration 007 preserves recurring skips and recurring-linked ledger overrides', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'expenses-migrations-'));
+    try {
+      for (const file of readdirSync(migrationsDir).filter((f) => /^\d+-.*\.sql$/.test(f) && !f.startsWith('007-'))) {
+        copyFileSync(join(migrationsDir, file), join(tempDir, file));
+      }
+      const db = openDb({ path: ':memory:', migrationsDir: tempDir });
+      const preRepo = new StateRepo(db);
+      preRepo.upsertRecurring({
+        id: 'therapy',
+        description: 'therapy',
+        amount: -205,
+        channel: 'bank',
+        cadence: { kind: 'weekly', dayOfWeek: 5 },
+        startDate: '2026-06-05',
+      });
+      preRepo.addSkip('therapy', '2026-06-12');
+      preRepo.upsertLedger({
+        id: 'ov',
+        description: 'therapy override',
+        amount: -250,
+        channel: 'bank',
+        date: '2026-06-12',
+        status: 'pending',
+        recurringId: 'therapy',
+        occurrenceKey: 'therapy@2026-06-12',
+      });
+
+      copyFileSync(
+        join(migrationsDir, '007-monthly-prediction.sql'),
+        join(tempDir, '007-monthly-prediction.sql'),
+      );
+      applyMigrations(db, tempDir);
+
+      const postRepo = new StateRepo(db);
+      expect(postRepo.listRecurring().find((t) => t.id === 'therapy')?.skips).toEqual(['2026-06-12']);
+      expect(postRepo.listLedger().find((e) => e.id === 'ov')).toMatchObject({
+        recurringId: 'therapy',
+        occurrenceKey: 'therapy@2026-06-12',
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
