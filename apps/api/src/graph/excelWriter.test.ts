@@ -243,4 +243,16 @@ describe('renderStateRawSheet', () => {
       String(row[0]).includes('non-monthly templates excluded'),
     )).toBe(true);
   });
+
+  it('includes card mode in the raw cards section', () => {
+    const grid = renderStateRawSheet(makeState({
+      cards: [
+        { id: 'cal', name: 'Cal', currentDebit: 0, asOf: '2026-05-10', billingDayOfMonth: 2, mode: 'debit' },
+      ],
+    }));
+    const header = grid.find((row) => row[0] === 'id' && row[1] === 'name' && row[5] === 'mode');
+    expect(header).toBeDefined();
+    const cardRow = grid.find((row) => row[0] === 'cal' && row[1] === 'Cal');
+    expect(cardRow?.[5]).toBe('debit');
+  });
 });

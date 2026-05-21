@@ -249,7 +249,7 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
   // Determine max width across all sections so the range PATCH stays rectangular.
   const widths = [
     2, // account
-    5, // card
+    6, // card
     8, // recurring
     8, // ledger
     4, // settings
@@ -262,9 +262,9 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
   out.push(pad([], maxW));
 
   out.push(pad(['# cards'], maxW));
-  out.push(pad(['id', 'name', 'currentDebit', 'asOf', 'billingDayOfMonth'], maxW));
+  out.push(pad(['id', 'name', 'currentDebit', 'asOf', 'billingDayOfMonth', 'mode'], maxW));
   for (const c of state.cards) {
-    out.push(pad([c.id, c.name, c.currentDebit, c.asOf, c.billingDayOfMonth], maxW));
+    out.push(pad([c.id, c.name, c.currentDebit, c.asOf, c.billingDayOfMonth, c.mode ?? 'credit'], maxW));
   }
   out.push(pad([], maxW));
 

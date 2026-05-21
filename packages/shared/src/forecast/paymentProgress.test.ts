@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paymentProgress } from './paymentProgress.js';
+import { endDateForPaymentCount, paymentProgress, scheduledPaymentCount } from './paymentProgress.js';
 import type { RecurringTemplate } from './types.js';
 
 const monthly = (
@@ -147,5 +147,36 @@ describe('paymentProgress (monthly prediction)', () => {
         '2024-03-20',
       ),
     ).toEqual({ total: 2, paid: 2 });
+  });
+});
+
+describe('endDateForPaymentCount', () => {
+  it('treats payment 1 as the first actual monthly occurrence', () => {
+    expect(endDateForPaymentCount(monthly('2024-01-20', undefined, 5), 1)).toBe('2024-02-05');
+  });
+
+  it('preserves the intended monthly day across clamped months', () => {
+    expect(endDateForPaymentCount(monthly('2024-01-31', undefined, 31), 3)).toBe('2024-03-31');
+  });
+
+  it('counts monthly predictions from the first anchor occurrence', () => {
+    expect(endDateForPaymentCount(monthlyPrediction('2024-01-20', undefined), 2)).toBe('2024-03-10');
+  });
+
+  it('counts weekly cadences from the first matching weekday', () => {
+    expect(endDateForPaymentCount(weekly('2024-01-01', undefined, 5), 3)).toBe('2024-01-19');
+  });
+});
+
+describe('scheduledPaymentCount', () => {
+  it('returns null for open-ended templates', () => {
+    expect(scheduledPaymentCount(monthly('2024-01-01', undefined, 1))).toBeNull();
+  });
+
+  it('round-trips with endDateForPaymentCount for fixed-term monthly templates', () => {
+    const template = monthly('2024-01-20', undefined, 5);
+    const endDate = endDateForPaymentCount(template, 4);
+    expect(scheduledPaymentCount({ ...template, endDate })).toBe(4);
+    expect(paymentProgress({ ...template, endDate }, endDate)).toEqual({ total: 4, paid: 4 });
   });
 });

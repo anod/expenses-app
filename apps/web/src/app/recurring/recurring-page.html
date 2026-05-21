@@ -21,7 +21,7 @@
   }
 
   @if (!isIdle()) {
-    <form class="m3-card edit-form" [formGroup]="form" (ngSubmit)="save()">
+    <form #editorCard class="m3-card edit-form" [formGroup]="form" (ngSubmit)="save()">
       <h3 class="form-title">
         <span class="material-symbols-outlined">{{ isNew() ? 'add_circle' : 'edit' }}</span>
         {{ isNew() ? 'New recurring template' : 'Edit template' }}
@@ -30,7 +30,7 @@
       <div class="form-grid">
         <label class="field field-span-2">
           <span class="field-label">Description</span>
-          <input type="text" formControlName="description" placeholder="e.g. супер" />
+          <input #descriptionInput type="text" formControlName="description" placeholder="e.g. супер" />
         </label>
 
         <label class="field">
@@ -86,6 +86,14 @@
           <span class="field-label">End date (optional)</span>
           <input type="date" formControlName="endDate" />
         </label>
+
+        @if (form.controls.cadenceKind.value === 'monthly') {
+          <label class="field">
+            <span class="field-label">Number of payments (optional)</span>
+            <input type="number" formControlName="paymentCount" min="1" step="1" placeholder="e.g. 12" />
+            <small>For installments, payment 1 is the first scheduled month from the start date.</small>
+          </label>
+        }
       </div>
 
       <div class="form-actions">

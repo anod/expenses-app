@@ -1,8 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Channel, CreditCard, LedgerEntry, RecurringTemplate } from '@expenses/shared';
-import { descriptionLabel, paymentProgress, type PaymentProgress } from '@expenses/shared';
+import {
+  descriptionLabel,
+  endDateForPaymentCount,
+  paymentProgress,
+  scheduledPaymentCount,
+  type PaymentProgress,
+} from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
@@ -26,6 +32,8 @@ const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as cons
 export class RecurringPageComponent {
   private readonly api = inject(ForecastApi);
   private readonly fb = inject(FormBuilder);
+  private readonly editorCard = viewChild<ElementRef<HTMLElement>>('editorCard');
+  private readonly descriptionInput = viewChild<ElementRef<HTMLInputElement>>('descriptionInput');
 
   protected readonly templates = signal<RecurringTemplate[]>([]);
   protected readonly cards = signal<CreditCard[]>([]);
@@ -108,15 +116,16 @@ export class RecurringPageComponent {
     ...this.cards().map((c) => ({ value: `cc:${c.id}` as Channel, label: c.name })),
   ]);
 
-  protected readonly form = this.fb.nonNullable.group({
-    description: ['', [Validators.required, Validators.maxLength(200)]],
-    amount: [0, [Validators.required]],
-    channel: ['bank' as Channel, [Validators.required]],
-    cadenceKind: ['monthly' as CadenceKind, [Validators.required]],
-    day: [1, [Validators.min(1), Validators.max(31)]],
-    dayOfWeek: [5, [Validators.min(0), Validators.max(6)]], // default Fri
-    startDate: ['', [Validators.required]],
-    endDate: [''],
+  protected readonly form = this.fb.group({
+    description: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
+    amount: this.fb.nonNullable.control(0, [Validators.required]),
+    channel: this.fb.nonNullable.control('bank' as Channel, [Validators.required]),
+    cadenceKind: this.fb.nonNullable.control('monthly' as CadenceKind, [Validators.required]),
+    day: this.fb.nonNullable.control(1, [Validators.min(1), Validators.max(31)]),
+    dayOfWeek: this.fb.nonNullable.control(5, [Validators.min(0), Validators.max(6)]), // default Fri
+    startDate: this.fb.nonNullable.control('', [Validators.required]),
+    endDate: this.fb.nonNullable.control(''),
+    paymentCount: this.fb.control<number | null>(null, [Validators.min(1), Validators.max(240)]),
   });
 
   protected readonly weekdayOptions = WEEKDAY_LABELS.map((label, value) => ({ value, label }));
@@ -160,8 +169,11 @@ export class RecurringPageComponent {
       dayOfWeek: t.cadence.kind === 'weekly' ? t.cadence.dayOfWeek : 5,
       startDate: t.startDate,
       endDate: t.endDate ?? '',
+      paymentCount:
+        t.cadence.kind === 'monthly' && t.endDate ? scheduledPaymentCount(t) : null,
     });
     this.edit.set({ kind: 'edit', id: t.id });
+    this.focusEditor();
   }
 
   protected startNew(): void {
@@ -175,8 +187,10 @@ export class RecurringPageComponent {
       dayOfWeek: 5,
       startDate: today,
       endDate: '',
+      paymentCount: null,
     });
     this.edit.set({ kind: 'new' });
+    this.focusEditor();
   }
 
   protected cancel(): void {
@@ -198,13 +212,20 @@ export class RecurringPageComponent {
         : v.cadenceKind === 'monthly_prediction'
           ? { kind: 'monthly_prediction' as const }
           : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
+    const paymentCount =
+      v.cadenceKind === 'monthly' && v.paymentCount != null && v.paymentCount > 0
+        ? v.paymentCount
+        : null;
+    const derivedEndDate = paymentCount
+      ? endDateForPaymentCount({ startDate: v.startDate, cadence }, paymentCount)
+      : null;
     const body = {
       description: v.description.trim(),
       amount: v.amount,
       channel: v.channel,
       cadence,
       startDate: v.startDate,
-      ...(v.endDate ? { endDate: v.endDate } : {}),
+      ...((derivedEndDate ?? v.endDate) ? { endDate: derivedEndDate ?? v.endDate } : {}),
     };
     this.saving.set(true);
     this.error.set(null);
@@ -234,6 +255,13 @@ export class RecurringPageComponent {
       this.templates.set(prev);
       this.error.set(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  private focusEditor(): void {
+    queueMicrotask(() => {
+      this.editorCard()?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      this.descriptionInput()?.nativeElement.focus();
+    });
   }
 
   protected channelLabel(channel: Channel): string {

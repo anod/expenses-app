@@ -8,6 +8,71 @@ import {
 } from './dates.js';
 import type { IsoDate, RecurringTemplate } from './types.js';
 
+type ScheduledTemplate = Pick<RecurringTemplate, 'startDate' | 'cadence'>;
+
+const firstScheduledOccurrence = (template: ScheduledTemplate): IsoDate => {
+  const { startDate: start, cadence } = template;
+  if (cadence.kind === 'monthly') {
+    return firstBillingDayOnOrAfter(start, cadence.day);
+  }
+  if (cadence.kind === 'monthly_prediction') {
+    let cursor = monthlyPredictionDate(start);
+    if (compareIso(cursor, start) < 0) cursor = monthlyPredictionDate(addMonths(start, 1));
+    return cursor;
+  }
+  const diff = (cadence.dayOfWeek - weekdayOfIso(start) + 7) % 7;
+  return diff === 0 ? start : addDays(start, diff);
+};
+
+const nextScheduledOccurrence = (
+  cadence: RecurringTemplate['cadence'],
+  current: IsoDate,
+): IsoDate => {
+  if (cadence.kind === 'monthly') {
+    return firstBillingDayOnOrAfter(addDays(current, 1), cadence.day);
+  }
+  if (cadence.kind === 'monthly_prediction') {
+    return monthlyPredictionDate(addMonths(current, 1));
+  }
+  return addDays(current, 7);
+};
+
+/**
+ * Compute the inclusive end date for a fixed number of scheduled payments.
+ * Payment 1 is the first actual occurrence on or after `startDate`.
+ */
+export const endDateForPaymentCount = (
+  template: ScheduledTemplate,
+  paymentCount: number,
+): IsoDate => {
+  if (!Number.isInteger(paymentCount) || paymentCount < 1) {
+    throw new Error(`paymentCount must be >= 1 (got ${paymentCount})`);
+  }
+  let cursor = firstScheduledOccurrence(template);
+  for (let i = 1; i < paymentCount; i++) {
+    cursor = nextScheduledOccurrence(template.cadence, cursor);
+  }
+  return cursor;
+};
+
+/**
+ * Count scheduled occurrences between startDate and endDate, ignoring skips.
+ * Returns null for open-ended templates.
+ */
+export const scheduledPaymentCount = (
+  template: Pick<RecurringTemplate, 'startDate' | 'endDate' | 'cadence'>,
+): number | null => {
+  if (!template.endDate) return null;
+  if (compareIso(template.endDate, template.startDate) < 0) return 0;
+  let total = 0;
+  let cursor = firstScheduledOccurrence(template);
+  for (let i = 0; i < 12_000 && compareIso(cursor, template.endDate) <= 0; i++) {
+    total++;
+    cursor = nextScheduledOccurrence(template.cadence, cursor);
+  }
+  return total;
+};
+
 export interface PaymentProgress {
   /** Total non-skipped scheduled occurrences from start through end, inclusive. */
   total: number;
@@ -47,38 +112,17 @@ export const paymentProgress = (
   if (!end) return null;
   if (compareIso(end, start) < 0) return { total: 0, paid: 0 };
   const skipSet = new Set(skips ?? []);
-  let cursor: IsoDate;
-  const advance: () => void = (() => {
-    if (cadence.kind === 'monthly') {
-      cursor = firstBillingDayOnOrAfter(start, cadence.day);
-      return () => {
-        cursor = addMonths(cursor, 1);
-      };
-    } else if (cadence.kind === 'monthly_prediction') {
-      cursor = monthlyPredictionDate(start);
-      if (compareIso(cursor, start) < 0) cursor = monthlyPredictionDate(addMonths(start, 1));
-      return () => {
-        cursor = monthlyPredictionDate(addMonths(cursor, 1));
-      };
-    } else {
-      // Step to the first matching weekday on or after `start`.
-      const diff = (cadence.dayOfWeek - weekdayOfIso(start) + 7) % 7;
-      cursor = diff === 0 ? start : addDays(start, diff);
-      return () => {
-        cursor = addDays(cursor, 7);
-      };
-    }
-  })();
+  let cursor = firstScheduledOccurrence(template);
 
   let total = 0;
   let paid = 0;
   // Safety bound: ~1000 monthly years or ~230 weekly years.
-  for (let i = 0; i < 12_000 && compareIso(cursor!, end) <= 0; i++) {
-    if (!skipSet.has(cursor!)) {
+  for (let i = 0; i < 12_000 && compareIso(cursor, end) <= 0; i++) {
+    if (!skipSet.has(cursor)) {
       total++;
-      if (compareIso(cursor!, asOf) <= 0) paid++;
+      if (compareIso(cursor, asOf) <= 0) paid++;
     }
-    advance();
+    cursor = nextScheduledOccurrence(cadence, cursor);
   }
   return { total, paid };
 };

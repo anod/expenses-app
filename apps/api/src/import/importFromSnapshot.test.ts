@@ -250,6 +250,28 @@ describe('importFromSnapshot — card creation', () => {
     }));
     expect(repo.listCards()[0]?.excelOwned).toBe(true);
   });
+
+  it('preserves existing debit/credit mode for excel-owned cards across re-import', () => {
+    const repo = newRepo();
+    repo.upsertCard({
+      id: 'cal',
+      name: 'Cal',
+      currentDebit: 123,
+      asOf: '2026-04-01',
+      billingDayOfMonth: 2,
+      excelOwned: true,
+      mode: 'debit',
+    });
+    const cols = months('2026-05-01', '2026-06-01');
+    importFromSnapshot(repo, mkSnap({
+      cols,
+      balance: [10_000, 10_000],
+      rows: [mkRow(cols, { source: 'cal', day: 15, label: 'groceries', values: [-100, -200] })],
+    }));
+    const card = repo.listCards().find((c) => c.id === 'cal');
+    expect(card?.mode).toBe('debit');
+    expect(card?.currentDebit).toBe(0);
+  });
 });
 
 // =========================================================================

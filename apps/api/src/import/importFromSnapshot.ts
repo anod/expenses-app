@@ -294,6 +294,11 @@ export function importFromSnapshot(
   );
   const touchedLedgerIds = new Set<string>();
   const touchedRecurringIds = new Set<string>();
+  const existingExcelCards = new Map(
+    repo.listCards()
+      .filter((c) => c.excelOwned)
+      .map((c) => [c.id, c]),
+  );
 
   // Wipe ONLY Excel-owned cards. User-created cards (POST /api/cards)
   // are preserved across re-imports — if any of their cc:<id> entries
@@ -362,13 +367,16 @@ export function importFromSnapshot(
   let cardsCreated = 0;
   for (const cardId of cardSourcesPresent) {
     const def = CREDIT_CARD_SOURCES[cardId]!;
+    const previous = existingExcelCards.get(cardId);
+    const mode = previous?.mode ?? 'credit';
     const card: CreditCard = {
       id: cardId,
       name: def.name,
-      currentDebit: debitForCard(cardId),
+      currentDebit: mode === 'debit' ? 0 : debitForCard(cardId),
       asOf: firstMonth.key,
       billingDayOfMonth: def.billingDay,
       excelOwned: true,
+      mode,
     };
     repo.upsertCard(card);
     cardsCreated++;
