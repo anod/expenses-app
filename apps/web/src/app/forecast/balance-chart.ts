@@ -10,7 +10,8 @@ interface Lane {
   path: string;
   className: string;
   pointClass?: string;
-  points?: ReadonlyArray<{ x: number; y: number }>;
+  points?: ReadonlyArray<{ x: number; y: number; title: string }>;
+  bars?: ReadonlyArray<{ x: number; y: number; width: number; height: number; title: string }>;
 }
 
 interface ChartModel {
@@ -63,10 +64,25 @@ interface ChartModel {
             text-anchor="end"
             class="lane-value"
           >{{ lane.valueLabel }}</text>
+          @if (lane.bars; as bars) {
+            @for (bar of bars; track $index) {
+              <rect
+                [attr.x]="bar.x"
+                [attr.y]="bar.y"
+                [attr.width]="bar.width"
+                [attr.height]="bar.height"
+                class="anchor-bar"
+              >
+                <title>{{ bar.title }}</title>
+              </rect>
+            }
+          }
           <path [attr.d]="lane.path" [attr.class]="lane.className" />
           @if (lane.points; as pts) {
             @for (pt of pts; track $index) {
-              <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" [attr.class]="lane.pointClass ?? 'series-point'" />
+              <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" [attr.class]="lane.pointClass ?? 'series-point'">
+                <title>{{ pt.title }}</title>
+              </circle>
             }
           }
         </g>
@@ -97,6 +113,10 @@ interface ChartModel {
     .anchor-band {
       fill: var(--md-sys-color-primary);
       opacity: 0.06;
+    }
+    .anchor-bar {
+      fill: var(--md-sys-color-primary);
+      opacity: 0.72;
     }
     .lane-label,
     .lane-value,
@@ -171,7 +191,8 @@ export class BalanceChartComponent {
       values: readonly number[],
       laneTop: number,
       indices?: readonly number[],
-    ): { path: string; points?: ReadonlyArray<{ x: number; y: number }> } => {
+      titles?: readonly string[],
+    ): { path: string; points?: ReadonlyArray<{ x: number; y: number; title: string }> } => {
       const ids = indices ?? values.map((_, i) => i);
       if (ids.length === 0) return { path: '' };
       const subset = ids.map((i) => values[i] ?? 0);
@@ -183,7 +204,11 @@ export class BalanceChartComponent {
       }
       const yOf = (v: number): number =>
         laneTop + laneHeight - ((v - min) / (max - min)) * laneHeight;
-      const points = ids.map((i) => ({ x: xOf(i), y: yOf(values[i] ?? 0) }));
+      const points = ids.map((i) => ({
+        x: xOf(i),
+        y: yOf(values[i] ?? 0),
+        title: titles?.[i] ?? '',
+      }));
       return {
         path: points
           .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
@@ -191,13 +216,44 @@ export class BalanceChartComponent {
         points,
       };
     };
+    const makeBars = (
+      values: readonly number[],
+      laneTop: number,
+      indices: readonly number[],
+      titles: readonly string[],
+    ): ReadonlyArray<{ x: number; y: number; width: number; height: number; title: string }> => {
+      if (indices.length === 0) return [];
+      const subset = indices.map((i) => values[i] ?? 0);
+      let min = Math.min(...subset);
+      let max = Math.max(...subset);
+      if (min === max) {
+        min -= 1;
+        max += 1;
+      }
+      const yOf = (v: number): number =>
+        laneTop + laneHeight - ((v - min) / (max - min)) * laneHeight;
+      const bottom = laneTop + laneHeight;
+      return indices.map((i) => {
+        const x = xOf(i);
+        const y = yOf(values[i] ?? 0);
+        return {
+          x: x - 7,
+          y,
+          width: 14,
+          height: Math.max(2, bottom - y),
+          title: titles[i] ?? '',
+        };
+      });
+    };
 
     const anchorIndices = days
       .map((d, i) => (d.isAnchor ? i : -1))
       .filter((i) => i >= 0);
     const anchorValues = days.map((d) => d.balance);
+    const anchorTitles = days.map((d) => `${d.date}: ${this.formatShort(d.balance)}`);
     const anchorLaneTop = pad.top;
-    const anchorSeries = makePath(anchorValues, anchorLaneTop, anchorIndices);
+    const anchorSeries = makePath(anchorValues, anchorLaneTop, anchorIndices, anchorTitles);
+    const anchorBars = makeBars(anchorValues, anchorLaneTop, anchorIndices, anchorTitles);
     const lastAnchorIdx = anchorIndices[anchorIndices.length - 1] ?? 0;
     const anchorBands = anchorIndices.map((idx) => ({ x: xOf(idx) - 10, width: 20 }));
 
@@ -236,10 +292,12 @@ export class BalanceChartComponent {
     });
     const expenseTotal = expenseValues[lastAnchorIdx] ?? expenseValues[0] ?? 0;
     const expenseLaneTop = anchorLaneTop + laneHeight + laneGap;
-    const expenseSeries = makePath(expenseValues, expenseLaneTop, anchorIndices);
+    const expenseTitles = days.map((d, i) => `${d.date}: ${this.formatShort(expenseValues[i] ?? 0)}`);
+    const expenseSeries = makePath(expenseValues, expenseLaneTop, anchorIndices, expenseTitles);
 
     const debtLaneTop = expenseLaneTop + laneHeight + laneGap;
-    const debtSeries = makePath(debtValues, debtLaneTop, anchorIndices);
+    const debtTitles = days.map((d, i) => `${d.date}: ${this.formatShort(debtValues[i] ?? 0)}`);
+    const debtSeries = makePath(debtValues, debtLaneTop, anchorIndices, debtTitles);
 
     const lanes: Lane[] = [
       {
@@ -248,10 +306,11 @@ export class BalanceChartComponent {
         top: anchorLaneTop,
         midY: anchorLaneTop + laneHeight / 2,
         valueLabel: this.formatShort(anchorValues[lastAnchorIdx] ?? anchorValues[0] ?? 0),
-        path: anchorSeries.path,
-        className: 'series-anchor',
+        path: '',
+        className: '',
         pointClass: 'series-point series-point-anchor',
         points: anchorSeries.points,
+        bars: anchorBars,
       },
       {
         key: 'expenses',
