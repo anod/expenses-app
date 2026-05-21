@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import type { CardForecast, DailyProjection } from '@expenses/shared';
+import { paymentProgress, type DailyProjection, type RecurringTemplate } from '@expenses/shared';
 
 interface Lane {
   key: string;
@@ -123,9 +123,7 @@ interface ChartModel {
 })
 export class BalanceChartComponent {
   readonly days = input.required<readonly DailyProjection[]>();
-  readonly cards = input<readonly CardForecast[]>([]);
-  readonly threshold = input<number | null>(null);
-  readonly minBalanceDate = input<string | null>(null);
+  readonly templates = input<readonly RecurringTemplate[]>([]);
 
   protected readonly chart = computed<ChartModel>(() => {
     const days = this.days();
@@ -181,23 +179,39 @@ export class BalanceChartComponent {
 
     let expenseTotal = 0;
     const expenseValues = days.map((day) => {
+      let dayExpense = 0;
       for (const charge of day.charges) {
         if (charge.amount < 0 && charge.source.kind !== 'cc-bill') {
-          expenseTotal += Math.abs(charge.amount);
+          dayExpense += Math.abs(charge.amount);
         }
       }
-      return expenseTotal;
+      expenseTotal += dayExpense;
+      return dayExpense;
     });
     const expenseLaneTop = anchorLaneTop + laneHeight + laneGap;
     const expenseSeries = makePath(expenseValues, expenseLaneTop);
 
-    const debtByDate = new Map<string, number>();
-    for (const card of this.cards()) {
-      for (const day of card.days) {
-        debtByDate.set(day.date, (debtByDate.get(day.date) ?? 0) + day.outstanding);
+    const installmentStarts = this.templates()
+      .filter((t) => t.channel !== 'bank' && !!t.endDate)
+      .map((t) => {
+        const progress = paymentProgress(t, t.endDate!);
+        const totalPayments = progress?.total ?? 0;
+        return {
+          startDate: t.startDate,
+          principal: totalPayments > 1 ? Math.abs(t.amount) * totalPayments : 0,
+        };
+      })
+      .filter((x) => x.principal > 0)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    let loanTotal = 0;
+    let loanIdx = 0;
+    const debtValues = days.map((d) => {
+      while (loanIdx < installmentStarts.length && installmentStarts[loanIdx]!.startDate <= d.date) {
+        loanTotal += installmentStarts[loanIdx]!.principal;
+        loanIdx++;
       }
-    }
-    const debtValues = days.map((d) => debtByDate.get(d.date) ?? 0);
+      return loanTotal;
+    });
     const debtLaneTop = expenseLaneTop + laneHeight + laneGap;
     const debtSeries = makePath(debtValues, debtLaneTop);
 
@@ -217,13 +231,13 @@ export class BalanceChartComponent {
         label: 'Payments',
         top: expenseLaneTop,
         midY: expenseLaneTop + laneHeight / 2,
-        valueLabel: this.formatShort(expenseValues[expenseValues.length - 1] ?? 0),
+        valueLabel: this.formatShort(expenseTotal),
         path: expenseSeries.path,
         className: 'series-expenses',
       },
       {
         key: 'debt',
-        label: 'Debt',
+        label: 'Multi-pay debt',
         top: debtLaneTop,
         midY: debtLaneTop + laneHeight / 2,
         valueLabel: this.formatShort(debtValues[debtValues.length - 1] ?? 0),
