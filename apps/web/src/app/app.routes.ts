@@ -22,5 +22,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./expenses/expenses-table').then((m) => m.ExpensesTableComponent),
   },
+  {
+    path: 'esop',
+    loadComponent: () =>
+      import('./esop/esop-page').then((m) => m.EsopPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

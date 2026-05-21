@@ -55,6 +55,12 @@ const GraphFields = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   WORKSHEET_NAME: z.string().min(1).default('Sheet1'),
+  ESOP_WORKBOOK_URL: z
+    .string()
+    .url('ESOP_WORKBOOK_URL must be a URL')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  ESOP_WORKSHEET_NAME: z.string().min(1).default('ESOP'),
   GRAPH_BASE_URL: z.string().url().default('https://graph.microsoft.com/v1.0'),
   GRAPH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   // The audience our API expects in incoming Bearer tokens. Defaults to

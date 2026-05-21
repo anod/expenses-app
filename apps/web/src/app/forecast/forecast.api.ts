@@ -7,6 +7,7 @@ import type {
   LedgerEntry,
   RecurringTemplate,
   Settings,
+  EsopCalculationResult,
 } from '@expenses/shared';
 
 export interface MutationResult<T> {
@@ -134,4 +135,23 @@ export class ForecastApi {
       forecast: ForecastResult;
     }>('/api/import/excel', {});
   }
+
+  getEsop(params?: {
+    usdNisRate?: number;
+    currentPriceUsd?: number;
+    lockDownDays?: number;
+    incomeTaxRate?: number;
+    asOf?: string;
+  }) {
+    return this.http.get<EsopCalculationResult>('/api/esop', { params: queryParams(params) });
+  }
+}
+
+function queryParams(params: Record<string, string | number | undefined> | undefined): Record<string, string> {
+  if (!params) return {};
+  return Object.fromEntries(
+    Object.entries(params)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, String(value)]),
+  );
 }

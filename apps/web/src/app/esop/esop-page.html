@@ -1,0 +1,133 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1><span class="material-symbols-outlined">finance_mode</span> ESOP</h1>
+      <p>Estimate net sale proceeds from the ESOP workbook formulas.</p>
+    </div>
+    <button type="button" class="m3-btn m3-btn--tonal" (click)="resetWorkbookDefaults()" [disabled]="loading()">
+      <span class="material-symbols-outlined" [class.spin]="loading()">refresh</span>
+      Refresh workbook
+    </button>
+  </div>
+
+  <div class="notice">
+    <span class="material-symbols-outlined">info</span>
+    This mirrors the workbook calculation and is only an estimate, not tax advice.
+  </div>
+
+  @if (error(); as e) {
+    <div class="error" role="alert">
+      <span class="material-symbols-outlined">error</span>
+      {{ e }}
+    </div>
+  }
+
+  @if (loading() && !result()) {
+    <div class="loading">
+      <span class="material-symbols-outlined spin">progress_activity</span>
+      Loading ESOP workbook…
+    </div>
+  }
+
+  @if (result(); as esop) {
+    <form class="card assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
+      <h2>Assumptions</h2>
+      <div class="fields">
+        <label>
+          <span>USD/NIS rate</span>
+          <input type="number" step="0.0001" formControlName="usdNisRate" />
+        </label>
+        <label>
+          <span>Current stock price</span>
+          <input type="number" step="0.01" formControlName="currentPriceUsd" />
+        </label>
+        <label>
+          <span>Lock period days</span>
+          <input type="number" step="1" formControlName="lockDownDays" />
+        </label>
+        <label>
+          <span>Income tax rate</span>
+          <input type="number" step="0.01" min="0" max="1" formControlName="incomeTaxRate" />
+        </label>
+        <label>
+          <span>As of</span>
+          <input type="date" formControlName="asOf" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" class="m3-btn m3-btn--filled" [disabled]="loading() || assumptionsForm.invalid">
+          <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
+          Recalculate
+        </button>
+      </div>
+    </form>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span>Gross</span>
+        <strong>{{ nis(esop.totals.grossNis) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Income tax</span>
+        <strong>{{ nis(esop.totals.incomeTaxNis) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Stock tax</span>
+        <strong>{{ nis(esop.totals.stockTaxNis) }}</strong>
+      </div>
+      <div class="summary-card primary">
+        <span>Net</span>
+        <strong>{{ nis(esop.totals.netNis) }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Total tax</span>
+        <strong>{{ pct(esop.totals.effectiveTaxRate) }}</strong>
+      </div>
+    </div>
+
+    @if (esop.warnings.length > 0) {
+      <div class="warnings">
+        <strong>Warnings</strong>
+        @for (warning of esop.warnings; track warning) {
+          <div>{{ warning }}</div>
+        }
+      </div>
+    }
+
+    <div class="card table-card">
+      <h2>Grants</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Grant date</th>
+              <th>Age</th>
+              <th>Grant price</th>
+              <th>Amount</th>
+              <th>Gross</th>
+              <th>Income tax</th>
+              <th>Stock tax</th>
+              <th>Net</th>
+              <th>Tax %</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of esop.computed; track row.id) {
+              <tr>
+                <td>{{ row.grantDate }}</td>
+                <td>{{ row.ageDays }}d</td>
+                <td>{{ usd(row.grantPriceUsd) }}</td>
+                <td>{{ row.amount }}</td>
+                <td>{{ nis(row.grossNis) }}</td>
+                <td>{{ nis(row.incomeTaxNis) }}</td>
+                <td>{{ nis(row.stockTaxNis) }} <span class="muted">({{ pct(row.stockTaxRate) }})</span></td>
+                <td class="net">{{ nis(row.netNis) }}</td>
+                <td>{{ pct(row.effectiveTaxRate) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</section>

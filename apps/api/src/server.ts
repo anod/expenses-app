@@ -26,6 +26,8 @@ import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
 import { buildSyncRoutes } from './sync/routes.js';
 import { buildImportRoutes } from './import/routes.js';
+import { GraphEsopReader } from './esop/graphEsopReader.js';
+import { buildEsopRoutes } from './esop/routes.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -90,6 +92,7 @@ const isDemo = (): boolean => demoController.isActive();
 
 let graphReader: GraphReader | null = null;
 let excelWriter: ExcelWriter | null = null;
+let esopReader: GraphEsopReader | null = null;
 let graphResolver: WorkbookResolver | null = null;
 let graphClient: GraphClient | null = null;
 if (isGraphConfig(config)) {
@@ -113,6 +116,15 @@ if (isGraphConfig(config)) {
     log,
   });
   excelWriter = new ExcelWriter({ client: graphClient, resolver: graphResolver, log });
+  if (config.ESOP_WORKBOOK_URL) {
+    const esopResolver = new WorkbookResolver(graphClient, () => config.ESOP_WORKBOOK_URL, log);
+    esopReader = new GraphEsopReader({
+      client: graphClient,
+      resolver: esopResolver,
+      worksheetName: config.ESOP_WORKSHEET_NAME,
+      log,
+    });
+  }
 }
 
 const app = express();
@@ -253,6 +265,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
+  app.use('/api', conditionalBearer, conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
   log.info(
     { allowedOids: config.ALLOWED_OIDS.length },
     'REQUIRE_AUTH=true: forecast + sync routes gated by JWKS-validated Bearer',
@@ -265,6 +278,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
+  app.use('/api', conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
 }
 
 app.get('/api/expenses', graphOrDump(), conditionalGraphToken, async (req, res, next) => {
