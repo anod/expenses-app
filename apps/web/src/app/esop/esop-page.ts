@@ -30,7 +30,7 @@ export class EsopPageComponent {
     asOf: ['', [Validators.required]],
   });
   protected readonly marketForm = this.fb.nonNullable.group({
-    stockSymbol: ['MNDY', [Validators.required]],
+    stockSymbol: ['MSFT', [Validators.required]],
     fxSymbol: ['USDILS=X', [Validators.required]],
   });
 
@@ -76,15 +76,26 @@ export class EsopPageComponent {
     this.error.set(null);
     this.marketMessage.set(null);
     try {
-      const quote = await firstValueFrom(this.api.getEsopMarket(this.marketForm.getRawValue()));
-      this.assumptionsForm.patchValue({
-        usdNisRate: quote.usdNisRate,
-        currentPriceUsd: quote.currentPriceUsd,
+      const overrides = this.assumptionOverrides();
+      const update = await firstValueFrom(
+        this.api.updateEsopMarket({
+          ...this.marketForm.getRawValue(),
+          lockDownDays: overrides.lockDownDays,
+          incomeTaxRate: overrides.incomeTaxRate,
+          asOf: overrides.asOf,
+        }),
+      );
+      this.result.set(update.esop);
+      this.assumptionsForm.setValue({
+        usdNisRate: update.esop.assumptions.usdNisRate,
+        currentPriceUsd: update.esop.assumptions.currentPriceUsd,
+        lockDownDays: update.esop.assumptions.lockDownDays,
+        incomeTaxRate: update.esop.assumptions.incomeTaxRate,
+        asOf: update.esop.assumptions.asOf,
       });
       this.marketMessage.set(
-        `Updated ${quote.stock.symbol} and ${quote.fx.symbol} from Yahoo Finance.`,
+        `Updated workbook market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
       );
-      await this.load(true);
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {

@@ -155,6 +155,22 @@ export class ForecastApi {
       fetchedAt: string;
     }>('/api/esop/market', { params: queryParams(params) });
   }
+
+  updateEsopMarket(params: {
+    stockSymbol: string;
+    fxSymbol: string;
+    lockDownDays?: number;
+    incomeTaxRate?: number;
+    asOf?: string;
+  }) {
+    return this.http.post<{
+      stock: { symbol: string; price: number; currency: string | null; fetchedAt: string };
+      fx: { symbol: string; price: number; currency: string | null; fetchedAt: string };
+      applied: { usdNisRate: number; currentPriceUsd: number };
+      esop: EsopCalculationResult;
+      fetchedAt: string;
+    }>('/api/esop/market/update', params);
+  }
 }
 
 function queryParams(params: Record<string, string | number | undefined> | undefined): Record<string, string> {

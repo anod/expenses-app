@@ -34,6 +34,13 @@ Run from the repo root unless noted.
 Web has no test runner wired up; Angular `ng test` is not configured. Don't
 add one unless asked.
 
+## Agent workflow
+
+- Always create and work from a dedicated git worktree for each task/session,
+  rather than editing the shared checkout directly. This avoids conflicts with
+  other local or agent sessions. Use a unique branch/worktree name, and only
+  merge/push back to `main` after the task is complete and validated.
+
 ## Architecture (the parts that span files)
 
 - **Two data sources, one API.** `EXPENSES_SOURCE` selects between `dump`

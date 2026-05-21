@@ -21,7 +21,8 @@ function needsGraphToken(url: string): boolean {
     GRAPH_PASSTHROUGH_PREFIXES.some((p) => url.startsWith(p)) ||
     url === '/api/esop' ||
     url.startsWith('/api/esop?') ||
-    url.startsWith('/api/esop/status')
+    url.startsWith('/api/esop/status') ||
+    url.startsWith('/api/esop/market/update')
   );
 }
 
