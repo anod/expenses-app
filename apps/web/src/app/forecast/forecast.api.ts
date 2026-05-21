@@ -145,6 +145,16 @@ export class ForecastApi {
   }) {
     return this.http.get<EsopCalculationResult>('/api/esop', { params: queryParams(params) });
   }
+
+  getEsopMarket(params: { stockSymbol: string; fxSymbol: string }) {
+    return this.http.get<{
+      stock: { symbol: string; price: number; currency: string | null; fetchedAt: string };
+      fx: { symbol: string; price: number; currency: string | null; fetchedAt: string };
+      currentPriceUsd: number;
+      usdNisRate: number;
+      fetchedAt: string;
+    }>('/api/esop/market', { params: queryParams(params) });
+  }
 }
 
 function queryParams(params: Record<string, string | number | undefined> | undefined): Record<string, string> {

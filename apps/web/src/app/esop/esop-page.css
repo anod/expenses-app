@@ -66,14 +66,69 @@
 }
 
 .card h2 {
-  margin: 0 0 1rem;
+  margin: 0;
   font: var(--md-sys-typescale-title-large);
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.card-title p {
+  margin: 0.25rem 0 0;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.price-field input {
+  font: var(--md-sys-typescale-headline-small);
+  padding: 0.85rem 1rem;
+}
+
+.market-tools {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 45%, transparent);
+}
+
+.market-message {
+  margin-top: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.advanced {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  padding-top: 0.75rem;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-large);
+}
+
+.compact {
+  margin-top: 0.75rem;
 }
 
 label {
@@ -168,5 +223,10 @@ td {
 @media (max-width: 720px) {
   .page-head {
     display: grid;
+  }
+
+  .market-grid,
+  .market-tools {
+    grid-template-columns: 1fr;
   }
 }

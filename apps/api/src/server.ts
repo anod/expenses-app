@@ -265,7 +265,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
-  app.use('/api', conditionalBearer, conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
+  app.use('/api', conditionalBearer, buildEsopRoutes(esopReader, isDemo));
   log.info(
     { allowedOids: config.ALLOWED_OIDS.length },
     'REQUIRE_AUTH=true: forecast + sync routes gated by JWKS-validated Bearer',
@@ -278,7 +278,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
-  app.use('/api', conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
+  app.use('/api', buildEsopRoutes(esopReader, isDemo));
 }
 
 app.get('/api/expenses', graphOrDump(), conditionalGraphToken, async (req, res, next) => {

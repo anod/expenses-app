@@ -14,11 +14,15 @@ const GRAPH_PASSTHROUGH_PREFIXES: ReadonlyArray<string> = [
   '/api/workbook/',
   '/api/import/',
   '/api/sync/',
-  '/api/esop',
 ];
 
 function needsGraphToken(url: string): boolean {
-  return GRAPH_PASSTHROUGH_PREFIXES.some((p) => url.startsWith(p));
+  return (
+    GRAPH_PASSTHROUGH_PREFIXES.some((p) => url.startsWith(p)) ||
+    url === '/api/esop' ||
+    url.startsWith('/api/esop?') ||
+    url.startsWith('/api/esop/status')
+  );
 }
 
 function applyHeaders(

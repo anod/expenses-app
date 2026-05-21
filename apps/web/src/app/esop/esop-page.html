@@ -31,29 +31,66 @@
 
   @if (result(); as esop) {
     <form class="card assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
-      <h2>Assumptions</h2>
-      <div class="fields">
-        <label>
+      <div class="card-title">
+        <div>
+          <h2>Price assumptions</h2>
+          <p>Use workbook values, edit manually, or update rate and stock price from Yahoo Finance.</p>
+        </div>
+      </div>
+
+      <div class="market-grid">
+        <label class="price-field">
           <span>USD/NIS rate</span>
           <input type="number" step="0.0001" formControlName="usdNisRate" />
         </label>
-        <label>
+        <label class="price-field">
           <span>Current stock price</span>
           <input type="number" step="0.01" formControlName="currentPriceUsd" />
         </label>
-        <label>
-          <span>Lock period days</span>
-          <input type="number" step="1" formControlName="lockDownDays" />
-        </label>
-        <label>
-          <span>Income tax rate</span>
-          <input type="number" step="0.01" min="0" max="1" formControlName="incomeTaxRate" />
-        </label>
-        <label>
-          <span>As of</span>
-          <input type="date" formControlName="asOf" />
-        </label>
       </div>
+
+      <div class="market-tools" [formGroup]="marketForm">
+        <label>
+          <span>Stock ticker</span>
+          <input type="text" formControlName="stockSymbol" />
+        </label>
+        <label>
+          <span>FX ticker</span>
+          <input type="text" formControlName="fxSymbol" />
+        </label>
+        <button
+          type="button"
+          class="m3-btn m3-btn--tonal"
+          (click)="updateMarketInputs()"
+          [disabled]="loading() || marketLoading() || marketForm.invalid"
+        >
+          <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
+          Update market values
+        </button>
+      </div>
+
+      @if (marketMessage(); as message) {
+        <div class="market-message">{{ message }}</div>
+      }
+
+      <details class="advanced">
+        <summary>Workbook tax settings</summary>
+        <div class="fields compact">
+          <label>
+            <span>Lock period days</span>
+            <input type="number" step="1" formControlName="lockDownDays" />
+          </label>
+          <label>
+            <span>Income tax rate</span>
+            <input type="number" step="0.01" min="0" max="1" formControlName="incomeTaxRate" />
+          </label>
+          <label>
+            <span>As of</span>
+            <input type="date" formControlName="asOf" />
+          </label>
+        </div>
+      </details>
+
       <div class="actions">
         <button type="submit" class="m3-btn m3-btn--filled" [disabled]="loading() || assumptionsForm.invalid">
           <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>

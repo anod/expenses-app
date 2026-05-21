@@ -18,7 +18,9 @@ export class EsopPageComponent {
 
   protected readonly result = signal<EsopCalculationResult | null>(null);
   protected readonly loading = signal(true);
+  protected readonly marketLoading = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly marketMessage = signal<string | null>(null);
 
   protected readonly assumptionsForm = this.fb.nonNullable.group({
     usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
@@ -26,6 +28,10 @@ export class EsopPageComponent {
     lockDownDays: [730, [Validators.required, Validators.min(1)]],
     incomeTaxRate: [0.55, [Validators.required, Validators.min(0), Validators.max(1)]],
     asOf: ['', [Validators.required]],
+  });
+  protected readonly marketForm = this.fb.nonNullable.group({
+    stockSymbol: ['MNDY', [Validators.required]],
+    fxSymbol: ['USDILS=X', [Validators.required]],
   });
 
   protected readonly totals = computed(() => this.result()?.totals ?? null);
@@ -62,6 +68,28 @@ export class EsopPageComponent {
 
   protected async resetWorkbookDefaults(): Promise<void> {
     await this.load(false);
+  }
+
+  protected async updateMarketInputs(): Promise<void> {
+    if (this.marketForm.invalid) return;
+    this.marketLoading.set(true);
+    this.error.set(null);
+    this.marketMessage.set(null);
+    try {
+      const quote = await firstValueFrom(this.api.getEsopMarket(this.marketForm.getRawValue()));
+      this.assumptionsForm.patchValue({
+        usdNisRate: quote.usdNisRate,
+        currentPriceUsd: quote.currentPriceUsd,
+      });
+      this.marketMessage.set(
+        `Updated ${quote.stock.symbol} and ${quote.fx.symbol} from Yahoo Finance.`,
+      );
+      await this.load(true);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.marketLoading.set(false);
+    }
   }
 
   protected nis(value: number | null | undefined): string {

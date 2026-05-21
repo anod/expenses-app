@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z, ZodError } from 'zod';
 import type { GraphEsopReader, EsopOverrides } from './graphEsopReader.js';
+import { fetchYahooQuote } from './marketData.js';
 
 const Query = z.object({
   usdNisRate: z.coerce.number().positive().optional(),
@@ -10,11 +11,39 @@ const Query = z.object({
   asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+const MarketQuery = z.object({
+  stockSymbol: z.string().trim().min(1).default('MNDY'),
+  fxSymbol: z.string().trim().min(1).default('USDILS=X'),
+});
+
 export const buildEsopRoutes = (
   reader: GraphEsopReader | null,
   isDemo: () => boolean,
 ): Router => {
   const router = Router();
+
+  router.get('/esop/market', async (req, res, next) => {
+    try {
+      const query = MarketQuery.parse(req.query);
+      const [stock, fx] = await Promise.all([
+        fetchYahooQuote(query.stockSymbol),
+        fetchYahooQuote(query.fxSymbol),
+      ]);
+      res.json({
+        stock,
+        fx,
+        currentPriceUsd: stock.price,
+        usdNisRate: fx.price,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: 'VALIDATION', issues: err.issues });
+        return;
+      }
+      next(err);
+    }
+  });
 
   router.get('/esop', async (req, res, next) => {
     try {
