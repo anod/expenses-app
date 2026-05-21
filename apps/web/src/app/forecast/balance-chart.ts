@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { paymentProgress, type DailyProjection, type RecurringTemplate } from '@expenses/shared';
+import type { DailyProjection, RecurringTemplate } from '@expenses/shared';
 
 interface Lane {
   key: string;
@@ -9,6 +9,7 @@ interface Lane {
   valueLabel: string;
   path: string;
   className: string;
+  pointClass?: string;
   points?: ReadonlyArray<{ x: number; y: number }>;
 }
 
@@ -55,7 +56,7 @@ interface ChartModel {
           <path [attr.d]="lane.path" [attr.class]="lane.className" />
           @if (lane.points; as pts) {
             @for (pt of pts; track $index) {
-              <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" class="anchor-point" />
+              <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3" [attr.class]="lane.pointClass ?? 'series-point'" />
             }
           }
         </g>
@@ -114,10 +115,18 @@ interface ChartModel {
       stroke-linejoin: round;
       stroke-linecap: round;
     }
-    .anchor-point {
-      fill: var(--md-sys-color-primary);
+    .series-point {
       stroke: var(--md-sys-color-surface);
       stroke-width: 1.5;
+    }
+    .series-point-anchor {
+      fill: var(--md-sys-color-primary);
+    }
+    .series-point-expenses {
+      fill: var(--md-sys-color-secondary);
+    }
+    .series-point-debt {
+      fill: var(--md-sys-color-tertiary);
     }
   `],
 })
@@ -177,43 +186,37 @@ export class BalanceChartComponent {
     const anchorSeries = makePath(anchorValues, anchorLaneTop, anchorIndices);
     const lastAnchorIdx = anchorIndices[anchorIndices.length - 1] ?? 0;
 
-    let expenseTotal = 0;
-    const expenseValues = days.map((day) => {
-      let dayExpense = 0;
+    const templateById = new Map(this.templates().map((t) => [t.id, t]));
+    let spendInPeriod = 0;
+    let splitCcInPeriod = 0;
+    const expenseValues = new Array<number>(days.length).fill(0);
+    const debtValues = new Array<number>(days.length).fill(0);
+    days.forEach((day, i) => {
       for (const charge of day.charges) {
         if (charge.amount < 0 && charge.source.kind !== 'cc-bill') {
-          dayExpense += Math.abs(charge.amount);
+          const outflow = Math.abs(charge.amount);
+          spendInPeriod += outflow;
+          const recurringId =
+            charge.source.kind === 'ledger' ? charge.source.recurringId : undefined;
+          const template = recurringId ? templateById.get(recurringId) : undefined;
+          if (template && template.channel !== 'bank' && template.endDate) {
+            splitCcInPeriod += outflow;
+          }
         }
       }
-      expenseTotal += dayExpense;
-      return dayExpense;
-    });
-    const expenseLaneTop = anchorLaneTop + laneHeight + laneGap;
-    const expenseSeries = makePath(expenseValues, expenseLaneTop);
-
-    const installmentStarts = this.templates()
-      .filter((t) => t.channel !== 'bank' && !!t.endDate)
-      .map((t) => {
-        const progress = paymentProgress(t, t.endDate!);
-        const totalPayments = progress?.total ?? 0;
-        return {
-          startDate: t.startDate,
-          principal: totalPayments > 1 ? Math.abs(t.amount) * totalPayments : 0,
-        };
-      })
-      .filter((x) => x.principal > 0)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
-    let loanTotal = 0;
-    let loanIdx = 0;
-    const debtValues = days.map((d) => {
-      while (loanIdx < installmentStarts.length && installmentStarts[loanIdx]!.startDate <= d.date) {
-        loanTotal += installmentStarts[loanIdx]!.principal;
-        loanIdx++;
+      if (day.isAnchor) {
+        expenseValues[i] = spendInPeriod;
+        debtValues[i] = splitCcInPeriod;
+        spendInPeriod = 0;
+        splitCcInPeriod = 0;
       }
-      return loanTotal;
     });
+    const expenseTotal = expenseValues[lastAnchorIdx] ?? expenseValues[0] ?? 0;
+    const expenseLaneTop = anchorLaneTop + laneHeight + laneGap;
+    const expenseSeries = makePath(expenseValues, expenseLaneTop, anchorIndices);
+
     const debtLaneTop = expenseLaneTop + laneHeight + laneGap;
-    const debtSeries = makePath(debtValues, debtLaneTop);
+    const debtSeries = makePath(debtValues, debtLaneTop, anchorIndices);
 
     const lanes: Lane[] = [
       {
@@ -224,25 +227,30 @@ export class BalanceChartComponent {
         valueLabel: this.formatShort(anchorValues[lastAnchorIdx] ?? anchorValues[0] ?? 0),
         path: anchorSeries.path,
         className: 'series-anchor',
+        pointClass: 'series-point series-point-anchor',
         points: anchorSeries.points,
       },
       {
         key: 'expenses',
-        label: 'Payments',
+        label: 'Spending @ anchor',
         top: expenseLaneTop,
         midY: expenseLaneTop + laneHeight / 2,
         valueLabel: this.formatShort(expenseTotal),
         path: expenseSeries.path,
         className: 'series-expenses',
+        pointClass: 'series-point series-point-expenses',
+        points: expenseSeries.points,
       },
       {
         key: 'debt',
-        label: 'Multi-pay debt',
+        label: 'Split CC @ anchor',
         top: debtLaneTop,
         midY: debtLaneTop + laneHeight / 2,
-        valueLabel: this.formatShort(debtValues[debtValues.length - 1] ?? 0),
+        valueLabel: this.formatShort(debtValues[lastAnchorIdx] ?? debtValues[0] ?? 0),
         path: debtSeries.path,
         className: 'series-debt',
+        pointClass: 'series-point series-point-debt',
+        points: debtSeries.points,
       },
     ];
 
