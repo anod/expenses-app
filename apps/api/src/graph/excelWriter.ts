@@ -146,12 +146,12 @@ export const renderAnchorSheet = (state: SyncState): SheetGrid => {
     r.values[colIdx] = (r.values[colIdx] ?? 0) + v;
   };
 
-  // Recurring → expand exportable templates to concrete occurrences and bucket
-  // them back into the anchor periods they belong to.
-  const exportableTemplates = state.recurring.filter((t) => t.cadence.kind !== 'weekly');
-  const recurringById = new Map(exportableTemplates.map((t) => [t.id, t]));
+  // Recurring → expand templates to concrete occurrences and bucket them back
+  // into the anchor periods they belong to. Weekly templates contribute the
+  // sum of all occurrences inside each anchor period.
+  const recurringById = new Map(state.recurring.map((t) => [t.id, t]));
   const recurringOccurrences = expandRecurring(
-    exportableTemplates,
+    state.recurring,
     anchors[0]!,
     anchors[anchors.length - 1]!,
   );

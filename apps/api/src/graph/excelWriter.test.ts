@@ -166,6 +166,24 @@ describe('renderAnchorSheet', () => {
     expect(row?.slice(3)).toEqual([-132, '', -132, '']);
   });
 
+  it('aggregates weekly templates into each anchor period', () => {
+    const grid = renderAnchorSheet(makeState({
+      recurring: [{
+        id: 'psych',
+        description: '[cal] психолог',
+        amount: -200,
+        channel: 'cc:cal',
+        cadence: { kind: 'weekly', dayOfWeek: 5 },
+        startDate: '2026-05-15',
+      }],
+      ledger: [],
+    }));
+    const row = grid.find((r) => r[2] === 'психолог');
+    expect(row?.[0]).toBe('cal');
+    expect(row?.[1]).toBe('');
+    expect(row?.slice(3)).toEqual([-800, -1000, -800, '']);
+  });
+
   it('balance row carries forward (each anchor = prior + sum of prior column)', () => {
     const s = makeState({
       account: { bankBalance: 1000, asOf: '2026-05-10' },
