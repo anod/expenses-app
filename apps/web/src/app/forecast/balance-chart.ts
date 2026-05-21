@@ -8,17 +8,25 @@ interface ChartPoint {
   balance: number;
 }
 
+interface LegendItem {
+  key: string;
+  label: string;
+  className: string;
+}
+
 interface ChartModel {
   width: number;
   height: number;
   pad: { top: number; right: number; bottom: number; left: number };
   innerW: number;
   innerH: number;
+  legend: LegendItem[];
   points: ChartPoint[];
   linePath: string;
   areaPath: string;
-  trendPath?: string;
-  trendSlopePerMonth?: number;
+  anchorTrendPath?: string;
+  expenseTrendPath?: string;
+  creditPaymentsPath?: string;
   minBalance: number;
   maxBalance: number;
   threshold?: number;
@@ -34,6 +42,16 @@ interface ChartModel {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    @if (chart().legend.length > 0) {
+      <div class="chart-legend" aria-label="Chart legend">
+        @for (item of chart().legend; track item.key) {
+          <span class="legend-item">
+            <span class="legend-swatch" [class]="item.className"></span>
+            {{ item.label }}
+          </span>
+        }
+      </div>
+    }
     <svg
       class="balance-chart"
       [attr.viewBox]="'0 0 ' + chart().width + ' ' + chart().height"
@@ -94,15 +112,14 @@ interface ChartModel {
 
       <!-- Area -->
       <path [attr.d]="chart().areaPath" fill="url(#balance-area-gradient)" />
-      <!-- Trend line (linear regression) -->
-      @if (chart().trendPath; as tp) {
-        <path [attr.d]="tp" class="trend" />
-        <text
-          [attr.x]="chart().width - chart().pad.right - 4"
-          [attr.y]="chart().pad.top + 12"
-          text-anchor="end"
-          class="trend-label"
-        >trend {{ chart().trendSlopePerMonth! >= 0 ? '+' : '' }}{{ formatShort(chart().trendSlopePerMonth!) }}/mo</text>
+      @if (chart().anchorTrendPath; as ap) {
+        <path [attr.d]="ap" class="anchor-trend" />
+      }
+      @if (chart().expenseTrendPath; as ep) {
+        <path [attr.d]="ep" class="expense-trend" />
+      }
+      @if (chart().creditPaymentsPath; as cp) {
+        <path [attr.d]="cp" class="credit-payments-trend" />
       }
       <!-- Line -->
       <path [attr.d]="chart().linePath" class="line" />
@@ -126,6 +143,38 @@ interface ChartModel {
   `,
   styles: [`
     :host { display: block; width: 100%; }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      margin: 0 0 0.35rem;
+      color: var(--md-sys-color-on-surface-variant);
+      font-size: 12px;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+    .legend-swatch {
+      width: 18px;
+      height: 0;
+      border-top-width: 2px;
+      border-top-style: solid;
+      border-radius: 999px;
+      opacity: 0.95;
+    }
+    .legend-swatch.balance-line { border-top-color: var(--md-sys-color-primary); }
+    .legend-swatch.anchor-line { border-top-color: var(--md-sys-color-tertiary); }
+    .legend-swatch.expense-line {
+      border-top-color: var(--md-sys-color-secondary);
+      border-top-style: dashed;
+    }
+    .legend-swatch.credit-line {
+      border-top-color: var(--md-sys-color-error);
+      border-top-style: dashed;
+    }
     .balance-chart {
       display: block;
       width: 100%;
@@ -148,17 +197,27 @@ interface ChartModel {
       stroke-linejoin: round;
       stroke-linecap: round;
     }
-    .trend {
+    .anchor-trend {
       fill: none;
       stroke: var(--md-sys-color-tertiary);
+      stroke-width: 1.75;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      opacity: 0.75;
+    }
+    .expense-trend {
+      fill: none;
+      stroke: var(--md-sys-color-secondary);
       stroke-width: 1.5;
       stroke-dasharray: 6 4;
-      opacity: 0.85;
+      opacity: 0.9;
     }
-    .trend-label {
-      fill: var(--md-sys-color-tertiary);
-      font-size: 10px;
-      font-weight: 500;
+    .credit-payments-trend {
+      fill: none;
+      stroke: var(--md-sys-color-error);
+      stroke-width: 1.5;
+      stroke-dasharray: 3 4;
+      opacity: 0.8;
     }
     .threshold {
       stroke: var(--md-sys-color-error);
@@ -204,6 +263,7 @@ export class BalanceChartComponent {
     if (days.length === 0) {
       return {
         width, height, pad, innerW, innerH,
+        legend: [],
         points: [], linePath: '', areaPath: '',
         minBalance: 0, maxBalance: 0,
         anchors: [], xLabels: [], yLabels: [],
@@ -212,17 +272,51 @@ export class BalanceChartComponent {
 
     const balances = days.map((d) => d.balance);
     const threshold = this.threshold();
-    const candidates = threshold != null ? [...balances, threshold, 0] : [...balances, 0];
-    let minB = Math.min(...candidates);
-    let maxB = Math.max(...candidates);
+    const n = days.length;
+    const xOf = (i: number) =>
+      pad.left + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1));
+
+    const openingBalance = balances[0]!;
+    let expenseBalance = openingBalance;
+    let creditPaymentsBalance = openingBalance;
+    let hasExpenseTrend = false;
+    let hasCreditPayments = false;
+    const expenseTrendValues: number[] = [];
+    const creditPaymentsValues: number[] = [];
+    for (const day of days) {
+      let expenseOutflow = 0;
+      let creditPaymentOutflow = 0;
+      for (const charge of day.charges) {
+        if (charge.amount >= 0) continue;
+        const outflow = Math.abs(charge.amount);
+        if (charge.source.kind === 'cc-bill') {
+          creditPaymentOutflow += outflow;
+        } else {
+          expenseOutflow += outflow;
+        }
+      }
+      if (expenseOutflow > 0) hasExpenseTrend = true;
+      if (creditPaymentOutflow > 0) hasCreditPayments = true;
+      expenseBalance -= expenseOutflow;
+      creditPaymentsBalance -= creditPaymentOutflow;
+      expenseTrendValues.push(expenseBalance);
+      creditPaymentsValues.push(creditPaymentsBalance);
+    }
+
+    const overlayCandidates = [
+      ...balances,
+      ...(hasExpenseTrend ? expenseTrendValues : []),
+      ...(hasCreditPayments ? creditPaymentsValues : []),
+      ...(threshold != null ? [threshold] : []),
+      0,
+    ];
+    let minB = Math.min(...overlayCandidates);
+    let maxB = Math.max(...overlayCandidates);
     if (minB === maxB) { minB -= 1; maxB += 1; }
     const padR = (maxB - minB) * 0.1;
     minB -= padR;
     maxB += padR;
 
-    const n = days.length;
-    const xOf = (i: number) =>
-      pad.left + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1));
     const yOf = (v: number) =>
       pad.top + innerH - ((v - minB) / (maxB - minB)) * innerH;
 
@@ -246,29 +340,17 @@ export class BalanceChartComponent {
       ` L${last.x.toFixed(1)},${bottom.toFixed(1)} Z`;
 
     const anchors = points.filter((_, i) => days[i]!.isAnchor);
-
-    // Linear regression of balance over day index (least-squares).
-    // Drawn as a dashed line — slope shows whether balance is trending up
-    // or down ("expense trend").
-    let trendPath: string | undefined;
-    let trendSlopePerMonth: number | undefined;
-    if (n >= 2) {
-      const meanX = (n - 1) / 2;
-      const meanY = balances.reduce((s, v) => s + v, 0) / n;
-      let num = 0;
-      let den = 0;
-      for (let i = 0; i < n; i++) {
-        const dx = i - meanX;
-        num += dx * (balances[i]! - meanY);
-        den += dx * dx;
-      }
-      const slope = den === 0 ? 0 : num / den;     // per-day
-      const intercept = meanY - slope * meanX;
-      const y0 = intercept;
-      const y1 = intercept + slope * (n - 1);
-      trendPath = `M${xOf(0).toFixed(1)},${yOf(y0).toFixed(1)} L${xOf(n - 1).toFixed(1)},${yOf(y1).toFixed(1)}`;
-      trendSlopePerMonth = slope * 30;
-    }
+    const pathOf = (vals: readonly number[]): string =>
+      vals
+        .map((v, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`)
+        .join(' ');
+    const anchorTrendPath = anchors.length >= 2
+      ? anchors
+          .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+          .join(' ')
+      : undefined;
+    const expenseTrendPath = hasExpenseTrend ? pathOf(expenseTrendValues) : undefined;
+    const creditPaymentsPath = hasCreditPayments ? pathOf(creditPaymentsValues) : undefined;
 
     const minDate = this.minBalanceDate();
     const minPoint = minDate ? points.find((p) => p.date === minDate) : undefined;
@@ -294,9 +376,16 @@ export class BalanceChartComponent {
 
     return {
       width, height, pad, innerW, innerH,
+      legend: [
+        { key: 'balance', label: 'balance', className: 'balance-line' },
+        ...(anchorTrendPath ? [{ key: 'anchors', label: 'anchors', className: 'anchor-line' }] : []),
+        ...(expenseTrendPath ? [{ key: 'expenses', label: 'expenses', className: 'expense-line' }] : []),
+        ...(creditPaymentsPath ? [{ key: 'credit', label: 'credit payments', className: 'credit-line' }] : []),
+      ],
       points, linePath, areaPath,
-      ...(trendPath ? { trendPath } : {}),
-      ...(trendSlopePerMonth != null ? { trendSlopePerMonth } : {}),
+      ...(anchorTrendPath ? { anchorTrendPath } : {}),
+      ...(expenseTrendPath ? { expenseTrendPath } : {}),
+      ...(creditPaymentsPath ? { creditPaymentsPath } : {}),
       minBalance: Math.min(...balances),
       maxBalance: Math.max(...balances),
       ...(threshold != null ? { threshold, thresholdY: yOf(threshold) } : {}),
