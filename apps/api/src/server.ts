@@ -133,6 +133,19 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '100kb' }));
 
+// API responses are live application state, not cacheable assets. When the
+// browser revalidates them with If-None-Match, Express may answer 304 and the
+// fetch-based Angular client then has no JSON body to parse. Force fresh JSON
+// responses for every /api/* request.
+app.use('/api', (req, res, next) => {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 app.get('/healthz', (_req, res) => {
   res.json({
     status: 'ok',
