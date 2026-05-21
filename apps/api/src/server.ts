@@ -245,7 +245,7 @@ const conditionalGraphToken = (
   res: Response,
   next: NextFunction,
 ): void => {
-  if (isDemo() || !isGraphConfig(config)) {
+  if (isDemo() || !isGraphConfig(config) || !needsGraphPassthroughToken(req.path)) {
     next();
     return;
   }
@@ -424,4 +424,15 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 function graphOrDump() {
   if (isGraphConfig(config)) return conditionalBearer;
   return (_req: Request, _res: Response, next: NextFunction) => next();
+}
+
+function needsGraphPassthroughToken(path: string): boolean {
+  return (
+    path === '/expenses' ||
+    path.startsWith('/workbook/') ||
+    path.startsWith('/import/') ||
+    path.startsWith('/sync/') ||
+    path === '/esop' ||
+    path.startsWith('/esop/status')
+  );
 }
