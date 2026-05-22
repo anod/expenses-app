@@ -40,6 +40,9 @@ add one unless asked.
   rather than editing the shared checkout directly. This avoids conflicts with
   other local or agent sessions. Use a unique branch/worktree name, and only
   merge/push back to `main` after the task is complete and validated.
+- After a task branch is merged to `main`, clean up its dedicated worktree and
+  delete the merged local and remote task branches. Prune stale worktree and
+  remote-tracking refs as part of the cleanup.
 
 ## Architecture (the parts that span files)
 
