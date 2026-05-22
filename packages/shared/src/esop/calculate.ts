@@ -4,6 +4,7 @@ import type {
   EsopComputedGrant,
   EsopGrant,
   EsopTotals,
+  EsopUnblockForecast,
 } from './types.js';
 
 const CAPITAL_GAINS_TAX_RATE = 0.25;
@@ -28,11 +29,13 @@ export function calculateEsop(
     calculateGrant(grant, normalizedAssumptions, asOf, warnings),
   );
   const totals = computeTotals(computed);
+  const unblockForecasts = computeUnblockForecasts(grants, normalizedAssumptions, totals);
   return {
     assumptions: normalizedAssumptions,
     grants,
     computed,
     totals,
+    unblockForecasts,
     warnings,
   };
 }
@@ -91,6 +94,102 @@ function computeTotals(rows: EsopComputedGrant[]): EsopTotals {
     ...totals,
     effectiveTaxRate: totals.grossNis === 0 ? null : 1 - totals.netNis / totals.grossNis,
   };
+}
+
+function computeUnblockForecasts(
+  grants: EsopGrant[],
+  assumptions: EsopAssumptions,
+  currentTotals: EsopTotals,
+): EsopUnblockForecast[] {
+  const may31Amount = sumUnblockAmounts(grants, 'unblockMay31Amount');
+  const aug31Amount = sumUnblockAmounts(grants, 'unblockAug31Amount');
+  if (may31Amount === 0 && aug31Amount === 0) return [];
+
+  const may31Date = assumptions.unblockMay31Date ?? nextMilestoneDate(assumptions.asOf, 5, 31);
+  const aug31Date = assumptions.unblockAug31Date ?? nextMilestoneDate(assumptions.asOf, 8, 31);
+  const may31 = calculateForecastMilestone(
+    grants,
+    assumptions,
+    may31Date,
+    may31Amount,
+    (grant) => grant.amount + (grant.unblockMay31Amount ?? 0),
+  );
+  const aug31 = calculateForecastMilestone(
+    grants,
+    assumptions,
+    aug31Date,
+    may31Amount + aug31Amount,
+    (grant) => grant.amount + (grant.unblockMay31Amount ?? 0) + (grant.unblockAug31Amount ?? 0),
+  );
+
+  return [
+    {
+      id: 'may31',
+      label: 'After May 31',
+      asOf: may31Date,
+      unlockedAmount: may31Amount,
+      totalAmount: may31.totalAmount,
+      sumNis: may31.totals.grossNis,
+      netNis: may31.totals.netNis,
+      sumDeltaNis: may31.totals.grossNis - currentTotals.grossNis,
+      netDeltaNis: may31.totals.netNis - currentTotals.netNis,
+    },
+    {
+      id: 'aug31',
+      label: 'After Aug 31',
+      asOf: aug31Date,
+      unlockedAmount: may31Amount + aug31Amount,
+      totalAmount: aug31.totalAmount,
+      sumNis: aug31.totals.grossNis,
+      netNis: aug31.totals.netNis,
+      sumDeltaNis: aug31.totals.grossNis - currentTotals.grossNis,
+      netDeltaNis: aug31.totals.netNis - currentTotals.netNis,
+    },
+  ];
+}
+
+function calculateForecastMilestone(
+  grants: EsopGrant[],
+  assumptions: EsopAssumptions,
+  asOf: string,
+  unlockedAmount: number,
+  amountForGrant: (grant: EsopGrant) => number,
+): { totals: EsopTotals; totalAmount: number } {
+  const forecastGrants = unlockedAmount === 0 ? grants : grants.map((grant) => ({
+    ...grant,
+    amount: amountForGrant(grant),
+  }));
+  const date = parseIsoDate(asOf);
+  if (!date) {
+    throw new Error(`Invalid ESOP forecast date: ${asOf}`);
+  }
+  const warnings: string[] = [];
+  const computed = forecastGrants.map((grant) =>
+    calculateGrant(grant, { ...assumptions, asOf }, date, warnings),
+  );
+  const totals = computeTotals(computed);
+  return { totals, totalAmount: sumAmounts(forecastGrants) };
+}
+
+function sumUnblockAmounts(
+  grants: EsopGrant[],
+  key: 'unblockMay31Amount' | 'unblockAug31Amount',
+): number {
+  return grants.reduce((sum, grant) => sum + (grant[key] ?? 0), 0);
+}
+
+function sumAmounts(grants: EsopGrant[]): number {
+  return grants.reduce((sum, grant) => sum + grant.amount, 0);
+}
+
+function nextMilestoneDate(asOf: string, month: number, day: number): string {
+  const year = Number(asOf.slice(0, 4));
+  const candidate = isoDate(year, month, day);
+  return candidate >= asOf ? candidate : isoDate(year + 1, month, day);
+}
+
+function isoDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function parseIsoDate(value: string): Date | null {

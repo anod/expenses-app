@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
-import type { EsopCalculationResult } from '@expenses/shared';
+import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 
 @Component({
@@ -21,6 +22,7 @@ export class EsopPageComponent {
   protected readonly marketLoading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly marketMessage = signal<string | null>(null);
+  private readonly assumptionChangeTick = signal(0);
 
   protected readonly assumptionsForm = this.fb.nonNullable.group({
     usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
@@ -30,13 +32,29 @@ export class EsopPageComponent {
     asOf: ['', [Validators.required]],
   });
   protected readonly marketForm = this.fb.nonNullable.group({
-    stockSymbol: ['MNDY', [Validators.required]],
+    stockSymbol: ['MSFT', [Validators.required]],
     fxSymbol: ['USDILS=X', [Validators.required]],
   });
 
   protected readonly totals = computed(() => this.result()?.totals ?? null);
+  protected readonly hasAssumptionChanges = computed(() => {
+    this.assumptionChangeTick();
+    const assumptions = this.result()?.assumptions;
+    if (!assumptions) return false;
+    const raw = this.assumptionsForm.getRawValue();
+    return (
+      raw.usdNisRate !== assumptions.usdNisRate ||
+      raw.currentPriceUsd !== assumptions.currentPriceUsd ||
+      raw.lockDownDays !== assumptions.lockDownDays ||
+      raw.incomeTaxRate !== assumptions.incomeTaxRate ||
+      raw.asOf !== assumptions.asOf
+    );
+  });
 
   constructor() {
+    this.assumptionsForm.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.assumptionChangeTick.update((value) => value + 1));
     void this.load();
   }
 
@@ -62,7 +80,7 @@ export class EsopPageComponent {
   }
 
   protected async applyOverrides(): Promise<void> {
-    if (this.assumptionsForm.invalid) return;
+    if (this.assumptionsForm.invalid || !this.hasAssumptionChanges()) return;
     await this.load(true);
   }
 
@@ -76,15 +94,26 @@ export class EsopPageComponent {
     this.error.set(null);
     this.marketMessage.set(null);
     try {
-      const quote = await firstValueFrom(this.api.getEsopMarket(this.marketForm.getRawValue()));
-      this.assumptionsForm.patchValue({
-        usdNisRate: quote.usdNisRate,
-        currentPriceUsd: quote.currentPriceUsd,
+      const overrides = this.assumptionOverrides();
+      const update = await firstValueFrom(
+        this.api.updateEsopMarket({
+          ...this.marketForm.getRawValue(),
+          lockDownDays: overrides.lockDownDays,
+          incomeTaxRate: overrides.incomeTaxRate,
+          asOf: overrides.asOf,
+        }),
+      );
+      this.result.set(update.esop);
+      this.assumptionsForm.setValue({
+        usdNisRate: update.esop.assumptions.usdNisRate,
+        currentPriceUsd: update.esop.assumptions.currentPriceUsd,
+        lockDownDays: update.esop.assumptions.lockDownDays,
+        incomeTaxRate: update.esop.assumptions.incomeTaxRate,
+        asOf: update.esop.assumptions.asOf,
       });
       this.marketMessage.set(
-        `Updated ${quote.stock.symbol} and ${quote.fx.symbol} from Yahoo Finance.`,
+        `Updated ESOP market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
       );
-      await this.load(true);
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {
@@ -99,6 +128,13 @@ export class EsopPageComponent {
       currency: 'ILS',
       maximumFractionDigits: 0,
     }).format(value);
+  }
+
+  protected signedNis(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const formatted = this.nis(Math.abs(value));
+    if (value === 0) return formatted;
+    return `${value > 0 ? '+' : '-'}${formatted}`;
   }
 
   protected usd(value: number | null | undefined): string {
@@ -116,6 +152,10 @@ export class EsopPageComponent {
       style: 'percent',
       maximumFractionDigits: 1,
     }).format(value);
+  }
+
+  protected isLockedGrant(row: EsopComputedGrant, esop: EsopCalculationResult): boolean {
+    return row.ageDays < esop.assumptions.lockDownDays;
   }
 
   private assumptionOverrides() {

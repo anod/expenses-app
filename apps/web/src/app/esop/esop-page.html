@@ -1,18 +1,23 @@
 <section class="page">
   <div class="page-head">
     <div>
-      <h1><span class="material-symbols-outlined">finance_mode</span> ESOP</h1>
+      <div class="title-row">
+        <h1><span class="material-symbols-outlined">finance_mode</span> ESOP</h1>
+        <details class="advice-popover">
+          <summary aria-label="Calculation note">
+            <span class="material-symbols-outlined">info</span>
+          </summary>
+          <div role="note">
+            This mirrors the workbook calculation and is only an estimate, not tax advice.
+          </div>
+        </details>
+      </div>
       <p>Estimate net sale proceeds from the ESOP workbook formulas.</p>
     </div>
     <button type="button" class="m3-btn m3-btn--tonal" (click)="resetWorkbookDefaults()" [disabled]="loading()">
       <span class="material-symbols-outlined" [class.spin]="loading()">refresh</span>
       Refresh workbook
     </button>
-  </div>
-
-  <div class="notice">
-    <span class="material-symbols-outlined">info</span>
-    This mirrors the workbook calculation and is only an estimate, not tax advice.
   </div>
 
   @if (error(); as e) {
@@ -30,50 +35,57 @@
   }
 
   @if (result(); as esop) {
-    <form class="card assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
-      <div class="card-title">
-        <div>
-          <h2>Price assumptions</h2>
-          <p>Use workbook values, edit manually, or update rate and stock price from Yahoo Finance.</p>
+    <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
+      <details class="card price-panel">
+        <summary class="price-summary">
+          <span>Price</span>
+          <strong>
+            {{ assumptionsForm.controls.usdNisRate.value }} ₪/$ ·
+            {{ usd(assumptionsForm.controls.currentPriceUsd.value) }}
+          </strong>
+        </summary>
+        <p class="section-copy">Update USD/NIS and stock price from Yahoo Finance, or edit them for a preview.</p>
+
+        <div class="price-row">
+          <label class="price-field">
+            <span>USD/NIS rate</span>
+            <input type="number" step="0.0001" formControlName="usdNisRate" />
+          </label>
+          <label class="price-field">
+            <span>Current stock price</span>
+            <input type="number" step="0.01" formControlName="currentPriceUsd" />
+          </label>
+          <button
+            type="button"
+            class="m3-btn m3-btn--tonal"
+            (click)="updateMarketInputs()"
+            [disabled]="loading() || marketLoading() || marketForm.invalid"
+          >
+            <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
+            Update & save
+          </button>
         </div>
-      </div>
 
-      <div class="market-grid">
-        <label class="price-field">
-          <span>USD/NIS rate</span>
-          <input type="number" step="0.0001" formControlName="usdNisRate" />
-        </label>
-        <label class="price-field">
-          <span>Current stock price</span>
-          <input type="number" step="0.01" formControlName="currentPriceUsd" />
-        </label>
-      </div>
+        <details class="advanced">
+          <summary>Market source</summary>
+          <div class="market-tools" [formGroup]="marketForm">
+            <label>
+              <span>Stock ticker</span>
+              <input type="text" formControlName="stockSymbol" />
+            </label>
+            <label>
+              <span>FX ticker</span>
+              <input type="text" formControlName="fxSymbol" />
+            </label>
+          </div>
+        </details>
 
-      <div class="market-tools" [formGroup]="marketForm">
-        <label>
-          <span>Stock ticker</span>
-          <input type="text" formControlName="stockSymbol" />
-        </label>
-        <label>
-          <span>FX ticker</span>
-          <input type="text" formControlName="fxSymbol" />
-        </label>
-        <button
-          type="button"
-          class="m3-btn m3-btn--tonal"
-          (click)="updateMarketInputs()"
-          [disabled]="loading() || marketLoading() || marketForm.invalid"
-        >
-          <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
-          Update market values
-        </button>
-      </div>
+        @if (marketMessage(); as message) {
+          <div class="market-message">{{ message }}</div>
+        }
+      </details>
 
-      @if (marketMessage(); as message) {
-        <div class="market-message">{{ message }}</div>
-      }
-
-      <details class="advanced">
+      <details class="card tax-panel">
         <summary>Workbook tax settings</summary>
         <div class="fields compact">
           <label>
@@ -89,14 +101,17 @@
             <input type="date" formControlName="asOf" />
           </label>
         </div>
+        <div class="actions">
+          <button
+            type="submit"
+            class="m3-btn m3-btn--filled"
+            [disabled]="loading() || assumptionsForm.invalid || !hasAssumptionChanges()"
+          >
+            <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
+            Recalculate
+          </button>
+        </div>
       </details>
-
-      <div class="actions">
-        <button type="submit" class="m3-btn m3-btn--filled" [disabled]="loading() || assumptionsForm.invalid">
-          <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
-          Recalculate
-        </button>
-      </div>
     </form>
 
     <div class="summary-grid">
@@ -122,6 +137,38 @@
       </div>
     </div>
 
+    @if (esop.unblockForecasts.length > 0) {
+      <div class="card forecast-card">
+        <div class="card-title">
+          <div>
+            <h2>Unlock forecast</h2>
+            <p>Full revaluation on each workbook unlock date, including newly unlocked shares.</p>
+          </div>
+        </div>
+        <div class="forecast-grid">
+          @for (forecast of esop.unblockForecasts; track forecast.id) {
+            <div class="forecast-item">
+              <div>
+                <span>{{ forecast.label }}</span>
+                <strong>{{ forecast.totalAmount }} shares</strong>
+                <small>+{{ forecast.unlockedAmount }} unlocked</small>
+              </div>
+              <div>
+                <span>Sum</span>
+                <strong>{{ nis(forecast.sumNis) }}</strong>
+                <small>{{ signedNis(forecast.sumDeltaNis) }}</small>
+              </div>
+              <div>
+                <span>Net</span>
+                <strong>{{ nis(forecast.netNis) }}</strong>
+                <small>{{ signedNis(forecast.netDeltaNis) }}</small>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     @if (esop.warnings.length > 0) {
       <div class="warnings">
         <strong>Warnings</strong>
@@ -141,6 +188,8 @@
               <th>Age</th>
               <th>Grant price</th>
               <th>Amount</th>
+              <th>May 31</th>
+              <th>Aug 31</th>
               <th>Gross</th>
               <th>Income tax</th>
               <th>Stock tax</th>
@@ -151,15 +200,23 @@
           <tbody>
             @for (row of esop.computed; track row.id) {
               <tr>
-                <td>{{ row.grantDate }}</td>
-                <td>{{ row.ageDays }}d</td>
-                <td>{{ usd(row.grantPriceUsd) }}</td>
-                <td>{{ row.amount }}</td>
-                <td>{{ nis(row.grossNis) }}</td>
-                <td>{{ nis(row.incomeTaxNis) }}</td>
-                <td>{{ nis(row.stockTaxNis) }} <span class="muted">({{ pct(row.stockTaxRate) }})</span></td>
-                <td class="net">{{ nis(row.netNis) }}</td>
-                <td>{{ pct(row.effectiveTaxRate) }}</td>
+                <td data-label="Grant date">{{ row.grantDate }}</td>
+                <td data-label="Age">{{ row.ageDays }}d</td>
+                <td data-label="Grant price">{{ usd(row.grantPriceUsd) }}</td>
+                <td data-label="Amount">{{ row.amount }}</td>
+                <td data-label="May 31">{{ row.unblockMay31Amount ?? '—' }}</td>
+                <td data-label="Aug 31">{{ row.unblockAug31Amount ?? '—' }}</td>
+                <td data-label="Gross">{{ nis(row.grossNis) }}</td>
+                <td data-label="Income tax">{{ nis(row.incomeTaxNis) }}</td>
+                <td data-label="Stock tax" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ nis(row.stockTaxNis) }} <span class="muted">({{ pct(row.stockTaxRate) }})</span>
+                </td>
+                <td data-label="Net" class="net" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ nis(row.netNis) }}
+                </td>
+                <td data-label="Tax %" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ pct(row.effectiveTaxRate) }}
+                </td>
               </tr>
             }
           </tbody>

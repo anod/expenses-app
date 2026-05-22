@@ -79,12 +79,41 @@
 
         <label class="field">
           <span class="field-label">Start date</span>
-          <input type="date" formControlName="startDate" />
+          <div class="date-input-row">
+            <input #startDateInput type="date" formControlName="startDate" />
+            <button type="button" class="m3-btn m3-btn--icon date-picker-btn"
+                    title="Open calendar" (click)="openDatePicker('start')">
+              <span class="material-symbols-outlined">calendar_month</span>
+            </button>
+          </div>
+          <small class="date-helper">
+            {{ describeDateInput(form.controls.startDate.value, 'Choose when this starts') }}
+          </small>
+          <div class="date-shortcuts">
+            <button type="button" class="m3-chip" (click)="setStartDateToday()">Today</button>
+            <button type="button" class="m3-chip" (click)="setStartDateNextScheduled()">
+              Next {{ nextStartShortcutLabel() }}
+            </button>
+          </div>
         </label>
 
         <label class="field">
           <span class="field-label">End date (optional)</span>
-          <input type="date" formControlName="endDate" />
+          <div class="date-input-row">
+            <input #endDateInput type="date" formControlName="endDate" />
+            <button type="button" class="m3-btn m3-btn--icon date-picker-btn"
+                    title="Open calendar" (click)="openDatePicker('end')">
+              <span class="material-symbols-outlined">calendar_month</span>
+            </button>
+          </div>
+          <small class="date-helper">
+            {{ describeDateInput(form.controls.endDate.value, 'No end date') }}
+          </small>
+          <div class="date-shortcuts">
+            <button type="button" class="m3-chip" (click)="clearEndDate()">No end</button>
+            <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(1)">+1 month</button>
+            <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(3)">+3 months</button>
+          </div>
         </label>
 
         @if (form.controls.cadenceKind.value === 'monthly') {
@@ -218,12 +247,17 @@
               </span>
             </div>
             <div class="template-row-body">
-              <div class="template-row-title">{{ displayDesc(t.description) }}
-                @if (skipCount(t); as n) {
-                  <span class="skip-badge" [title]="n + ' skipped occurrence' + (n === 1 ? '' : 's')">
-                    <span class="material-symbols-outlined">event_busy</span>{{ n }}
-                  </span>
-                }
+              <div class="template-row-head">
+                <div class="template-row-title">{{ displayDesc(t.description) }}
+                  @if (skipCount(t); as n) {
+                    <span class="skip-badge" [title]="n + ' skipped occurrence' + (n === 1 ? '' : 's')">
+                      <span class="material-symbols-outlined">event_busy</span>{{ n }}
+                    </span>
+                  }
+                </div>
+                <div class="template-row-amount" [class.is-negative]="t.amount < 0">
+                  {{ t.amount }}
+                </div>
               </div>
               <div class="template-row-meta">
                 <span>{{ channelLabel(t.channel) }}</span>
@@ -238,9 +272,6 @@
                   </span>
                 }
               </div>
-            </div>
-            <div class="template-row-amount" [class.is-negative]="t.amount < 0">
-              {{ t.amount }}
             </div>
           </div>
           <div class="template-row-actions">

@@ -17,6 +17,7 @@ export interface RawUsedRange {
   values: RawCellValue[][];
   formulas?: (string | RawCellValue)[][];
   numberFormat?: string[][];
+  text?: string[][];
 }
 
 export interface RawWorkbookDump {

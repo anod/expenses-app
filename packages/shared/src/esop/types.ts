@@ -5,6 +5,8 @@ export interface EsopGrant {
   grantDate: string;
   grantPriceUsd: number;
   amount: number;
+  unblockMay31Amount?: number;
+  unblockAug31Amount?: number;
 }
 
 export interface EsopAssumptions {
@@ -13,6 +15,8 @@ export interface EsopAssumptions {
   lockDownDays: number;
   incomeTaxRate: number;
   asOf: string;
+  unblockMay31Date?: string;
+  unblockAug31Date?: string;
 }
 
 export interface EsopComputedGrant extends EsopGrant {
@@ -33,11 +37,24 @@ export interface EsopTotals {
   effectiveTaxRate: number | null;
 }
 
+export interface EsopUnblockForecast {
+  id: 'may31' | 'aug31';
+  label: string;
+  asOf: string;
+  unlockedAmount: number;
+  totalAmount: number;
+  sumNis: number;
+  netNis: number;
+  sumDeltaNis: number;
+  netDeltaNis: number;
+}
+
 export interface EsopCalculationResult {
   assumptions: EsopAssumptions;
   grants: EsopGrant[];
   computed: EsopComputedGrant[];
   totals: EsopTotals;
+  unblockForecasts: EsopUnblockForecast[];
   warnings: string[];
 }
 
