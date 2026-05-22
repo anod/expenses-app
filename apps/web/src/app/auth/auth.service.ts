@@ -51,7 +51,7 @@ function clearAuthResponseFromUrl(): void {
  * Wraps MSAL.js for the personal-use case:
  * - One PublicClientApplication, initialized once at bootstrap via initialize().
  * - Signal-based account state for templates.
- * - getApiToken() / getGraphToken() each do silent → popup fallback so
+ * - getApiToken() / getGraphToken() each do silent → redirect fallback so
  *   callers (e.g. HTTP interceptor) can `await` a token without juggling
  *   MSAL exceptions themselves. Each token has its own scope list and
  *   `aud` claim, so we never reuse a Graph token to call the API.
@@ -149,12 +149,12 @@ export class AuthService {
     });
   }
 
-  /** Silent → popup fallback. Returns null if the user is not signed in. */
+  /** Silent → redirect fallback. Returns null if the user is not signed in. */
   getApiToken(): Promise<string | null> {
     return this.getToken('api');
   }
 
-  /** Silent → popup fallback. Returns null if the user is not signed in. */
+  /** Silent → redirect fallback. Returns null if the user is not signed in. */
   getGraphToken(): Promise<string | null> {
     return this.getToken('graph');
   }
@@ -212,7 +212,7 @@ export class AuthService {
       });
       return this.handleResult(result);
     } catch {
-      return this.popupFallback(kind);
+      return this.redirectFallback(kind);
     }
   }
 
@@ -228,25 +228,16 @@ export class AuthService {
       return this.handleResult(result);
     } catch (err) {
       if (err instanceof InteractionRequiredAuthError || isRecoverableBrowserAuthError(err)) {
-        return this.popupFallback(kind);
+        return this.redirectFallback(kind);
       }
       throw err;
     }
   }
 
-  private async popupFallback(kind: TokenKind): Promise<string | null> {
+  private async redirectFallback(kind: TokenKind): Promise<string | null> {
     const pca = this.requirePca();
-    try {
-      // Used only for token re-acquisition after the user is already
-      // signed in (e.g. expired token). Initial login uses redirect.
-      const result = await pca.acquireTokenPopup({ scopes: this.scopesFor(kind) });
-      return this.handleResult(result);
-    } catch (err) {
-      if (err instanceof BrowserAuthError && err.errorCode === 'user_cancelled') return null;
-      // If popup is blocked, fall back to a full redirect.
-      await pca.acquireTokenRedirect({ scopes: this.scopesFor(kind) });
-      return null;
-    }
+    await pca.acquireTokenRedirect({ scopes: this.scopesFor(kind) });
+    return null;
   }
 
   private handleResult(result: AuthenticationResult): string {
