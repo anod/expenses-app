@@ -35,53 +35,57 @@
   }
 
   @if (result(); as esop) {
-    <form class="card assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
-      <div class="card-title">
-        <div>
-          <h2>Price</h2>
-          <p>Update USD/NIS and stock price from Yahoo Finance, or edit them for a preview.</p>
-        </div>
-      </div>
+    <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
+      <details class="card price-panel">
+        <summary class="price-summary">
+          <span>Price</span>
+          <strong>
+            {{ assumptionsForm.controls.usdNisRate.value }} ₪/$ ·
+            {{ usd(assumptionsForm.controls.currentPriceUsd.value) }}
+          </strong>
+        </summary>
+        <p class="section-copy">Update USD/NIS and stock price from Yahoo Finance, or edit them for a preview.</p>
 
-      <div class="price-row">
-        <label class="price-field">
-          <span>USD/NIS rate</span>
-          <input type="number" step="0.0001" formControlName="usdNisRate" />
-        </label>
-        <label class="price-field">
-          <span>Current stock price</span>
-          <input type="number" step="0.01" formControlName="currentPriceUsd" />
-        </label>
-        <button
-          type="button"
-          class="m3-btn m3-btn--tonal"
-          (click)="updateMarketInputs()"
-          [disabled]="loading() || marketLoading() || marketForm.invalid"
-        >
-          <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
-          Update & save
-        </button>
-      </div>
-
-      <details class="advanced">
-        <summary>Market source</summary>
-        <div class="market-tools" [formGroup]="marketForm">
-          <label>
-            <span>Stock ticker</span>
-            <input type="text" formControlName="stockSymbol" />
+        <div class="price-row">
+          <label class="price-field">
+            <span>USD/NIS rate</span>
+            <input type="number" step="0.0001" formControlName="usdNisRate" />
           </label>
-          <label>
-            <span>FX ticker</span>
-            <input type="text" formControlName="fxSymbol" />
+          <label class="price-field">
+            <span>Current stock price</span>
+            <input type="number" step="0.01" formControlName="currentPriceUsd" />
           </label>
+          <button
+            type="button"
+            class="m3-btn m3-btn--tonal"
+            (click)="updateMarketInputs()"
+            [disabled]="loading() || marketLoading() || marketForm.invalid"
+          >
+            <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
+            Update & save
+          </button>
         </div>
+
+        <details class="advanced">
+          <summary>Market source</summary>
+          <div class="market-tools" [formGroup]="marketForm">
+            <label>
+              <span>Stock ticker</span>
+              <input type="text" formControlName="stockSymbol" />
+            </label>
+            <label>
+              <span>FX ticker</span>
+              <input type="text" formControlName="fxSymbol" />
+            </label>
+          </div>
+        </details>
+
+        @if (marketMessage(); as message) {
+          <div class="market-message">{{ message }}</div>
+        }
       </details>
 
-      @if (marketMessage(); as message) {
-        <div class="market-message">{{ message }}</div>
-      }
-
-      <details class="advanced">
+      <details class="card tax-panel">
         <summary>Workbook tax settings</summary>
         <div class="fields compact">
           <label>

@@ -76,6 +76,70 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.assumptions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.price-panel,
+.tax-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.price-panel > summary,
+.tax-panel > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.price-panel > summary::-webkit-details-marker,
+.tax-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.price-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-large);
+}
+
+.price-summary::after,
+.tax-panel > summary::after {
+  content: 'expand_more';
+  font-family: 'Material Symbols Outlined';
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.price-panel[open] .price-summary::after,
+.tax-panel[open] > summary::after {
+  content: 'expand_less';
+}
+
+.price-summary strong {
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-title-medium);
+  text-align: right;
+}
+
+.tax-panel > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-large);
+}
+
+.section-copy {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 .title-row {
   display: flex;
   align-items: center;
@@ -309,11 +373,17 @@ td {
 
 @media (max-width: 720px) {
   .page {
+    gap: 0.65rem;
     padding: 0.5rem;
   }
 
   .page-head {
     display: grid;
+    gap: 0.5rem;
+  }
+
+  .page-head p {
+    display: none;
   }
 
   .page-head .m3-btn {
@@ -327,17 +397,69 @@ td {
 
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .forecast-grid {
+    gap: 0.5rem;
   }
 
   .forecast-item {
     grid-template-columns: 1fr;
+    gap: 0.35rem;
+    padding: 0.6rem;
   }
 }
 
 @media (max-width: 640px) {
   .card,
   .summary-card {
-    padding: 0.75rem;
+    border-radius: var(--md-sys-shape-corner-md);
+    padding: 0.65rem;
+  }
+
+  .card-title {
+    margin-bottom: 0.65rem;
+  }
+
+  .card-title p,
+  .section-copy {
+    display: none;
+  }
+
+  .price-summary {
+    align-items: center;
+  }
+
+  .price-summary strong {
+    font: var(--md-sys-typescale-body-large);
+  }
+
+  .price-field input {
+    font: var(--md-sys-typescale-title-medium);
+    padding: 0.65rem 0.75rem;
+  }
+
+  .advanced {
+    margin-top: 0.55rem;
+    padding-top: 0.55rem;
+  }
+
+  .actions {
+    margin-top: 0.65rem;
+  }
+
+  .summary-card {
+    gap: 0.2rem;
+  }
+
+  .summary-card strong,
+  .forecast-item strong {
+    font: var(--md-sys-typescale-title-medium);
+  }
+
+  .forecast-card {
+    gap: 0.65rem;
   }
 
   .table-wrap {
@@ -362,27 +484,23 @@ td {
 
   tbody {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   tr {
     border: 1px solid var(--md-sys-color-outline-variant);
     border-radius: var(--md-sys-shape-corner-md);
-    padding: 0.35rem 0.75rem;
+    padding: 0.2rem 0.6rem;
     background: var(--md-sys-color-surface);
   }
 
   td {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 0.45rem 0;
+    gap: 0.75rem;
+    padding: 0.28rem 0;
     white-space: normal;
     text-align: right;
-    border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  }
-
-  td:last-child {
     border-bottom: 0;
   }
 
