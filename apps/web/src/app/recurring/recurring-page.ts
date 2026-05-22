@@ -36,8 +36,6 @@ export class RecurringPageComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly editorCard = viewChild<ElementRef<HTMLElement>>('editorCard');
   private readonly descriptionInput = viewChild<ElementRef<HTMLInputElement>>('descriptionInput');
-  private readonly startDateInput = viewChild<ElementRef<HTMLInputElement>>('startDateInput');
-  private readonly endDateInput = viewChild<ElementRef<HTMLInputElement>>('endDateInput');
   private suppressWeeklyStartSync = false;
   private lastCadenceKind: CadenceKind = 'monthly';
 
@@ -312,20 +310,6 @@ export class RecurringPageComponent {
   private syncWeeklyStartDate(from: string): void {
     const next = firstWeekdayOnOrAfter(from, this.form.controls.dayOfWeek.value);
     this.form.controls.startDate.setValue(next, { emitEvent: false });
-  }
-
-  protected openDatePicker(which: 'start' | 'end'): void {
-    const input =
-      which === 'start'
-        ? this.startDateInput()?.nativeElement
-        : this.endDateInput()?.nativeElement;
-    if (!input) return;
-    if ('showPicker' in input && typeof input.showPicker === 'function') {
-      input.showPicker();
-      return;
-    }
-    input.focus();
-    input.click();
   }
 
   protected setStartDateToday(): void {

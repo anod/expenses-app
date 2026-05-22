@@ -79,13 +79,7 @@
 
         <label class="field">
           <span class="field-label">Start date</span>
-          <div class="date-input-row">
-            <input #startDateInput type="date" formControlName="startDate" />
-            <button type="button" class="m3-btn m3-btn--icon date-picker-btn"
-                    title="Open calendar" (click)="openDatePicker('start')">
-              <span class="material-symbols-outlined">calendar_month</span>
-            </button>
-          </div>
+          <input type="date" formControlName="startDate" />
           <small class="date-helper">
             {{ describeDateInput(form.controls.startDate.value, 'Choose when this starts') }}
           </small>
@@ -99,13 +93,7 @@
 
         <label class="field">
           <span class="field-label">End date (optional)</span>
-          <div class="date-input-row">
-            <input #endDateInput type="date" formControlName="endDate" />
-            <button type="button" class="m3-btn m3-btn--icon date-picker-btn"
-                    title="Open calendar" (click)="openDatePicker('end')">
-              <span class="material-symbols-outlined">calendar_month</span>
-            </button>
-          </div>
+          <input type="date" formControlName="endDate" />
           <small class="date-helper">
             {{ describeDateInput(form.controls.endDate.value, 'No end date') }}
           </small>
