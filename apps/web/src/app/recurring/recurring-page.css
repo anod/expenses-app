@@ -129,6 +129,28 @@ tr.is-editing td {
   outline-offset: -1px;
 }
 
+.date-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.date-picker-btn {
+  flex: none;
+}
+
+.date-helper {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.date-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;

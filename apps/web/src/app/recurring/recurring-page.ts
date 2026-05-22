@@ -36,6 +36,8 @@ export class RecurringPageComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly editorCard = viewChild<ElementRef<HTMLElement>>('editorCard');
   private readonly descriptionInput = viewChild<ElementRef<HTMLInputElement>>('descriptionInput');
+  private readonly startDateInput = viewChild<ElementRef<HTMLInputElement>>('startDateInput');
+  private readonly endDateInput = viewChild<ElementRef<HTMLInputElement>>('endDateInput');
   private suppressWeeklyStartSync = false;
   private lastCadenceKind: CadenceKind = 'monthly';
 
@@ -312,6 +314,74 @@ export class RecurringPageComponent {
     this.form.controls.startDate.setValue(next, { emitEvent: false });
   }
 
+  protected openDatePicker(which: 'start' | 'end'): void {
+    const input =
+      which === 'start'
+        ? this.startDateInput()?.nativeElement
+        : this.endDateInput()?.nativeElement;
+    if (!input) return;
+    if ('showPicker' in input && typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.focus();
+    input.click();
+  }
+
+  protected setStartDateToday(): void {
+    this.form.controls.startDate.setValue(todayIsoLocal());
+  }
+
+  protected setStartDateNextScheduled(): void {
+    this.form.controls.startDate.setValue(
+      firstScheduledDateOnOrAfter(todayIsoLocal(), this.formCadence()),
+    );
+  }
+
+  protected clearEndDate(): void {
+    this.form.controls.endDate.setValue('');
+  }
+
+  protected setEndDateMonthsFromStart(months: number): void {
+    const startDate = this.form.controls.startDate.value || todayIsoLocal();
+    this.form.controls.endDate.setValue(addMonthsIso(startDate, months));
+  }
+
+  protected describeDateInput(date: string, emptyLabel: string): string {
+    if (!date) return emptyLabel;
+    return new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  protected nextStartShortcutLabel(): string {
+    const cadence = this.formCadence();
+    if (cadence.kind === 'weekly') return WEEKDAY_LABELS[cadence.dayOfWeek] ?? 'day';
+    if (cadence.kind === 'monthly_prediction') return 'anchor';
+    return `day ${cadence.day}`;
+  }
+
+  private formCadence(): RecurringTemplate['cadence'] {
+    const cadenceKind = this.form.controls.cadenceKind.value;
+    if (cadenceKind === 'weekly') {
+      return {
+        kind: 'weekly',
+        dayOfWeek: this.form.controls.dayOfWeek.value as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+      };
+    }
+    if (cadenceKind === 'monthly_prediction') {
+      return { kind: 'monthly_prediction' };
+    }
+    return {
+      kind: 'monthly',
+      day: this.form.controls.day.value,
+      monthEndPolicy: 'clamp',
+    };
+  }
+
   protected channelLabel(channel: Channel): string {
     if (channel === 'bank') return 'Bank';
     const id = channel.slice(3);
@@ -437,4 +507,38 @@ function firstWeekdayOnOrAfter(from: string, dayOfWeek: number): string {
   const diff = (dayOfWeek - date.getDay() + 7) % 7;
   date.setDate(date.getDate() + diff);
   return date.toLocaleDateString('en-CA');
+}
+
+function addMonthsIso(from: string, months: number): string {
+  const date = new Date(`${from}T00:00:00`);
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  const target = new Date(year, month + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return target.toLocaleDateString('en-CA');
+}
+
+function firstScheduledDateOnOrAfter(from: string, cadence: RecurringTemplate['cadence']): string {
+  if (cadence.kind === 'weekly') return firstWeekdayOnOrAfter(from, cadence.dayOfWeek);
+
+  const date = new Date(`${from}T00:00:00`);
+  if (cadence.kind === 'monthly_prediction') {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const currentAnchor = new Date(year, month, 10);
+    if (currentAnchor >= date) return currentAnchor.toLocaleDateString('en-CA');
+    return new Date(year, month + 1, 10).toLocaleDateString('en-CA');
+  }
+
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const currentLastDay = new Date(year, month + 1, 0).getDate();
+  const currentCandidate = new Date(year, month, Math.min(cadence.day, currentLastDay));
+  if (currentCandidate >= date) return currentCandidate.toLocaleDateString('en-CA');
+  const nextYear = month === 11 ? year + 1 : year;
+  const nextMonth = (month + 1) % 12;
+  const nextLastDay = new Date(nextYear, nextMonth + 1, 0).getDate();
+  return new Date(nextYear, nextMonth, Math.min(cadence.day, nextLastDay)).toLocaleDateString('en-CA');
 }
