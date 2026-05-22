@@ -10,6 +10,16 @@ import type { ApiConfig, AuthConfig } from './api-config';
 
 type TokenKind = 'api' | 'graph';
 
+const RECOVERABLE_BROWSER_AUTH_ERRORS = new Set([
+  'monitor_window_timeout',
+  'monitor_popup_timeout',
+  'timed_out',
+]);
+
+function isRecoverableBrowserAuthError(err: unknown): boolean {
+  return err instanceof BrowserAuthError && RECOVERABLE_BROWSER_AUTH_ERRORS.has(err.errorCode);
+}
+
 /**
  * Wraps MSAL.js for the personal-use case:
  * - One PublicClientApplication, initialized once at bootstrap via initialize().
@@ -189,7 +199,7 @@ export class AuthService {
       });
       return this.handleResult(result);
     } catch (err) {
-      if (err instanceof InteractionRequiredAuthError) {
+      if (err instanceof InteractionRequiredAuthError || isRecoverableBrowserAuthError(err)) {
         return this.popupFallback(kind);
       }
       throw err;
