@@ -168,9 +168,15 @@
                 <td data-label="Amount">{{ row.amount }}</td>
                 <td data-label="Gross">{{ nis(row.grossNis) }}</td>
                 <td data-label="Income tax">{{ nis(row.incomeTaxNis) }}</td>
-                <td data-label="Stock tax">{{ nis(row.stockTaxNis) }} <span class="muted">({{ pct(row.stockTaxRate) }})</span></td>
-                <td data-label="Net" class="net">{{ nis(row.netNis) }}</td>
-                <td data-label="Tax %">{{ pct(row.effectiveTaxRate) }}</td>
+                <td data-label="Stock tax" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ nis(row.stockTaxNis) }} <span class="muted">({{ pct(row.stockTaxRate) }})</span>
+                </td>
+                <td data-label="Net" class="net" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ nis(row.netNis) }}
+                </td>
+                <td data-label="Tax %" [class.lock-rule]="isLockedGrant(row, esop)">
+                  {{ pct(row.effectiveTaxRate) }}
+                </td>
               </tr>
             }
           </tbody>

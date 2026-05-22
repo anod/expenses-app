@@ -247,6 +247,14 @@ td {
   font-weight: 700;
 }
 
+.lock-rule {
+  color: #ff0000;
+}
+
+.lock-rule .muted {
+  color: inherit;
+}
+
 .muted {
   color: var(--md-sys-color-on-surface-variant);
 }

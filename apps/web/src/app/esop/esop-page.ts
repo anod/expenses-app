@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
-import type { EsopCalculationResult } from '@expenses/shared';
+import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 
 @Component({
@@ -145,6 +145,10 @@ export class EsopPageComponent {
       style: 'percent',
       maximumFractionDigits: 1,
     }).format(value);
+  }
+
+  protected isLockedGrant(row: EsopComputedGrant, esop: EsopCalculationResult): boolean {
+    return row.ageDays < esop.assumptions.lockDownDays;
   }
 
   private assumptionOverrides() {
