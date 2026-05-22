@@ -175,14 +175,14 @@ tr.is-editing td {
   padding: 0;
   display: none; /* visible only on narrow viewports — see media query below */
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .template-row {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.875rem 1rem;
+  gap: 0.35rem;
+  padding: 0.75rem 0.875rem;
 }
 .template-row.is-editing {
   background: color-mix(in srgb, var(--md-sys-color-primary-container) 50%, transparent);
@@ -190,17 +190,17 @@ tr.is-editing td {
 
 .template-row-main {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
 }
 
 .template-row-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
@@ -210,10 +210,22 @@ tr.is-editing td {
   color: var(--md-sys-color-on-tertiary-container);
 }
 
-.template-row-body { min-width: 0; }
+.template-row-body {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+.template-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
 .template-row-title {
-  font: var(--md-sys-typescale-body-large);
-  font-weight: 500;
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--md-sys-typescale-body-medium);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -221,22 +233,27 @@ tr.is-editing td {
 .template-row-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 0.35rem;
+  gap: 0.1rem 0.3rem;
   font: var(--md-sys-typescale-body-small);
+  line-height: 1.25;
   color: var(--md-sys-color-on-surface-variant);
 }
 .template-row-meta .dot { opacity: 0.6; }
 
 .template-row-amount {
-  font: var(--md-sys-typescale-title-medium);
+  flex: none;
+  white-space: nowrap;
+  font: var(--md-sys-typescale-title-small);
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 .template-row-amount.is-negative { color: var(--md-sys-color-error); }
 
 .template-row-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.25rem;
+  gap: 0.125rem;
+  margin-left: calc(32px + 0.625rem);
 }
 .template-row-actions .m3-btn--icon.danger { color: var(--md-sys-color-error); }
 
@@ -244,6 +261,12 @@ tr.is-editing td {
 @media (max-width: 719px) {
   .table-card { display: none; }
   .template-list { display: flex; }
+  .template-row {
+    padding: 0.625rem 0.75rem;
+  }
+  .template-row-actions {
+    margin-left: calc(32px + 0.5rem);
+  }
 }
 
 .skip-badge {
