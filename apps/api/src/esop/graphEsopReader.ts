@@ -10,7 +10,7 @@ import { GraphClient, GraphError } from '../graph/graphClient.js';
 import { WorkbookResolver, type DriveItemRef } from '../graph/workbookResolver.js';
 import { encodeWorksheetName } from '../graph/graphReader.js';
 
-const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,numberFormat';
+const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,text,numberFormat';
 const MARKET_VALUES_RANGE = 'D12:D13';
 
 export interface EsopOverrides {

@@ -35,6 +35,8 @@ describe('parseEsopUsedRange', () => {
       currentPriceUsd: 420.26,
       lockDownDays: 730,
       incomeTaxRate: 0.55,
+      unblockMay31Date: '2026-05-31',
+      unblockAug31Date: '2026-08-31',
     });
     expect(parsed.grants).toHaveLength(6);
     expect(parsed.grants[0]).toEqual({
@@ -42,6 +44,8 @@ describe('parseEsopUsedRange', () => {
       grantPriceUsd: 211.02,
       grantDate: '2020-08-31',
       amount: 11,
+      unblockMay31Amount: 5,
+      unblockAug31Amount: 5,
     });
   });
 });
@@ -63,6 +67,23 @@ describe('calculateEsop', () => {
     expect(result.computed[0]?.stockTaxNis).toBeCloseTo(1720.4759, 6);
     expect(result.computed[0]?.netNis).toBeCloseTo(8284.62921, 6);
     expect(result.computed[0]?.effectiveTaxRate).toBeCloseTo(0.400635320991767, 12);
+    expect(result.unblockForecasts).toHaveLength(2);
+    expect(result.unblockForecasts[0]).toMatchObject({
+      id: 'may31',
+      label: 'After May 31',
+      asOf: '2026-05-31',
+      unlockedAmount: 47,
+      totalAmount: 197,
+    });
+    expect(result.unblockForecasts[1]).toMatchObject({
+      id: 'aug31',
+      label: 'After Aug 31',
+      asOf: '2026-08-31',
+      unlockedAmount: 92,
+      totalAmount: 242,
+    });
+    expect(result.unblockForecasts[0]?.sumDeltaNis).toBeCloseTo(59059.1378, 6);
+    expect(result.unblockForecasts[1]?.sumDeltaNis).toBeCloseTo(115605.1208, 6);
   });
 
   it('returns null effective tax rates when gross proceeds are zero', () => {
@@ -78,5 +99,6 @@ describe('calculateEsop', () => {
     );
     expect(result.computed[0]?.effectiveTaxRate).toBeNull();
     expect(result.totals.effectiveTaxRate).toBeNull();
+    expect(result.unblockForecasts).toEqual([]);
   });
 });

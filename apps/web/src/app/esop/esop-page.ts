@@ -130,6 +130,13 @@ export class EsopPageComponent {
     }).format(value);
   }
 
+  protected signedNis(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    const formatted = this.nis(Math.abs(value));
+    if (value === 0) return formatted;
+    return `${value > 0 ? '+' : '-'}${formatted}`;
+  }
+
   protected usd(value: number | null | undefined): string {
     if (value == null || !Number.isFinite(value)) return '—';
     return new Intl.NumberFormat('en-US', {

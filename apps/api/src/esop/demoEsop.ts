@@ -7,9 +7,30 @@ import {
 import type { EsopOverrides } from './graphEsopReader.js';
 
 const DEMO_GRANTS: EsopGrant[] = [
-  { id: 'demo:esop:2021', grantDate: '2021-09-01', grantPriceUsd: 210, amount: 12 },
-  { id: 'demo:esop:2022', grantDate: '2022-09-01', grantPriceUsd: 245, amount: 18 },
-  { id: 'demo:esop:2024', grantDate: '2024-09-01', grantPriceUsd: 375, amount: 24 },
+  {
+    id: 'demo:esop:2021',
+    grantDate: '2021-09-01',
+    grantPriceUsd: 210,
+    amount: 12,
+    unblockMay31Amount: 4,
+    unblockAug31Amount: 4,
+  },
+  {
+    id: 'demo:esop:2022',
+    grantDate: '2022-09-01',
+    grantPriceUsd: 245,
+    amount: 18,
+    unblockMay31Amount: 6,
+    unblockAug31Amount: 6,
+  },
+  {
+    id: 'demo:esop:2024',
+    grantDate: '2024-09-01',
+    grantPriceUsd: 375,
+    amount: 24,
+    unblockMay31Amount: 8,
+    unblockAug31Amount: 8,
+  },
 ];
 
 const DEMO_ASSUMPTIONS = {

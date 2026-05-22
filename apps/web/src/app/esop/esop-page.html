@@ -133,6 +133,38 @@
       </div>
     </div>
 
+    @if (esop.unblockForecasts.length > 0) {
+      <div class="card forecast-card">
+        <div class="card-title">
+          <div>
+            <h2>Unlock forecast</h2>
+            <p>Full revaluation on each workbook unlock date, including newly unlocked shares.</p>
+          </div>
+        </div>
+        <div class="forecast-grid">
+          @for (forecast of esop.unblockForecasts; track forecast.id) {
+            <div class="forecast-item">
+              <div>
+                <span>{{ forecast.label }}</span>
+                <strong>{{ forecast.totalAmount }} shares</strong>
+                <small>+{{ forecast.unlockedAmount }} unlocked</small>
+              </div>
+              <div>
+                <span>Sum</span>
+                <strong>{{ nis(forecast.sumNis) }}</strong>
+                <small>{{ signedNis(forecast.sumDeltaNis) }}</small>
+              </div>
+              <div>
+                <span>Net</span>
+                <strong>{{ nis(forecast.netNis) }}</strong>
+                <small>{{ signedNis(forecast.netDeltaNis) }}</small>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     @if (esop.warnings.length > 0) {
       <div class="warnings">
         <strong>Warnings</strong>
@@ -152,6 +184,8 @@
               <th>Age</th>
               <th>Grant price</th>
               <th>Amount</th>
+              <th>May 31</th>
+              <th>Aug 31</th>
               <th>Gross</th>
               <th>Income tax</th>
               <th>Stock tax</th>
@@ -166,6 +200,8 @@
                 <td data-label="Age">{{ row.ageDays }}d</td>
                 <td data-label="Grant price">{{ usd(row.grantPriceUsd) }}</td>
                 <td data-label="Amount">{{ row.amount }}</td>
+                <td data-label="May 31">{{ row.unblockMay31Amount ?? '—' }}</td>
+                <td data-label="Aug 31">{{ row.unblockAug31Amount ?? '—' }}</td>
                 <td data-label="Gross">{{ nis(row.grossNis) }}</td>
                 <td data-label="Income tax">{{ nis(row.incomeTaxNis) }}</td>
                 <td data-label="Stock tax" [class.lock-rule]="isLockedGrant(row, esop)">
