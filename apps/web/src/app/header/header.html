@@ -49,10 +49,20 @@
       }
     } @else {
       @if (auth.isDemo()) {
-        <span class="m3-chip demo-badge" title="In-memory demo data — your real workbook is not touched">
-          <span class="material-symbols-outlined">science</span>
-          demo mode
-        </span>
+        <div class="user">
+          <span class="avatar demo-avatar" aria-hidden="true">DEMO</span>
+          <span class="who">Demo mode</span>
+          <button
+            type="button"
+            class="m3-btn m3-btn--icon"
+            (click)="exitDemo()"
+            [disabled]="demoBusy()"
+            title="Exit demo mode"
+            aria-label="Exit demo mode"
+          >
+            <span class="material-symbols-outlined">logout</span>
+          </button>
+        </div>
       } @else {
         <span class="m3-chip dump-badge">dump mode</span>
       }

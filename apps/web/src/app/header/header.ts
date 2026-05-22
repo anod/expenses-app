@@ -1,6 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
+import { ForecastApi } from '../forecast/forecast.api';
 
 @Component({
   selector: 'app-header',
@@ -11,6 +13,8 @@ import { AuthService } from '../auth/auth.service';
 })
 export class HeaderComponent {
   protected readonly auth = inject(AuthService);
+  private readonly api = inject(ForecastApi);
+  protected readonly demoBusy = signal(false);
 
   protected readonly initials = computed(() => {
     const name = this.auth.displayName();
@@ -32,6 +36,18 @@ export class HeaderComponent {
       await this.auth.signOut();
     } catch (err) {
       console.error('sign-out failed', err);
+    }
+  }
+
+  protected async exitDemo(): Promise<void> {
+    if (this.demoBusy()) return;
+    this.demoBusy.set(true);
+    try {
+      await firstValueFrom(this.api.setDemo(false));
+      window.location.reload();
+    } catch (err) {
+      this.demoBusy.set(false);
+      console.error('exit demo failed', err);
     }
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Demo data builder — produces a deterministic-yet-funny snapshot of the
+ * Demo data builder — produces a deterministic, realistic snapshot of the
  * domain state so the app can be demoed without exposing real finances.
  *
  * The shape is built relative to a reference date (defaults to today) so the
@@ -59,8 +59,8 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
   const today = opts.today ?? new Date();
   const todayIso = isoDate(today);
 
-  const calId = `${PREFIX}card:doom`;
-  const visaId = `${PREFIX}card:plastic`;
+  const travelCardId = `${PREFIX}card:travel`;
+  const householdCardId = `${PREFIX}card:household`;
 
   const account: Account = {
     bankBalance: 18_432.5,
@@ -69,15 +69,15 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
 
   const cards: CreditCard[] = [
     {
-      id: calId,
-      name: 'Card of Doom',
+      id: travelCardId,
+      name: 'Travel Rewards Visa',
       currentDebit: 3_217.4,
       asOf: todayIso,
       billingDayOfMonth: 2,
     },
     {
-      id: visaId,
-      name: 'Plastic Regret',
+      id: householdCardId,
+      name: 'Household Mastercard',
       currentDebit: 1_842.1,
       asOf: todayIso,
       billingDayOfMonth: 15,
@@ -95,7 +95,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
   const recurring: RecurringTemplate[] = [
     {
       id: `${PREFIX}r:salary`,
-      description: 'Salary from the Joke Factory',
+      description: 'Monthly salary',
       amount: 14_500,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 1, monthEndPolicy: 'clamp' },
@@ -103,7 +103,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}r:rent`,
-      description: 'Rent for the Closet I Call Home',
+      description: 'Apartment rent',
       amount: -4_800,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 5, monthEndPolicy: 'clamp' },
@@ -111,7 +111,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}r:internet`,
-      description: 'Suspiciously Cheap Internet',
+      description: 'Home internet',
       amount: -89,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' },
@@ -119,7 +119,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}r:gym`,
-      description: 'Gym Membership (cancelled but still paying)',
+      description: 'Gym membership',
       amount: -149,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 12, monthEndPolicy: 'clamp' },
@@ -127,47 +127,47 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}r:streaming`,
-      description: 'Netflix and Procrastinate',
+      description: 'Streaming subscriptions',
       amount: -54.9,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 18, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
     {
-      id: `${PREFIX}r:spotify`,
-      description: 'Existential Spotify',
+      id: `${PREFIX}r:music`,
+      description: 'Music subscription',
       amount: -19.9,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 20, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
     {
-      id: `${PREFIX}r:cat`,
-      description: 'Bribes for the Cat (non-negotiable)',
+      id: `${PREFIX}r:utilities`,
+      description: 'Electricity and water',
       amount: -120,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 22, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
     {
-      id: `${PREFIX}r:therapy`,
-      description: 'Therapy (required by therapist)',
+      id: `${PREFIX}r:health`,
+      description: 'Health insurance',
       amount: -320,
       channel: 'bank',
       cadence: { kind: 'monthly', day: 25, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
     {
-      id: `${PREFIX}r:coffee`,
-      description: 'Coffee Subscription Nobody Asked For',
+      id: `${PREFIX}r:mobile`,
+      description: 'Mobile phone plan',
       amount: -69,
-      channel: `cc:${visaId}`,
+      channel: `cc:${householdCardId}`,
       cadence: { kind: 'monthly', day: 8, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
     {
       id: `${PREFIX}r:supermarket`,
-      description: 'Supermarket prediction',
+      description: 'Monthly groceries estimate',
       amount: -1600,
       channel: 'bank',
       cadence: { kind: 'monthly_prediction' },
@@ -177,16 +177,16 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
 
   const ledger: LedgerEntry[] = [
     {
-      id: `${PREFIX}l:shawarma`,
-      description: 'Emergency Shawarma',
+      id: `${PREFIX}l:restaurant`,
+      description: 'Restaurant dinner',
       amount: -52,
       channel: 'bank',
       date: isoDate(shiftDays(today, -3)),
       status: 'cleared',
     },
     {
-      id: `${PREFIX}l:plant`,
-      description: 'Bought a plant I will definitely keep alive',
+      id: `${PREFIX}l:supplies`,
+      description: 'Home supplies',
       amount: -89,
       channel: 'bank',
       date: isoDate(shiftDays(today, -5)),
@@ -194,7 +194,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:refund`,
-      description: 'Refund from past-me\u2019s bad decision',
+      description: 'Returned item refund',
       amount: 240,
       channel: 'bank',
       date: isoDate(shiftDays(today, -1)),
@@ -202,7 +202,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:atm`,
-      description: 'ATM withdrawal: cash for vibes',
+      description: 'ATM withdrawal',
       amount: -500,
       channel: 'bank',
       date: isoDate(shiftDays(today, -7)),
@@ -210,7 +210,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:birthday`,
-      description: 'Birthday gift for a person I might know',
+      description: 'Birthday gift',
       amount: -180,
       channel: 'bank',
       date: isoDate(shiftDays(today, 4)),
@@ -218,7 +218,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:concert`,
-      description: 'Concert tickets (regret incoming)',
+      description: 'Event tickets',
       amount: -480,
       channel: 'bank',
       date: isoDate(shiftDays(today, 9)),
@@ -226,7 +226,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:dentist`,
-      description: 'Dentist (the betrayal)',
+      description: 'Dental appointment',
       amount: -650,
       channel: 'bank',
       date: isoDate(shiftDays(today, 14)),
@@ -234,33 +234,33 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
     {
       id: `${PREFIX}l:cc1`,
-      description: 'Suspicious late-night AliExpress haul',
+      description: 'Online shopping',
       amount: -342.8,
-      channel: `cc:${calId}`,
+      channel: `cc:${travelCardId}`,
       date: isoDate(shiftDays(today, -2)),
       status: 'cleared',
     },
     {
       id: `${PREFIX}l:cc2`,
-      description: '\u201CJust one book\u201D (it was seven)',
+      description: 'Books and learning',
       amount: -218,
-      channel: `cc:${calId}`,
+      channel: `cc:${travelCardId}`,
       date: isoDate(shiftDays(today, -4)),
       status: 'cleared',
     },
     {
       id: `${PREFIX}l:cc3`,
-      description: 'Overpriced gadget I will never use',
+      description: 'Electronics accessory',
       amount: -429,
-      channel: `cc:${visaId}`,
+      channel: `cc:${householdCardId}`,
       date: isoDate(shiftDays(today, -6)),
       status: 'cleared',
     },
     {
       id: `${PREFIX}l:cc4`,
-      description: 'Snacks (it\u2019s called self-care)',
+      description: 'Grocery top-up',
       amount: -78.5,
-      channel: `cc:${visaId}`,
+      channel: `cc:${householdCardId}`,
       date: isoDate(shiftDays(today, 2)),
       status: 'pending',
     },
