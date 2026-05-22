@@ -27,6 +27,7 @@ import { buildForecastRoutes } from './forecast/routes.js';
 import { buildSyncRoutes } from './sync/routes.js';
 import { buildImportRoutes } from './import/routes.js';
 import { GraphEsopReader } from './esop/graphEsopReader.js';
+import { MarketDataTimeoutError } from './esop/marketData.js';
 import { buildEsopRoutes } from './esop/routes.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
@@ -134,7 +135,7 @@ app.use(pinoHttp({ logger: log }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', config.CORS_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-MS-Graph-Token');
   res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -265,7 +266,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
-  app.use('/api', conditionalBearer, buildEsopRoutes(esopReader, isDemo));
+  app.use('/api', conditionalBearer, conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
   log.info(
     { allowedOids: config.ALLOWED_OIDS.length },
     'REQUIRE_AUTH=true: forecast + sync routes gated by JWKS-validated Bearer',
@@ -278,7 +279,7 @@ if (protectApi) {
     conditionalGraphToken,
     buildImportRoutes(getRepo, graphReader, isDemo, log),
   );
-  app.use('/api', buildEsopRoutes(esopReader, isDemo));
+  app.use('/api', conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
 }
 
 app.get('/api/expenses', graphOrDump(), conditionalGraphToken, async (req, res, next) => {
@@ -397,6 +398,11 @@ const errorHandler: ErrorRequestHandler = (err: unknown, req: Request, res: Resp
   if (err instanceof GraphTimeoutError) {
     req.log.warn('graph request timed out');
     res.status(504).json({ error: 'GRAPH_TIMEOUT', message: err.message });
+    return;
+  }
+  if (err instanceof MarketDataTimeoutError) {
+    req.log.warn('market data request timed out');
+    res.status(504).json({ error: 'MARKET_DATA_TIMEOUT', message: err.message });
     return;
   }
   const message = err instanceof Error ? err.message : String(err);
