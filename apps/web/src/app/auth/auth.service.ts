@@ -10,6 +10,7 @@ import type { ApiConfig, AuthConfig } from './api-config';
 
 type TokenKind = 'api' | 'graph';
 
+const STALE_REDIRECT_CACHE_ERROR = 'no_token_request_cache_error';
 const RECOVERABLE_BROWSER_AUTH_ERRORS = new Set([
   'monitor_window_timeout',
   'monitor_popup_timeout',
@@ -18,6 +19,32 @@ const RECOVERABLE_BROWSER_AUTH_ERRORS = new Set([
 
 function isRecoverableBrowserAuthError(err: unknown): boolean {
   return err instanceof BrowserAuthError && RECOVERABLE_BROWSER_AUTH_ERRORS.has(err.errorCode);
+}
+
+function isStaleRedirectCacheError(err: unknown): boolean {
+  return err instanceof BrowserAuthError && err.errorCode === STALE_REDIRECT_CACHE_ERROR;
+}
+
+function clearAuthResponseFromUrl(): void {
+  const url = new URL(window.location.href);
+  const authParams = ['code', 'state', 'session_state', 'error', 'error_description', 'client_info'];
+  let changed = false;
+
+  for (const param of authParams) {
+    if (url.searchParams.has(param)) {
+      url.searchParams.delete(param);
+      changed = true;
+    }
+  }
+
+  if (/(^|[#&?])(code|state|error|error_description|session_state)=/.test(url.hash)) {
+    url.hash = '';
+    changed = true;
+  }
+
+  if (changed) {
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }
 }
 
 /**
@@ -77,15 +104,16 @@ export class AuthService {
       },
     });
     await this.pca.initialize();
-    const result = await this.pca.handleRedirectPromise();
+    let result: AuthenticationResult | null = null;
+    try {
+      result = await this.pca.handleRedirectPromise();
+    } catch (err) {
+      if (!isStaleRedirectCacheError(err)) throw err;
+      clearAuthResponseFromUrl();
+    }
     if (result?.account) {
       this.pca.setActiveAccount(result.account);
-      // Strip the auth code/state from the URL so refreshes don't replay it.
-      window.history.replaceState(
-        {},
-        document.title,
-        window.location.pathname + window.location.hash,
-      );
+      clearAuthResponseFromUrl();
     }
     const active = this.pca.getActiveAccount() ?? this.pca.getAllAccounts()[0] ?? null;
     if (active) this.pca.setActiveAccount(active);
