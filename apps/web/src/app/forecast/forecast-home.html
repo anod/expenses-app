@@ -306,7 +306,8 @@
             @if (item.billKey && isBillExpanded(item.billKey) && item.billedEntries) {
               @for (sub of item.billedEntries; track sub.date + sub.description + sub.amount) {
                 <li class="timeline-charge timeline-charge--sub"
-                    [class.is-past]="item.past">
+                    [class.is-past]="item.past || sub.past"
+                    [class.is-cleared]="sub.cleared">
                   <span class="row-icon row-icon--cc">
                     <span class="material-symbols-outlined">subdirectory_arrow_right</span>
                   </span>
