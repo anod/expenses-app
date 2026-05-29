@@ -1,8 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { ForecastResult, LedgerEntry, Settings, ProjectionCharge, RecurringTemplate, CreditCard, Account, PaymentProgress } from '@expenses/shared';
-import { forecast as runForecast, descriptionLabel, paymentProgress } from '@expenses/shared';
+import type {
+  ForecastResult,
+  LedgerEntry,
+  Settings,
+  ProjectionCharge,
+  RecurringTemplate,
+  CreditCard,
+  PaymentProgress,
+} from '@expenses/shared';
+import { descriptionLabel, generateVirtualOccurrences, paymentProgress } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
@@ -26,9 +34,9 @@ interface ChargeItem {
   cardId?: string;
   /** Set for bank-channel charges (single ledger entry). Absent for cc-bill rollups. */
   entryId?: string;
-  /** True for entries that already happened (date earlier than account asOf). */
+  /** True for rows shown as already accounted for, not forecast actions. */
   past?: boolean;
-  /** True for past entries that were cleared (status === 'cleared'). */
+  /** True for entries that were marked cleared (status === 'cleared'). */
   cleared?: boolean;
   /** Individual charges aggregated into this cc-bill (chronological). */
   billedEntries?: BilledChargeRow[];
@@ -178,15 +186,7 @@ export class ForecastHomeComponent {
       });
   });
 
-  /** Charges + anchors interleaved chronologically.
-   *
-   * The server forecast trims its `days` to start at max(asOf, today), so
-   * past-but-after-asOf days never make it to the client. To show what
-   * happened since the last period anchor we re-run the shared pipeline
-   * locally with `today = windowStart`, then take only the days strictly
-   * before the real today from that secondary projection. Forecast rows
-   * from the real (server) result are appended as-is.
-   */
+  /** Charges + anchors interleaved chronologically. */
   protected readonly timeline = computed<TimelineItem[]>(() => {
     const f = this.forecast();
     if (!f) return [];
@@ -196,42 +196,37 @@ export class ForecastHomeComponent {
 
     const today = todayIsoLocal();
     const windowStart = lastPastAnchor(today);
+    const visibleStart = f.days[0]?.date ?? today;
 
-    // ---- Past projection: rerun pipeline with today = windowStart ----
-    const settings = this.settings();
-    if (settings && windowStart < today) {
-      try {
-        const past = runForecast({
-          templates: this.templates(),
-          persisted: this.ledger(),
-          account: f.account as Account,
-          cards: this.cards(),
-          settings,
-          today: windowStart,
-        });
-        for (const day of past.days) {
-          if (day.date >= today) break;
-          if (filter !== 'anchors') {
-            for (const c of day.charges) {
-              const row = this.toChargeItem(day.date, c);
-              row.past = true;
-              if (filter === 'all' || row.channel === filter) {
-                items.push(row);
-              }
-            }
-          }
-          if (day.isAnchor) {
-            items.push({
-              kind: 'anchor',
-              date: day.date,
-              balance: day.balance,
-              belowThreshold: day.balance < threshold,
-            });
-          }
+    // ---- Historical context: actual cleared rows and already-past rows ----
+    if (filter !== 'anchors') {
+      const ledger = this.ledger();
+      const overriddenOccurrences = new Set<string>();
+      for (const e of ledger) {
+        if (e.occurrenceKey) overriddenOccurrences.add(e.occurrenceKey);
+      }
+
+      const virtualPast =
+        windowStart < visibleStart
+          ? generateVirtualOccurrences(this.templates(), windowStart, visibleStart)
+              .filter(
+                (e) =>
+                  e.date < visibleStart &&
+                  (!e.occurrenceKey || !overriddenOccurrences.has(e.occurrenceKey)),
+              )
+          : [];
+      const persistedHistorical = ledger.filter(
+        (e) =>
+          e.date >= windowStart &&
+          e.date <= f.endDate &&
+          (e.date < visibleStart || e.status === 'cleared'),
+      );
+
+      for (const e of [...virtualPast, ...persistedHistorical]) {
+        const row = this.toPastChargeItem(e);
+        if (filter === 'all' || row.channel === filter) {
+          items.push(row);
         }
-      } catch {
-        // If past projection fails (e.g. inconsistent data), skip silently —
-        // the future forecast is still shown.
       }
     }
 
@@ -254,7 +249,11 @@ export class ForecastHomeComponent {
         });
       }
     }
-    return items;
+    return items.sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      if (a.kind === b.kind) return 0;
+      return a.kind === 'anchor' ? 1 : -1;
+    });
   });
 
   constructor() {
@@ -628,8 +627,10 @@ export class ForecastHomeComponent {
       entryId: e.id,
       past: true,
       cleared: e.status === 'cleared',
+      progress: e.recurringId ? this.progressForEntry(e) : null,
     };
     if (cardId) item.cardId = cardId;
+    if (e.recurringId) item.recurringId = e.recurringId;
     return item;
   }
 }

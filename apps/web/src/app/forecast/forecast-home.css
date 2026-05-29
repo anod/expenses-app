@@ -275,13 +275,14 @@
 
 .timeline-charge:last-child { border-bottom: none; }
 
-/* Past entries (month-to-date, before account asOf) render muted so they
- * read as historical context next to the live forecast rows. Cleared
- * past entries get a strike-through to reinforce that they're settled. */
-.timeline-charge.is-past {
+/* Past/cleared entries are already reflected in the current calculation, so
+ * render them muted next to the live forecast rows. */
+.timeline-charge.is-past,
+.timeline-charge.is-cleared {
   opacity: 0.55;
 }
-.timeline-charge.is-past .charge-amount {
+.timeline-charge.is-past .charge-amount,
+.timeline-charge.is-cleared .charge-amount {
   color: var(--md-sys-color-on-surface-variant);
 }
 .timeline-charge.is-cleared .charge-desc,

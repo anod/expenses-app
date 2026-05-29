@@ -280,7 +280,7 @@
                     {{ isBillExpanded(bk) ? 'expand_less' : 'expand_more' }}
                   </span>
                 </button>
-              } @else if (!item.past && item.entryId; as id) {
+              } @else if (!item.past && !item.cleared && item.entryId; as id) {
                 <div class="row-actions">
                   @if (canSkip(item) && item.recurringId; as rid) {
                     <button type="button"
