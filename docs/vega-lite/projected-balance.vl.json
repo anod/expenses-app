@@ -1,6 +1,6 @@
 {
-  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "description": "Anchor balance columns with expected spending as a line.",
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Anchor balance columns with expected spending as a line; mirrors the app chart rendered directly with Vega-Lite.",
   "title": {
     "text": "Projected Balance",
     "subtitle": "Columns show anchor balance; line shows expected spending",
@@ -73,7 +73,7 @@
         "type": "bar",
         "cornerRadiusTopLeft": 5,
         "cornerRadiusTopRight": 5,
-        "color": "#eaddff",
+        "color": "#d7c8f5",
         "stroke": "#6750a4",
         "strokeWidth": 0.9,
         "opacity": 0.96,
@@ -141,7 +141,7 @@
         "type": "line",
         "strokeWidth": 3,
         "interpolate": "monotone",
-        "color": "#7d5260"
+        "color": "#006d75"
       },
       "encoding": {
         "x": {
@@ -195,7 +195,7 @@
         "size": 72,
         "stroke": "white",
         "strokeWidth": 1.5,
-        "color": "#7d5260"
+        "color": "#006d75"
       },
       "encoding": {
         "x": {
