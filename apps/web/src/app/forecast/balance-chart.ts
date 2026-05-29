@@ -33,7 +33,7 @@ interface ChartBar {
 }
 
 interface LineSeries {
-  key: 'required' | 'cc';
+  key: 'spending';
   label: string;
   path: string;
   lineClass: string;
@@ -51,7 +51,7 @@ interface ChartModel {
   yTicks: readonly { y: number; label: string }[];
   zeroY: number;
   plotBottom: number;
-  legend: readonly { x: number; label: string; className: string }[];
+  legend: readonly { x: number; label: string; className: string; kind: 'bar' | 'line' }[];
 }
 
 interface AnchorDatum {
@@ -72,21 +72,32 @@ interface AnchorDatum {
         [attr.viewBox]="'0 0 ' + chart().width + ' ' + chart().height"
         preserveAspectRatio="none"
         role="img"
-        aria-label="Projected balance chart with expected spending bars and payment lines"
+        aria-label="Projected balance chart with anchor balance bars and expected spending line"
       >
         <text [attr.x]="chart().pad.left" y="14" class="chart-subtitle">
-          Spending columns with balance and split-card payment lines
+          Anchor balance columns with expected spending line
         </text>
 
         @for (item of chart().legend; track item.label) {
           <g>
-            <line
-              [attr.x1]="item.x"
-              [attr.x2]="item.x + 22"
-              y1="32"
-              y2="32"
-              [attr.class]="item.className"
-            />
+            @if (item.kind === 'bar') {
+              <rect
+                [attr.x]="item.x"
+                y="25"
+                width="22"
+                height="12"
+                rx="3"
+                [attr.class]="item.className"
+              />
+            } @else {
+              <line
+                [attr.x1]="item.x"
+                [attr.x2]="item.x + 22"
+                y1="32"
+                y2="32"
+                [attr.class]="item.className"
+              />
+            }
             <text [attr.x]="item.x + 28" y="36" class="legend-label">{{ item.label }}</text>
           </g>
         }
@@ -126,7 +137,7 @@ interface AnchorDatum {
             rx="5"
             ry="5"
             tabindex="0"
-            class="spending-bar"
+            class="balance-bar"
             [attr.aria-label]="bar.ariaLabel"
             (pointerenter)="showPointerTooltip($event, bar.tooltip)"
             (pointermove)="showPointerTooltip($event, bar.tooltip)"
@@ -230,36 +241,29 @@ interface AnchorDatum {
         stroke: var(--md-sys-color-outline-variant);
         stroke-width: 1.2;
       }
-      .spending-bar {
-        fill: #d7c8f5;
-        opacity: 0.92;
+      .balance-bar {
+        fill: var(--md-sys-color-primary-container);
+        stroke: var(--md-sys-color-primary);
+        stroke-width: 0.9;
+        opacity: 0.96;
         cursor: pointer;
       }
-      .series-required,
-      .series-cc {
+      .series-spending {
         fill: none;
+        stroke: var(--md-sys-color-tertiary);
         stroke-width: 3;
         stroke-linejoin: round;
         stroke-linecap: round;
-      }
-      .series-required {
-        stroke: var(--md-sys-color-primary);
-      }
-      .series-cc {
-        stroke: var(--md-sys-color-error);
       }
       .series-point {
         stroke: var(--md-sys-color-surface);
         stroke-width: 1.5;
         cursor: pointer;
       }
-      .series-point-required {
-        fill: var(--md-sys-color-primary);
+      .series-point-spending {
+        fill: var(--md-sys-color-tertiary);
       }
-      .series-point-cc {
-        fill: var(--md-sys-color-error);
-      }
-      .spending-bar:focus-visible,
+      .balance-bar:focus-visible,
       .series-point:focus-visible {
         outline: none;
         stroke: var(--md-sys-color-on-surface);
@@ -320,8 +324,13 @@ export class BalanceChartComponent {
       zeroY: plotBottom,
       plotBottom,
       legend: [
-        { x: pad.left, label: 'Anchor balance', className: 'series-required' },
-        { x: pad.left + 150, label: 'Split CC @ anchor', className: 'series-cc' },
+        { x: pad.left, label: 'Anchor balance', className: 'balance-bar', kind: 'bar' },
+        {
+          x: pad.left + 150,
+          label: 'Expected spending',
+          className: 'series-spending',
+          kind: 'line',
+        },
       ],
     };
 
@@ -336,11 +345,7 @@ export class BalanceChartComponent {
       Math.max(18, (innerW / Math.max(anchors.length, 1)) * 0.56),
     );
 
-    const values = anchors.flatMap((d) => [
-      d.anchorBalance,
-      d.expectedSpending,
-      d.creditCardPayments,
-    ]);
+    const values = anchors.flatMap((d) => [d.anchorBalance, d.expectedSpending]);
     const domain = this.valueDomain(values);
     const yOf = (v: number): number =>
       plotBottom - ((v - domain.min) / (domain.max - domain.min)) * innerH;
@@ -352,15 +357,15 @@ export class BalanceChartComponent {
 
     const bars = anchors.map((d, i) => {
       const x = xOf(i);
-      const y = yOf(d.expectedSpending);
+      const y = yOf(d.anchorBalance);
       const bottom = yOf(0);
-      const tooltip = this.anchorTooltip(d, 'Expected spending', d.expectedSpending);
+      const tooltip = this.anchorTooltip(d, 'Anchor balance', d.anchorBalance);
       return {
         x: x - barWidth / 2,
         y: Math.min(y, bottom),
         width: barWidth,
         height: Math.max(2, Math.abs(bottom - y)),
-        ariaLabel: `${this.formatAnchorDate(d.date)} expected spending ${this.formatAmount(d.expectedSpending)}`,
+        ariaLabel: `${this.formatAnchorDate(d.date)} anchor balance ${this.formatAmount(d.anchorBalance)}`,
         tooltip,
       };
     });
@@ -400,18 +405,11 @@ export class BalanceChartComponent {
       bars,
       lines: [
         lineFor(
-          'required',
-          'Anchor balance',
-          (d) => d.anchorBalance,
-          'series-required',
-          'series-point series-point-required',
-        ),
-        lineFor(
-          'cc',
-          'Split CC @ anchor',
-          (d) => d.creditCardPayments,
-          'series-cc',
-          'series-point series-point-cc',
+          'spending',
+          'Expected spending',
+          (d) => d.expectedSpending,
+          'series-spending',
+          'series-point series-point-spending',
         ),
       ],
       xLabels: anchors.map((d, i) => ({ x: xOf(i), key: d.date, label: this.anchorLabel(d.date) })),
