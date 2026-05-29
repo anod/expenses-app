@@ -10,7 +10,13 @@ import type {
   CreditCard,
   PaymentProgress,
 } from '@expenses/shared';
-import { descriptionLabel, generateVirtualOccurrences, paymentProgress } from '@expenses/shared';
+import {
+  addMonths,
+  descriptionLabel,
+  firstBillingDayStrictlyAfter,
+  generateVirtualOccurrences,
+  paymentProgress,
+} from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 
@@ -206,24 +212,38 @@ export class ForecastHomeComponent {
         if (e.occurrenceKey) overriddenOccurrences.add(e.occurrenceKey);
       }
 
-      const virtualPast =
+      const virtualBillCandidates =
         windowStart < visibleStart
-          ? generateVirtualOccurrences(this.templates(), windowStart, visibleStart)
+          ? generateVirtualOccurrences(this.templates(), addMonths(windowStart, -1), visibleStart)
               .filter(
                 (e) =>
                   e.date < visibleStart &&
                   (!e.occurrenceKey || !overriddenOccurrences.has(e.occurrenceKey)),
               )
           : [];
+      const virtualPast = virtualBillCandidates.filter((e) => e.date >= windowStart);
       const persistedHistorical = ledger.filter(
         (e) =>
           e.date >= windowStart &&
           e.date <= f.endDate &&
           (e.date < visibleStart || e.status === 'cleared'),
       );
+      const historicalBillRows = this.pastCreditCardBillItems(
+        virtualBillCandidates,
+        ledger,
+        windowStart,
+        visibleStart,
+        f.endDate,
+      );
 
       for (const e of [...virtualPast, ...persistedHistorical]) {
+        if (this.rollsIntoCreditCardBill(e)) continue;
         const row = this.toPastChargeItem(e);
+        if (filter === 'all' || row.channel === filter) {
+          items.push(row);
+        }
+      }
+      for (const row of historicalBillRows) {
         if (filter === 'all' || row.channel === filter) {
           items.push(row);
         }
@@ -632,6 +652,82 @@ export class ForecastHomeComponent {
     if (cardId) item.cardId = cardId;
     if (e.recurringId) item.recurringId = e.recurringId;
     return item;
+  }
+
+  private rollsIntoCreditCardBill(e: LedgerEntry): boolean {
+    if (!e.channel.startsWith('cc:')) return false;
+    const card = this.cards().find((c) => c.id === e.channel.slice(3));
+    return card != null && card.mode !== 'debit';
+  }
+
+  private pastCreditCardBillItems(
+    virtuals: ReadonlyArray<LedgerEntry>,
+    persisted: ReadonlyArray<LedgerEntry>,
+    start: string,
+    visibleStart: string,
+    end: string,
+  ): ChargeItem[] {
+    type BillBucket = {
+      billDate: string;
+      cardId: string;
+      entries: LedgerEntry[];
+      openingDebit: number;
+    };
+
+    const cardsById = new Map(this.cards().map((card) => [card.id, card]));
+    const buckets = new Map<string, BillBucket>();
+    const bucketFor = (cardId: string, billDate: string): BillBucket => {
+      const key = `${billDate}:${cardId}`;
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { billDate, cardId, entries: [], openingDebit: 0 };
+        buckets.set(key, bucket);
+      }
+      return bucket;
+    };
+    const inPastWindow = (date: string): boolean =>
+      date >= start && date < visibleStart && date <= end;
+
+    for (const card of this.cards()) {
+      if (card.mode === 'debit' || card.currentDebit === 0) continue;
+      const billDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
+      if (inPastWindow(billDate)) {
+        bucketFor(card.id, billDate).openingDebit += card.currentDebit;
+      }
+    }
+
+    for (const e of [...virtuals, ...persisted]) {
+      if (!e.channel.startsWith('cc:')) continue;
+      const cardId = e.channel.slice(3);
+      const card = cardsById.get(cardId);
+      if (!card || card.mode === 'debit' || e.date <= card.asOf) continue;
+      const billDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
+      if (inPastWindow(billDate)) {
+        bucketFor(cardId, billDate).entries.push(e);
+      }
+    }
+
+    const rows: ChargeItem[] = [];
+    for (const bucket of buckets.values()) {
+      const card = cardsById.get(bucket.cardId);
+      if (!card) continue;
+      const entriesTotal = bucket.entries.reduce((sum, e) => sum + e.amount, 0);
+      const amount = entriesTotal - bucket.openingDebit;
+      const parts: string[] = [];
+      if (bucket.openingDebit > 0) parts.push('opening balance');
+      if (bucket.entries.length > 0) {
+        parts.push(`${bucket.entries.length} charge${bucket.entries.length === 1 ? '' : 's'}`);
+      }
+      const summary = parts.length > 0 ? parts.join(' + ') : '0 charges';
+      const row = this.toChargeItem(bucket.billDate, {
+        description: `Credit card bill (${card.name}, ${summary})`,
+        amount,
+        source: { kind: 'cc-bill', cardId: bucket.cardId, billedEntries: bucket.entries.slice() },
+      });
+      row.past = true;
+      rows.push(row);
+    }
+    return rows;
   }
 }
 
