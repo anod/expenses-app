@@ -1,15 +1,15 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "description": "Projected balance by anchor period with spending and split credit-card debt as lines.",
+  "description": "Expected spending columns with anchor balance and split credit-card payments as lines.",
   "title": {
     "text": "Projected Balance",
-    "subtitle": "Columns show anchor balance; lines show spending and split credit-card debt at each anchor",
+    "subtitle": "Columns show expected spending; lines show anchor balance and split credit-card payments",
     "anchor": "start",
     "fontSize": 16,
     "subtitleFontSize": 12,
     "subtitleColor": "#6b6472"
   },
-  "width": 820,
+  "width": 680,
   "height": 320,
   "data": {
     "values": [
@@ -59,34 +59,46 @@
   },
   "transform": [
     {
-      "timeUnit": "yearmonthdate",
-      "field": "date",
-      "as": "anchorDate"
+      "calculate": "datum.spendingAtAnchor",
+      "as": "expectedSpending"
+    },
+    {
+      "calculate": "datum.splitCcAtAnchor",
+      "as": "creditCardPayments"
     }
   ],
   "layer": [
     {
       "mark": {
         "type": "bar",
-        "cornerRadiusTopLeft": 4,
-        "cornerRadiusTopRight": 4,
+        "cornerRadiusTopLeft": 5,
+        "cornerRadiusTopRight": 5,
         "color": "#d7c8f5",
-        "opacity": 0.85,
-        "width": 34
+        "opacity": 0.92,
+        "width": 56
       },
       "encoding": {
         "x": {
-          "field": "anchorDate",
+          "field": "date",
           "type": "ordinal",
           "title": null,
+          "sort": {
+            "field": "date",
+            "order": "ascending"
+          },
+          "scale": {
+            "paddingInner": 0.08,
+            "paddingOuter": 0.03
+          },
           "axis": {
-            "format": "%b %d",
+            "labelExpr": "timeFormat(toDate(datum.label), '%b %d')",
             "labelAngle": 0,
-            "labelFontSize": 12
+            "labelFontSize": 12,
+            "labelColor": "#49454f"
           }
         },
         "y": {
-          "field": "anchorBalance",
+          "field": "expectedSpending",
           "type": "quantitative",
           "title": "Amount",
           "axis": {
@@ -98,8 +110,14 @@
           {
             "field": "date",
             "type": "temporal",
-            "title": "Anchor",
+            "title": "Anchor period",
             "format": "%b %d, %Y"
+          },
+          {
+            "field": "expectedSpending",
+            "type": "quantitative",
+            "title": "Expected spending",
+            "format": ",.0f"
           },
           {
             "field": "anchorBalance",
@@ -108,13 +126,7 @@
             "format": ",.0f"
           },
           {
-            "field": "spendingAtAnchor",
-            "type": "quantitative",
-            "title": "Spending @ anchor",
-            "format": ",.0f"
-          },
-          {
-            "field": "splitCcAtAnchor",
+            "field": "creditCardPayments",
             "type": "quantitative",
             "title": "Split CC @ anchor",
             "format": ",.0f"
@@ -125,11 +137,11 @@
     {
       "transform": [
         {
-          "fold": ["spendingAtAnchor", "splitCcAtAnchor"],
+          "fold": ["anchorBalance", "creditCardPayments"],
           "as": ["lineKey", "lineValue"]
         },
         {
-          "calculate": "datum.lineKey === 'spendingAtAnchor' ? 'Spending @ anchor' : 'Split CC @ anchor'",
+          "calculate": "datum.lineKey === 'anchorBalance' ? 'Anchor balance' : 'Split CC @ anchor'",
           "as": "lineMetric"
         }
       ],
@@ -140,9 +152,16 @@
       },
       "encoding": {
         "x": {
-          "field": "anchorDate",
+          "field": "date",
           "type": "ordinal",
-          "title": null
+          "sort": {
+            "field": "date",
+            "order": "ascending"
+          },
+          "scale": {
+            "paddingInner": 0.08,
+            "paddingOuter": 0.03
+          }
         },
         "y": {
           "field": "lineValue",
@@ -152,8 +171,8 @@
           "field": "lineMetric",
           "type": "nominal",
           "scale": {
-            "domain": ["Spending @ anchor", "Split CC @ anchor"],
-            "range": ["#625b71", "#b3261e"]
+            "domain": ["Anchor balance", "Split CC @ anchor"],
+            "range": ["#6750a4", "#b3261e"]
           },
           "legend": {
             "orient": "top",
@@ -166,7 +185,7 @@
           {
             "field": "date",
             "type": "temporal",
-            "title": "Anchor",
+            "title": "Anchor period",
             "format": "%b %d, %Y"
           },
           {
@@ -186,26 +205,33 @@
     {
       "transform": [
         {
-          "fold": ["spendingAtAnchor", "splitCcAtAnchor"],
+          "fold": ["anchorBalance", "creditCardPayments"],
           "as": ["lineKey", "lineValue"]
         },
         {
-          "calculate": "datum.lineKey === 'spendingAtAnchor' ? 'Spending @ anchor' : 'Split CC @ anchor'",
+          "calculate": "datum.lineKey === 'anchorBalance' ? 'Anchor balance' : 'Split CC @ anchor'",
           "as": "lineMetric"
         }
       ],
       "mark": {
         "type": "point",
         "filled": true,
-        "size": 70,
+        "size": 72,
         "stroke": "white",
         "strokeWidth": 1.5
       },
       "encoding": {
         "x": {
-          "field": "anchorDate",
+          "field": "date",
           "type": "ordinal",
-          "title": null
+          "sort": {
+            "field": "date",
+            "order": "ascending"
+          },
+          "scale": {
+            "paddingInner": 0.08,
+            "paddingOuter": 0.03
+          }
         },
         "y": {
           "field": "lineValue",
@@ -215,8 +241,8 @@
           "field": "lineMetric",
           "type": "nominal",
           "scale": {
-            "domain": ["Spending @ anchor", "Split CC @ anchor"],
-            "range": ["#625b71", "#b3261e"]
+            "domain": ["Anchor balance", "Split CC @ anchor"],
+            "range": ["#6750a4", "#b3261e"]
           },
           "legend": null
         },
@@ -224,7 +250,7 @@
           {
             "field": "date",
             "type": "temporal",
-            "title": "Anchor",
+            "title": "Anchor period",
             "format": "%b %d, %Y"
           },
           {
@@ -256,8 +282,7 @@
       "titleColor": "#49454f"
     },
     "legend": {
-      "labelColor": "#49454f",
-      "orient": "top"
+      "labelColor": "#49454f"
     }
   }
 }
