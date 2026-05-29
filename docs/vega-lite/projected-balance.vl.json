@@ -1,9 +1,9 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "description": "Expected spending columns with anchor balance and split credit-card payments as lines.",
+  "description": "Anchor balance columns with expected spending as a line.",
   "title": {
     "text": "Projected Balance",
-    "subtitle": "Columns show expected spending; lines show anchor balance and split credit-card payments",
+    "subtitle": "Columns show anchor balance; line shows expected spending",
     "anchor": "start",
     "fontSize": 16,
     "subtitleFontSize": 12,
@@ -73,8 +73,10 @@
         "type": "bar",
         "cornerRadiusTopLeft": 5,
         "cornerRadiusTopRight": 5,
-        "color": "#d7c8f5",
-        "opacity": 0.92,
+        "color": "#eaddff",
+        "stroke": "#6750a4",
+        "strokeWidth": 0.9,
+        "opacity": 0.96,
         "width": 56
       },
       "encoding": {
@@ -98,13 +100,65 @@
           }
         },
         "y": {
-          "field": "expectedSpending",
+          "field": "anchorBalance",
           "type": "quantitative",
           "title": "Amount",
           "axis": {
             "format": ",.0f",
             "labelFontSize": 11
           }
+        },
+        "tooltip": [
+          {
+            "field": "date",
+            "type": "temporal",
+            "title": "Anchor period",
+            "format": "%b %d, %Y"
+          },
+          {
+            "field": "anchorBalance",
+            "type": "quantitative",
+            "title": "Anchor balance",
+            "format": ",.0f"
+          },
+          {
+            "field": "expectedSpending",
+            "type": "quantitative",
+            "title": "Expected spending",
+            "format": ",.0f"
+          },
+          {
+            "field": "creditCardPayments",
+            "type": "quantitative",
+            "title": "Split CC @ anchor",
+            "format": ",.0f"
+          }
+        ]
+      }
+    },
+    {
+      "mark": {
+        "type": "line",
+        "strokeWidth": 3,
+        "interpolate": "monotone",
+        "color": "#7d5260"
+      },
+      "encoding": {
+        "x": {
+          "field": "date",
+          "type": "ordinal",
+          "sort": {
+            "field": "date",
+            "order": "ascending"
+          },
+          "scale": {
+            "paddingInner": 0.08,
+            "paddingOuter": 0.03
+          }
+        },
+        "y": {
+          "field": "expectedSpending",
+          "type": "quantitative"
         },
         "tooltip": [
           {
@@ -135,90 +189,13 @@
       }
     },
     {
-      "transform": [
-        {
-          "fold": ["anchorBalance", "creditCardPayments"],
-          "as": ["lineKey", "lineValue"]
-        },
-        {
-          "calculate": "datum.lineKey === 'anchorBalance' ? 'Anchor balance' : 'Split CC @ anchor'",
-          "as": "lineMetric"
-        }
-      ],
-      "mark": {
-        "type": "line",
-        "strokeWidth": 3,
-        "interpolate": "monotone"
-      },
-      "encoding": {
-        "x": {
-          "field": "date",
-          "type": "ordinal",
-          "sort": {
-            "field": "date",
-            "order": "ascending"
-          },
-          "scale": {
-            "paddingInner": 0.08,
-            "paddingOuter": 0.03
-          }
-        },
-        "y": {
-          "field": "lineValue",
-          "type": "quantitative"
-        },
-        "color": {
-          "field": "lineMetric",
-          "type": "nominal",
-          "scale": {
-            "domain": ["Anchor balance", "Split CC @ anchor"],
-            "range": ["#6750a4", "#b3261e"]
-          },
-          "legend": {
-            "orient": "top",
-            "title": null,
-            "labelFontSize": 12,
-            "symbolType": "stroke"
-          }
-        },
-        "tooltip": [
-          {
-            "field": "date",
-            "type": "temporal",
-            "title": "Anchor period",
-            "format": "%b %d, %Y"
-          },
-          {
-            "field": "lineMetric",
-            "type": "nominal",
-            "title": "Metric"
-          },
-          {
-            "field": "lineValue",
-            "type": "quantitative",
-            "title": "Amount",
-            "format": ",.0f"
-          }
-        ]
-      }
-    },
-    {
-      "transform": [
-        {
-          "fold": ["anchorBalance", "creditCardPayments"],
-          "as": ["lineKey", "lineValue"]
-        },
-        {
-          "calculate": "datum.lineKey === 'anchorBalance' ? 'Anchor balance' : 'Split CC @ anchor'",
-          "as": "lineMetric"
-        }
-      ],
       "mark": {
         "type": "point",
         "filled": true,
         "size": 72,
         "stroke": "white",
-        "strokeWidth": 1.5
+        "strokeWidth": 1.5,
+        "color": "#7d5260"
       },
       "encoding": {
         "x": {
@@ -234,17 +211,8 @@
           }
         },
         "y": {
-          "field": "lineValue",
+          "field": "expectedSpending",
           "type": "quantitative"
-        },
-        "color": {
-          "field": "lineMetric",
-          "type": "nominal",
-          "scale": {
-            "domain": ["Anchor balance", "Split CC @ anchor"],
-            "range": ["#6750a4", "#b3261e"]
-          },
-          "legend": null
         },
         "tooltip": [
           {
@@ -254,14 +222,21 @@
             "format": "%b %d, %Y"
           },
           {
-            "field": "lineMetric",
-            "type": "nominal",
-            "title": "Metric"
+            "field": "expectedSpending",
+            "type": "quantitative",
+            "title": "Expected spending",
+            "format": ",.0f"
           },
           {
-            "field": "lineValue",
+            "field": "anchorBalance",
             "type": "quantitative",
-            "title": "Amount",
+            "title": "Anchor balance",
+            "format": ",.0f"
+          },
+          {
+            "field": "creditCardPayments",
+            "type": "quantitative",
+            "title": "Split CC @ anchor",
             "format": ",.0f"
           }
         ]
