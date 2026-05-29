@@ -1,6 +1,5 @@
 import {
   ChangeDetectionStrategy,
-  ChangeDetectorRef,
   Component,
   DestroyRef,
   ElementRef,
@@ -10,19 +9,11 @@ import {
   effect,
   inject,
   input,
-  signal,
   viewChild,
 } from '@angular/core';
 import type { DailyProjection, RecurringTemplate } from '@expenses/shared';
 import type { TopLevelSpec } from 'vega-lite';
-import type { TooltipHandler, View as VegaView } from 'vega';
-
-interface ChartTooltip {
-  x: number;
-  y: number;
-  title: string;
-  rows: readonly { label: string; value: string }[];
-}
+import type { View as VegaView } from 'vega';
 
 interface AnchorDatum {
   date: string;
@@ -31,8 +22,6 @@ interface AnchorDatum {
   expectedSpending: number;
   creditCardPayments: number;
 }
-
-type TooltipValue = Record<string, unknown> | null | undefined;
 
 const CHART_WIDTH = 680;
 const CHART_HEIGHT = 320;
@@ -45,7 +34,7 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="chart-wrap" (pointerleave)="hideTooltip()" (blur)="hideTooltip()" tabindex="-1">
+    <div class="chart-wrap">
       <div
         #chartHost
         class="vega-chart"
@@ -55,18 +44,6 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
 
       @if (anchors().length === 0) {
         <p class="empty-chart">No anchor periods to chart yet.</p>
-      }
-
-      @if (tooltip(); as tip) {
-        <div class="chart-tooltip" role="tooltip" [style.left.px]="tip.x" [style.top.px]="tip.y">
-          <div class="tooltip-title">{{ tip.title }}</div>
-          @for (row of tip.rows; track row.label) {
-            <div class="tooltip-row">
-              <span>{{ row.label }}</span>
-              <strong>{{ row.value }}</strong>
-            </div>
-          }
-        </div>
       }
     </div>
   `,
@@ -102,48 +79,22 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
         font: var(--md-sys-typescale-body-medium);
         background: var(--md-sys-color-surface);
       }
-      .chart-tooltip {
-        position: absolute;
-        z-index: 1;
-        min-width: 180px;
-        max-width: min(260px, calc(100% - 16px));
-        padding: 0.65rem 0.75rem;
-        border-radius: var(--md-sys-shape-corner-md);
-        background: var(--md-sys-color-inverse-surface);
-        color: var(--md-sys-color-inverse-on-surface);
-        box-shadow: var(--md-sys-elevation-3);
-        font: var(--md-sys-typescale-body-small);
-        pointer-events: none;
-        transform: translate(10px, calc(-100% - 10px));
-      }
-      .tooltip-title {
-        margin-bottom: 0.45rem;
-        font: var(--md-sys-typescale-label-large);
-      }
-      .tooltip-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        font-variant-numeric: tabular-nums;
-      }
-      .tooltip-row + .tooltip-row {
-        margin-top: 0.25rem;
-      }
     `,
   ],
 })
 export class BalanceChartComponent {
-  private readonly host = inject(ElementRef<HTMLElement>);
   private readonly chartHost = viewChild.required<ElementRef<HTMLElement>>('chartHost');
-  private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
-  private readonly vegaModules = Promise.all([import('vega'), import('vega-lite')]);
+  private readonly vegaModules = Promise.all([
+    import('vega'),
+    import('vega-lite'),
+    import('vega-tooltip'),
+  ]);
   private renderGeneration = 0;
 
   readonly days = input.required<readonly DailyProjection[]>();
   readonly templates = input<readonly RecurringTemplate[]>([]);
-  protected readonly tooltip = signal<ChartTooltip | null>(null);
   protected readonly anchors = computed(() => this.anchorData());
   private readonly spec = computed<TopLevelSpec>(() => buildBalanceChartSpec(this.anchors()));
 
@@ -158,7 +109,6 @@ export class BalanceChartComponent {
 
           if (anchors.length === 0) {
             host.replaceChildren();
-            this.hideTooltip();
             return;
           }
 
@@ -174,7 +124,6 @@ export class BalanceChartComponent {
             this.renderGeneration++;
             view?.finalize();
             host.replaceChildren();
-            this.hideTooltip();
           });
         },
         { injector: this.injector },
@@ -183,7 +132,6 @@ export class BalanceChartComponent {
 
     this.destroyRef.onDestroy(() => {
       this.renderGeneration++;
-      this.tooltip.set(null);
     });
   }
 
@@ -192,11 +140,11 @@ export class BalanceChartComponent {
     spec: TopLevelSpec,
     renderId: number,
   ): Promise<VegaView> {
-    const [{ View, parse }, { compile }] = await this.vegaModules;
+    const [{ View, parse }, { compile }, { Handler }] = await this.vegaModules;
     const runtime = parse(compile(spec).spec);
     const view = new View(runtime, {
       renderer: 'svg',
-      tooltip: this.tooltipHandler,
+      tooltip: new Handler().call,
       hover: true,
     }).initialize(host);
 
@@ -207,53 +155,6 @@ export class BalanceChartComponent {
     }
 
     return view;
-  }
-
-  private readonly tooltipHandler: TooltipHandler = (_handler, event, _item, value) => {
-    const tooltip = this.tooltipFromValue(value);
-    if (!tooltip) {
-      this.hideTooltip();
-      return;
-    }
-
-    const rect = this.host.nativeElement.getBoundingClientRect();
-    this.tooltip.set({
-      ...tooltip,
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
-    this.cdr.markForCheck();
-  };
-
-  protected hideTooltip(): void {
-    this.tooltip.set(null);
-    this.cdr.markForCheck();
-  }
-
-  private tooltipFromValue(value: TooltipValue): Omit<ChartTooltip, 'x' | 'y'> | null {
-    if (!value || typeof value !== 'object') return null;
-
-    const title = this.readTooltipString(value, 'Anchor period');
-    const metric = this.readTooltipString(value, 'Metric');
-    const amount = this.readTooltipString(value, 'Amount');
-    if (!title || !metric || !amount) return null;
-
-    const rows = [
-      { label: metric, value: amount },
-      {
-        label: EXPECTED_SPENDING_LABEL,
-        value: this.readTooltipString(value, EXPECTED_SPENDING_LABEL),
-      },
-      { label: ANCHOR_BALANCE_LABEL, value: this.readTooltipString(value, ANCHOR_BALANCE_LABEL) },
-      { label: SPLIT_CC_LABEL, value: this.readTooltipString(value, SPLIT_CC_LABEL) },
-    ].filter((row) => row.label === metric || (row.label !== metric && row.value));
-
-    return { title, rows };
-  }
-
-  private readTooltipString(value: Record<string, unknown>, key: string): string {
-    const raw = value[key];
-    return typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
   }
 
   private anchorData(): AnchorDatum[] {
