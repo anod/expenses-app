@@ -92,6 +92,246 @@ add one unless asked.
 - Tests use `vitest` (`vitest run` for CI, no jest). Co-locate as
   `*.test.ts` next to the unit under test.
 
+## Chart reference
+
+Use this Vega-Lite definition as the reference layout for projected balance
+experiments in the online Vega editor. The x-axis is ordinal by anchor date so
+each anchor day appears once instead of using a continuous monthly time scale.
+Inline values are sample-shaped data; replace them with forecast anchor rows.
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "Projected balance by anchor period with spending and split credit-card debt as lines.",
+  "title": {
+    "text": "Projected Balance",
+    "subtitle": "Columns show anchor balance; lines show spending and split credit-card debt at each anchor",
+    "anchor": "start",
+    "fontSize": 16,
+    "subtitleFontSize": 12,
+    "subtitleColor": "#6b6472"
+  },
+  "width": 820,
+  "height": 320,
+  "data": {
+    "values": [
+      {
+        "date": "2026-01-10",
+        "anchorBalance": 18400,
+        "spendingAtAnchor": 0,
+        "splitCcAtAnchor": 0
+      },
+      {
+        "date": "2026-02-10",
+        "anchorBalance": 16250,
+        "spendingAtAnchor": 3850,
+        "splitCcAtAnchor": 900
+      },
+      {
+        "date": "2026-03-10",
+        "anchorBalance": 14100,
+        "spendingAtAnchor": 4100,
+        "splitCcAtAnchor": 1250
+      },
+      {
+        "date": "2026-04-10",
+        "anchorBalance": 11950,
+        "spendingAtAnchor": 3950,
+        "splitCcAtAnchor": 1500
+      },
+      {
+        "date": "2026-05-10",
+        "anchorBalance": 9800,
+        "spendingAtAnchor": 4200,
+        "splitCcAtAnchor": 1750
+      },
+      {
+        "date": "2026-06-10",
+        "anchorBalance": 11200,
+        "spendingAtAnchor": 3600,
+        "splitCcAtAnchor": 1200
+      },
+      {
+        "date": "2026-07-10",
+        "anchorBalance": 8700,
+        "spendingAtAnchor": 4550,
+        "splitCcAtAnchor": 2100
+      }
+    ]
+  },
+  "transform": [
+    {
+      "timeUnit": "yearmonthdate",
+      "field": "date",
+      "as": "anchorDate"
+    }
+  ],
+  "layer": [
+    {
+      "mark": {
+        "type": "bar",
+        "cornerRadiusTopLeft": 4,
+        "cornerRadiusTopRight": 4,
+        "color": "#d7c8f5",
+        "opacity": 0.85,
+        "width": 34
+      },
+      "encoding": {
+        "x": {
+          "field": "anchorDate",
+          "type": "ordinal",
+          "title": null,
+          "axis": {
+            "format": "%b %d",
+            "labelAngle": 0,
+            "labelFontSize": 12
+          }
+        },
+        "y": {
+          "field": "anchorBalance",
+          "type": "quantitative",
+          "title": "Amount",
+          "axis": {
+            "format": ",.0f",
+            "labelFontSize": 11
+          }
+        },
+        "tooltip": [
+          { "field": "date", "type": "temporal", "title": "Anchor", "format": "%b %d, %Y" },
+          {
+            "field": "anchorBalance",
+            "type": "quantitative",
+            "title": "Anchor balance",
+            "format": ",.0f"
+          },
+          {
+            "field": "spendingAtAnchor",
+            "type": "quantitative",
+            "title": "Spending @ anchor",
+            "format": ",.0f"
+          },
+          {
+            "field": "splitCcAtAnchor",
+            "type": "quantitative",
+            "title": "Split CC @ anchor",
+            "format": ",.0f"
+          }
+        ]
+      }
+    },
+    {
+      "transform": [
+        {
+          "fold": ["spendingAtAnchor", "splitCcAtAnchor"],
+          "as": ["lineKey", "lineValue"]
+        },
+        {
+          "calculate": "datum.lineKey === 'spendingAtAnchor' ? 'Spending @ anchor' : 'Split CC @ anchor'",
+          "as": "lineMetric"
+        }
+      ],
+      "mark": {
+        "type": "line",
+        "strokeWidth": 3,
+        "interpolate": "monotone"
+      },
+      "encoding": {
+        "x": {
+          "field": "anchorDate",
+          "type": "ordinal",
+          "title": null
+        },
+        "y": {
+          "field": "lineValue",
+          "type": "quantitative"
+        },
+        "color": {
+          "field": "lineMetric",
+          "type": "nominal",
+          "scale": {
+            "domain": ["Spending @ anchor", "Split CC @ anchor"],
+            "range": ["#625b71", "#b3261e"]
+          },
+          "legend": {
+            "orient": "top",
+            "title": null,
+            "labelFontSize": 12,
+            "symbolType": "stroke"
+          }
+        },
+        "tooltip": [
+          { "field": "date", "type": "temporal", "title": "Anchor", "format": "%b %d, %Y" },
+          { "field": "lineMetric", "type": "nominal", "title": "Metric" },
+          { "field": "lineValue", "type": "quantitative", "title": "Amount", "format": ",.0f" }
+        ]
+      }
+    },
+    {
+      "transform": [
+        {
+          "fold": ["spendingAtAnchor", "splitCcAtAnchor"],
+          "as": ["lineKey", "lineValue"]
+        },
+        {
+          "calculate": "datum.lineKey === 'spendingAtAnchor' ? 'Spending @ anchor' : 'Split CC @ anchor'",
+          "as": "lineMetric"
+        }
+      ],
+      "mark": {
+        "type": "point",
+        "filled": true,
+        "size": 70,
+        "stroke": "white",
+        "strokeWidth": 1.5
+      },
+      "encoding": {
+        "x": {
+          "field": "anchorDate",
+          "type": "ordinal",
+          "title": null
+        },
+        "y": {
+          "field": "lineValue",
+          "type": "quantitative"
+        },
+        "color": {
+          "field": "lineMetric",
+          "type": "nominal",
+          "scale": {
+            "domain": ["Spending @ anchor", "Split CC @ anchor"],
+            "range": ["#625b71", "#b3261e"]
+          },
+          "legend": null
+        },
+        "tooltip": [
+          { "field": "date", "type": "temporal", "title": "Anchor", "format": "%b %d, %Y" },
+          { "field": "lineMetric", "type": "nominal", "title": "Metric" },
+          { "field": "lineValue", "type": "quantitative", "title": "Amount", "format": ",.0f" }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "background": "#fffbff",
+    "view": {
+      "stroke": null
+    },
+    "axis": {
+      "grid": true,
+      "gridColor": "#eee8f1",
+      "domain": false,
+      "tickColor": "#d7d0dd",
+      "labelColor": "#49454f",
+      "titleColor": "#49454f"
+    },
+    "legend": {
+      "labelColor": "#49454f",
+      "orient": "top"
+    }
+  }
+}
+```
+
 ## Privacy / safety
 
 - **Never commit financial data.** `.env`, `.token-cache.json`, `dumps/`,
