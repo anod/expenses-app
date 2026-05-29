@@ -269,6 +269,22 @@ a:hover { text-decoration: underline; }
   color: var(--md-sys-color-on-error-container);
 }
 
+/* Vega-Lite tooltip is appended to document.body by vega-tooltip. */
+#vg-tooltip {
+  background: var(--md-sys-color-inverse-surface) !important;
+  color: var(--md-sys-color-inverse-on-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 18%, transparent) !important;
+  border-radius: var(--md-sys-shape-corner-md) !important;
+  box-shadow: var(--md-sys-elevation-3) !important;
+  font: var(--md-sys-typescale-body-medium) !important;
+}
+
+#vg-tooltip table,
+#vg-tooltip td,
+#vg-tooltip th {
+  color: inherit !important;
+}
+
 /* Table */
 .m3-table {
   width: 100%;
