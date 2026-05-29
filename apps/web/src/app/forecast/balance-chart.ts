@@ -25,6 +25,13 @@ interface AnchorDatum {
 
 const CHART_WIDTH = 680;
 const CHART_HEIGHT = 320;
+const CHART_BG = '#211f26';
+const CHART_GRID = '#49454f';
+const CHART_TEXT = '#e6e0e9';
+const CHART_MUTED_TEXT = '#cac4d0';
+const ANCHOR_BALANCE_COLOR = '#d0bcff';
+const EXPECTED_SPENDING_COLOR = '#80deea';
+const SPLIT_CC_COLOR = '#ffb4ab';
 const ANCHOR_BALANCE_LABEL = 'Anchor balance';
 const EXPECTED_SPENDING_LABEL = 'Expected spending';
 const SPLIT_CC_LABEL = 'Split CC @ anchor';
@@ -58,7 +65,6 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
         width: 100%;
       }
       .vega-chart {
-        min-height: 320px;
         font-family: var(--md-sys-font-plain);
       }
       .vega-chart:empty {
@@ -68,7 +74,8 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
       :host ::ng-deep .vega-chart canvas {
         display: block;
         width: 100%;
-        height: 320px;
+        height: auto;
+        border-radius: var(--md-sys-shape-corner-md);
       }
       .empty-chart {
         display: grid;
@@ -78,6 +85,11 @@ const SPLIT_CC_LABEL = 'Split CC @ anchor';
         color: var(--md-sys-color-on-surface-variant);
         font: var(--md-sys-typescale-body-medium);
         background: var(--md-sys-color-surface);
+      }
+      @media (max-width: 560px) {
+        .empty-chart {
+          min-height: 220px;
+        }
       }
     `,
   ],
@@ -217,20 +229,21 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
     axis: {
       labelAngle: 0,
       labelFontSize: 12,
-      labelColor: '#49454f',
+      labelColor: CHART_MUTED_TEXT,
       labelExpr: "timeFormat(toDate(datum.label), '%b %d')",
     },
   };
   const color = {
     type: 'nominal' as const,
     scale: {
-      domain: [ANCHOR_BALANCE_LABEL, EXPECTED_SPENDING_LABEL],
-      range: ['#d7c8f5', '#006d75'],
+      domain: [ANCHOR_BALANCE_LABEL, EXPECTED_SPENDING_LABEL, SPLIT_CC_LABEL],
+      range: [ANCHOR_BALANCE_COLOR, EXPECTED_SPENDING_COLOR, SPLIT_CC_COLOR],
     },
     legend: {
       orient: 'top' as const,
       title: null,
       labelFontSize: 12,
+      labelColor: CHART_MUTED_TEXT,
       symbolType: 'stroke' as const,
     },
   };
@@ -238,7 +251,7 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
   return {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
     description:
-      'Anchor balance columns with expected spending as a line, rendered directly with Vega-Lite.',
+      'Anchor balance columns with expected spending and split credit-card spending as lines, rendered directly with Vega-Lite.',
     width: CHART_WIDTH,
     height: CHART_HEIGHT,
     autosize: { type: 'fit', contains: 'padding' },
@@ -261,7 +274,7 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
           cornerRadiusTopRight: 5,
           opacity: 0.96,
           width: 56,
-          stroke: '#6750a4',
+          stroke: '#ede7ff',
           strokeWidth: 0.9,
         },
         encoding: {
@@ -279,73 +292,83 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
           tooltip: tooltipFields(),
         },
       },
-      {
-        transform: [
-          { calculate: `'${EXPECTED_SPENDING_LABEL}'`, as: 'metric' },
-          { calculate: 'datum.expectedSpending', as: 'metricValue' },
-        ],
-        mark: {
-          type: 'line',
-          strokeWidth: 3,
-          interpolate: 'monotone',
-          point: false,
-        },
-        encoding: {
-          x,
-          y: {
-            field: 'expectedSpending',
-            type: 'quantitative',
-          },
-          color: {
-            datum: EXPECTED_SPENDING_LABEL,
-            ...color,
-          },
-          tooltip: tooltipFields(),
-        },
-      },
-      {
-        transform: [
-          { calculate: `'${EXPECTED_SPENDING_LABEL}'`, as: 'metric' },
-          { calculate: 'datum.expectedSpending', as: 'metricValue' },
-        ],
-        mark: {
-          type: 'point',
-          filled: true,
-          size: 72,
-          stroke: '#fffbff',
-          strokeWidth: 1.5,
-        },
-        encoding: {
-          x,
-          y: {
-            field: 'expectedSpending',
-            type: 'quantitative',
-          },
-          color: {
-            datum: EXPECTED_SPENDING_LABEL,
-            ...color,
-            legend: null,
-          },
-          tooltip: tooltipFields(),
-        },
-      },
+      lineLayer(EXPECTED_SPENDING_LABEL, 'expectedSpending'),
+      lineLayer(SPLIT_CC_LABEL, 'creditCardPayments'),
+      pointLayer(EXPECTED_SPENDING_LABEL, 'expectedSpending'),
+      pointLayer(SPLIT_CC_LABEL, 'creditCardPayments'),
     ],
     config: {
-      background: '#fffbff',
+      background: CHART_BG,
       view: { stroke: null },
       axis: {
         grid: true,
-        gridColor: '#eee8f1',
+        gridColor: CHART_GRID,
+        gridOpacity: 0.55,
         domain: false,
-        tickColor: '#d7d0dd',
-        labelColor: '#49454f',
-        titleColor: '#49454f',
+        tickColor: CHART_GRID,
+        labelColor: CHART_MUTED_TEXT,
+        titleColor: CHART_TEXT,
       },
       legend: {
-        labelColor: '#49454f',
+        labelColor: CHART_MUTED_TEXT,
       },
     },
   };
+
+  function lineLayer(label: string, field: 'expectedSpending' | 'creditCardPayments') {
+    return {
+      transform: [
+        { calculate: `'${label}'`, as: 'metric' },
+        { calculate: `datum.${field}`, as: 'metricValue' },
+      ],
+      mark: {
+        type: 'line' as const,
+        strokeWidth: 3,
+        interpolate: 'monotone' as const,
+        point: false,
+      },
+      encoding: {
+        x,
+        y: {
+          field,
+          type: 'quantitative' as const,
+        },
+        color: {
+          datum: label,
+          ...color,
+        },
+        tooltip: tooltipFields(),
+      },
+    };
+  }
+
+  function pointLayer(label: string, field: 'expectedSpending' | 'creditCardPayments') {
+    return {
+      transform: [
+        { calculate: `'${label}'`, as: 'metric' },
+        { calculate: `datum.${field}`, as: 'metricValue' },
+      ],
+      mark: {
+        type: 'point' as const,
+        filled: true,
+        size: 72,
+        stroke: CHART_BG,
+        strokeWidth: 1.5,
+      },
+      encoding: {
+        x,
+        y: {
+          field,
+          type: 'quantitative' as const,
+        },
+        color: {
+          datum: label,
+          ...color,
+        },
+        tooltip: tooltipFields(),
+      },
+    };
+  }
 }
 
 function tooltipFields() {

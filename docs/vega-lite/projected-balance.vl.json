@@ -1,16 +1,21 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Anchor balance columns with expected spending as a line; mirrors the app chart rendered directly with Vega-Lite.",
+  "description": "Dark themed anchor balance columns with expected spending and split credit-card spending as lines; mirrors the app chart rendered directly with Vega-Lite.",
   "title": {
     "text": "Projected Balance",
-    "subtitle": "Columns show anchor balance; line shows expected spending",
+    "subtitle": "Columns show anchor balance; lines show expected spending and split credit-card spending",
     "anchor": "start",
     "fontSize": 16,
     "subtitleFontSize": 12,
-    "subtitleColor": "#6b6472"
+    "color": "#e6e0e9",
+    "subtitleColor": "#cac4d0"
   },
   "width": 680,
   "height": 320,
+  "autosize": {
+    "type": "fit",
+    "contains": "padding"
+  },
   "data": {
     "values": [
       {
@@ -69,15 +74,24 @@
   ],
   "layer": [
     {
+      "transform": [
+        {
+          "calculate": "'Anchor balance'",
+          "as": "metric"
+        },
+        {
+          "calculate": "datum.anchorBalance",
+          "as": "metricValue"
+        }
+      ],
       "mark": {
         "type": "bar",
         "cornerRadiusTopLeft": 5,
         "cornerRadiusTopRight": 5,
-        "color": "#d7c8f5",
-        "stroke": "#6750a4",
-        "strokeWidth": 0.9,
         "opacity": 0.96,
-        "width": 56
+        "width": 56,
+        "stroke": "#ede7ff",
+        "strokeWidth": 0.9
       },
       "encoding": {
         "x": {
@@ -96,7 +110,7 @@
             "labelExpr": "timeFormat(toDate(datum.label), '%b %d')",
             "labelAngle": 0,
             "labelFontSize": 12,
-            "labelColor": "#49454f"
+            "labelColor": "#cac4d0"
           }
         },
         "y": {
@@ -108,6 +122,21 @@
             "labelFontSize": 11
           }
         },
+        "color": {
+          "datum": "Anchor balance",
+          "type": "nominal",
+          "scale": {
+            "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
+            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+          },
+          "legend": {
+            "orient": "top",
+            "title": null,
+            "labelFontSize": 12,
+            "labelColor": "#cac4d0",
+            "symbolType": "stroke"
+          }
+        },
         "tooltip": [
           {
             "field": "date",
@@ -116,15 +145,26 @@
             "format": "%b %d, %Y"
           },
           {
-            "field": "anchorBalance",
+            "field": "metric",
+            "type": "nominal",
+            "title": "Metric"
+          },
+          {
+            "field": "metricValue",
             "type": "quantitative",
-            "title": "Anchor balance",
+            "title": "Amount",
             "format": ",.0f"
           },
           {
             "field": "expectedSpending",
             "type": "quantitative",
             "title": "Expected spending",
+            "format": ",.0f"
+          },
+          {
+            "field": "anchorBalance",
+            "type": "quantitative",
+            "title": "Anchor balance",
             "format": ",.0f"
           },
           {
@@ -137,11 +177,21 @@
       }
     },
     {
+      "transform": [
+        {
+          "fold": ["expectedSpending", "creditCardPayments"],
+          "as": ["lineKey", "metricValue"]
+        },
+        {
+          "calculate": "datum.lineKey === 'expectedSpending' ? 'Expected spending' : 'Split CC @ anchor'",
+          "as": "metric"
+        }
+      ],
       "mark": {
         "type": "line",
         "strokeWidth": 3,
         "interpolate": "monotone",
-        "color": "#006d75"
+        "point": false
       },
       "encoding": {
         "x": {
@@ -157,8 +207,23 @@
           }
         },
         "y": {
-          "field": "expectedSpending",
+          "field": "metricValue",
           "type": "quantitative"
+        },
+        "color": {
+          "field": "metric",
+          "type": "nominal",
+          "scale": {
+            "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
+            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+          },
+          "legend": {
+            "orient": "top",
+            "title": null,
+            "labelFontSize": 12,
+            "labelColor": "#cac4d0",
+            "symbolType": "stroke"
+          }
         },
         "tooltip": [
           {
@@ -166,6 +231,17 @@
             "type": "temporal",
             "title": "Anchor period",
             "format": "%b %d, %Y"
+          },
+          {
+            "field": "metric",
+            "type": "nominal",
+            "title": "Metric"
+          },
+          {
+            "field": "metricValue",
+            "type": "quantitative",
+            "title": "Amount",
+            "format": ",.0f"
           },
           {
             "field": "expectedSpending",
@@ -189,13 +265,22 @@
       }
     },
     {
+      "transform": [
+        {
+          "fold": ["expectedSpending", "creditCardPayments"],
+          "as": ["lineKey", "metricValue"]
+        },
+        {
+          "calculate": "datum.lineKey === 'expectedSpending' ? 'Expected spending' : 'Split CC @ anchor'",
+          "as": "metric"
+        }
+      ],
       "mark": {
         "type": "point",
         "filled": true,
         "size": 72,
-        "stroke": "white",
-        "strokeWidth": 1.5,
-        "color": "#006d75"
+        "stroke": "#211f26",
+        "strokeWidth": 1.5
       },
       "encoding": {
         "x": {
@@ -211,8 +296,23 @@
           }
         },
         "y": {
-          "field": "expectedSpending",
+          "field": "metricValue",
           "type": "quantitative"
+        },
+        "color": {
+          "field": "metric",
+          "type": "nominal",
+          "scale": {
+            "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
+            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+          },
+          "legend": {
+            "orient": "top",
+            "title": null,
+            "labelFontSize": 12,
+            "labelColor": "#cac4d0",
+            "symbolType": "stroke"
+          }
         },
         "tooltip": [
           {
@@ -220,6 +320,17 @@
             "type": "temporal",
             "title": "Anchor period",
             "format": "%b %d, %Y"
+          },
+          {
+            "field": "metric",
+            "type": "nominal",
+            "title": "Metric"
+          },
+          {
+            "field": "metricValue",
+            "type": "quantitative",
+            "title": "Amount",
+            "format": ",.0f"
           },
           {
             "field": "expectedSpending",
@@ -244,20 +355,21 @@
     }
   ],
   "config": {
-    "background": "#fffbff",
+    "background": "#211f26",
     "view": {
       "stroke": null
     },
     "axis": {
       "grid": true,
-      "gridColor": "#eee8f1",
+      "gridColor": "#49454f",
+      "gridOpacity": 0.55,
       "domain": false,
-      "tickColor": "#d7d0dd",
-      "labelColor": "#49454f",
-      "titleColor": "#49454f"
+      "tickColor": "#49454f",
+      "labelColor": "#cac4d0",
+      "titleColor": "#e6e0e9"
     },
     "legend": {
-      "labelColor": "#49454f"
+      "labelColor": "#cac4d0"
     }
   }
 }
