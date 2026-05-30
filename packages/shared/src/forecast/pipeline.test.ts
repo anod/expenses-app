@@ -114,6 +114,36 @@ describe('forecast pipeline', () => {
     }
   });
 
+  it('includes cc virtual installments after card asOf even when bank asOf is later', () => {
+    const card: CreditCard = { ...visa, asOf: '2026-05-10' };
+    const tmpl: RecurringTemplate = {
+      id: 'inst',
+      description: 'installment',
+      amount: -200,
+      channel: 'cc:visa',
+      cadence: { kind: 'monthly', day: 15, monthEndPolicy: 'clamp' },
+      startDate: '2026-05-15',
+      endDate: '2026-05-15',
+    };
+
+    const r = forecast({
+      templates: [tmpl],
+      persisted: [],
+      account: acct(20_000, '2026-05-30'),
+      cards: [card],
+      settings: baseSettings,
+      today: '2026-05-30',
+    });
+
+    const bill = r.days
+      .find((x) => x.date === '2026-06-02')!
+      .charges.find((c) => c.source.kind === 'cc-bill');
+    expect(bill?.amount).toBe(-200);
+    expect(bill?.source.kind).toBe('cc-bill');
+    if (bill?.source.kind !== 'cc-bill') throw new Error('expected cc bill');
+    expect(bill.source.billedEntries[0]?.id).toBe('virtual:inst:2026-05-15');
+  });
+
   // 8
   it('recurring salary on the 1st raises balance', () => {
     const tmpl: RecurringTemplate = {

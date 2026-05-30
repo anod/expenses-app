@@ -702,11 +702,17 @@ export class ForecastHomeComponent {
   ): LedgerEntry[] {
     const card = this.cards().find((c) => c.id === cardId);
     if (!card || card.mode === 'debit') return [];
+    const openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
     return entries.filter(
-      (e) =>
-        e.date >= start &&
-        e.channel === `cc:${cardId}` &&
-        firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth) === billDate,
+      (e) => {
+        if (e.date < start || e.channel !== `cc:${cardId}`) return false;
+        const entryBillDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
+        if (entryBillDate !== billDate) return false;
+        if (e.date <= card.asOf) {
+          return card.currentDebit !== 0 && billDate === openingBillDate;
+        }
+        return true;
+      },
     );
   }
 
@@ -721,6 +727,7 @@ export class ForecastHomeComponent {
       billDate: string;
       cardId: string;
       entries: LedgerEntry[];
+      accountedEntries: LedgerEntry[];
       openingDebit: number;
     };
 
@@ -730,7 +737,7 @@ export class ForecastHomeComponent {
       const key = `${billDate}:${cardId}`;
       let bucket = buckets.get(key);
       if (!bucket) {
-        bucket = { billDate, cardId, entries: [], openingDebit: 0 };
+        bucket = { billDate, cardId, entries: [], accountedEntries: [], openingDebit: 0 };
         buckets.set(key, bucket);
       }
       return bucket;
@@ -750,10 +757,16 @@ export class ForecastHomeComponent {
       if (!e.channel.startsWith('cc:')) continue;
       const cardId = e.channel.slice(3);
       const card = cardsById.get(cardId);
-      if (!card || card.mode === 'debit' || e.date <= card.asOf) continue;
+      if (!card || card.mode === 'debit') continue;
       const billDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
       if (inPastWindow(billDate)) {
-        bucketFor(cardId, billDate).entries.push(e);
+        const bucket = bucketFor(cardId, billDate);
+        const openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
+        if (e.date <= card.asOf && card.currentDebit !== 0 && billDate === openingBillDate) {
+          bucket.accountedEntries.push(e);
+        } else {
+          bucket.entries.push(e);
+        }
       }
     }
 
@@ -773,7 +786,7 @@ export class ForecastHomeComponent {
         description: `Credit card bill (${card.name}, ${summary})`,
         amount,
         source: { kind: 'cc-bill', cardId: bucket.cardId, billedEntries: bucket.entries.slice() },
-      });
+      }, bucket.accountedEntries);
       row.past = true;
       rows.push(row);
     }
