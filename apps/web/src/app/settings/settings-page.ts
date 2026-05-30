@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Settings } from '@expenses/shared';
 import { AuthService } from '../auth/auth.service';
+import { errorMessage } from '../core/api-error';
 import { ForecastApi } from '../forecast/forecast.api';
 
 interface SyncResultView {
@@ -205,11 +206,6 @@ export class SettingsPageComponent {
   }
 
   private errMsg(err: unknown): string {
-    if (typeof err === 'object' && err && 'error' in err) {
-      const body = (err as { error?: { message?: string; error?: string } }).error;
-      if (body?.message) return body.message;
-      if (body?.error) return body.error;
-    }
-    return err instanceof Error ? err.message : String(err);
+    return errorMessage(err);
   }
 }

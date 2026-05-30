@@ -19,4 +19,5 @@ export class App {
   protected readonly showLanding = computed(
     () => this.auth.enabled() && !this.auth.isSignedIn(),
   );
+  protected readonly initError = computed(() => this.auth.initError());
 }

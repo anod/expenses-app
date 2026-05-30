@@ -14,6 +14,7 @@ import { authInterceptor } from './auth/auth.interceptor';
 import { AuthService } from './auth/auth.service';
 import type { ApiConfig } from './auth/api-config';
 import { routes } from './app.routes';
+import { errorMessage } from './core/api-error';
 import { SwUpdaterService } from './core/sw-updater.service';
 
 export const appConfig: ApplicationConfig = {
@@ -36,12 +37,8 @@ export const appConfig: ApplicationConfig = {
         const config = await firstValueFrom(http.get<ApiConfig>('/api/config'));
         await auth.initialize(config);
       } catch (err) {
-        const message =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Unable to reach the API';
         console.error('Failed to initialize auth from /api/config', err);
-        auth.setInitError(`Failed to load app config: ${message}`);
+        auth.setInitError(errorMessage(err, 'Failed to load app config.'));
       }
     }),
   ],

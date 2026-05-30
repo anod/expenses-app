@@ -3,6 +3,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { ForecastApi } from '../forecast/forecast.api';
+import { SwUpdaterService } from '../core/sw-updater.service';
 
 @Component({
   selector: 'app-header',
@@ -13,6 +14,7 @@ import { ForecastApi } from '../forecast/forecast.api';
 })
 export class HeaderComponent {
   protected readonly auth = inject(AuthService);
+  protected readonly swUpdater = inject(SwUpdaterService);
   private readonly api = inject(ForecastApi);
   protected readonly demoBusy = signal(false);
 

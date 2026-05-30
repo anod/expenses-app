@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
+import { errorMessage as formatApiError } from '../core/api-error';
 
 @Component({
   selector: 'app-esop-page',
@@ -171,13 +172,5 @@ export class EsopPageComponent {
 }
 
 function errorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'error' in err) {
-    const maybe = err as { error?: { message?: unknown; error?: unknown } };
-    if (typeof maybe.error?.message === 'string') return maybe.error.message;
-    if (typeof maybe.error?.error === 'string') return maybe.error.error;
-  }
-  if (err && typeof err === 'object' && 'message' in err) {
-    return String((err as { message: unknown }).message);
-  }
-  return String(err);
+  return formatApiError(err, 'Unable to load ESOP data.');
 }

@@ -107,15 +107,14 @@
   cursor: default;
 }
 
-.init-error {
-  display: inline-flex;
-  align-items: center;
+.sw-update {
+  min-height: 36px;
   gap: 0.4rem;
-  font: var(--md-sys-typescale-body-medium);
-  padding: 0.4rem 0.75rem;
-  background: var(--md-sys-color-error-container);
-  color: var(--md-sys-color-on-error-container);
-  border-radius: var(--md-sys-shape-corner-sm);
+  white-space: nowrap;
+}
+
+.sw-update .material-symbols-outlined {
+  font-size: 1.15rem;
 }
 
 @media (max-width: 720px) {
@@ -123,4 +122,11 @@
   .nav a { padding: 0.5rem 0.75rem; }
   .who { display: none; }
   .brand span:last-child { display: none; }
+  .sw-update {
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    border-radius: var(--md-sys-shape-corner-full);
+  }
+  .sw-update-label { display: none; }
 }

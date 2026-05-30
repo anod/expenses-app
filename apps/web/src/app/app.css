@@ -9,3 +9,30 @@
 .content {
   flex: 1;
 }
+
+.app-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: min(calc(100% - 2rem), 520px);
+  max-width: 520px;
+  margin: min(18vh, 7rem) auto 0;
+  padding: 1.25rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.app-error .material-symbols-outlined {
+  color: var(--md-sys-color-error);
+  font-size: 2rem;
+  margin-top: 0.1rem;
+}
+
+.app-error h1 {
+  margin: 0 0 0.35rem;
+  font: var(--md-sys-typescale-headline-small);
+}
+
+.app-error p {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+}

@@ -11,6 +11,7 @@ import {
   scheduledPaymentCount,
   type PaymentProgress,
 } from '@expenses/shared';
+import { errorMessage } from '../core/api-error';
 import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
@@ -186,7 +187,7 @@ export class RecurringPageComponent {
       this.cards.set(cards);
       this.ledger.set(ledger);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err, 'Unable to load recurring templates.'));
     } finally {
       this.loading.set(false);
     }
@@ -274,7 +275,7 @@ export class RecurringPageComponent {
       }
       this.edit.set({ kind: 'idle' });
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     } finally {
       this.saving.set(false);
     }
@@ -289,7 +290,7 @@ export class RecurringPageComponent {
       if (this.isEditing(t.id)) this.edit.set({ kind: 'idle' });
     } catch (err) {
       this.templates.set(prev);
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     }
   }
 
@@ -475,7 +476,7 @@ export class RecurringPageComponent {
       this.ledger.update((arr) => arr.map((e) => (e.id === state.id ? res.entity : e)));
       this.ledgerEdit.set({ kind: 'idle' });
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     } finally {
       this.saving.set(false);
     }
@@ -489,7 +490,7 @@ export class RecurringPageComponent {
       await firstValueFrom(this.api.deleteLedger(e.id));
     } catch (err) {
       this.ledger.set(prev);
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     }
   }
 }

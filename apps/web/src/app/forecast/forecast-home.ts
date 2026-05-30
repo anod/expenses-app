@@ -11,6 +11,7 @@ import type {
 import { descriptionLabel } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
+import { errorMessage } from '../core/api-error';
 import {
   buildForecastTimeline,
   type AnchorItem,
@@ -182,7 +183,7 @@ export class ForecastHomeComponent {
       this.templates.set(templates);
       this.cards.set(cards);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err, 'Unable to load the forecast.'));
     } finally {
       this.loading.set(false);
     }
@@ -278,7 +279,7 @@ export class ForecastHomeComponent {
       this.forecast.set(res.forecast);
       this.editing.set(null);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     } finally {
       this.saving.set(false);
     }
@@ -310,7 +311,7 @@ export class ForecastHomeComponent {
       }
       this.editing.set(null);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     } finally {
       this.saving.set(false);
     }
@@ -326,7 +327,7 @@ export class ForecastHomeComponent {
       this.forecast.set(res.forecast);
       this.showSnackbar(`Cleared “${res.entity.description}”`, res.entity);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     }
   }
 
@@ -348,7 +349,7 @@ export class ForecastHomeComponent {
       const res = await firstValueFrom(this.api.updateLedger(e.id, body));
       this.forecast.set(res.forecast);
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     }
   }
 
@@ -426,7 +427,7 @@ export class ForecastHomeComponent {
       );
     } catch (err) {
       // 409 SKIP_CONFLICT_CLEARED bubbles up here.
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       this.error.set(
         msg.includes('SKIP_CONFLICT_CLEARED')
           ? 'A cleared override exists for this occurrence. Un-clear it before skipping.'
@@ -444,7 +445,7 @@ export class ForecastHomeComponent {
         arr.map((t) => (t.id === recurringId ? res.entity : t)),
       );
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
     }
   }
 

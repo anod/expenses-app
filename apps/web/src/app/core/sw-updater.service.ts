@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, inject } from '@angular/core';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs/operators';
@@ -6,21 +6,18 @@ import { filter } from 'rxjs/operators';
 const UPDATE_CHECK_INTERVAL_MS = 60_000;
 
 /**
- * Auto-activate Angular SW updates as soon as a new build is published, then
- * reload the page once so the user gets the new bundle without having to close
- * every tab. Also polls ngsw.json every minute to detect server-side deploys
- * while the app is open.
+ * Detect Angular SW updates as soon as a new build is published. The shell
+ * asks before reloading so the current session stays stable.
  *
  * Why this exists: by default Angular's SW only checks for updates 30s after
  * the app becomes stable, and new versions sit in the "waiting" state until
- * every tab is closed. That makes deploys feel broken ("I reloaded, still
- * old version"). This service collapses that into a single auto-reload.
+ * every tab is closed. Polling keeps deploy detection prompt.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdaterService {
   private readonly updates = inject(SwUpdate, { optional: true });
   private readonly destroyRef = inject(DestroyRef);
-  private reloading = false;
+  readonly updateReady = signal(false);
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   start(): void {
@@ -32,7 +29,7 @@ export class SwUpdaterService {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(() => {
-        void this.activateAndReload();
+        this.updateReady.set(true);
       });
 
     this.pollHandle = setInterval(() => {
@@ -44,9 +41,8 @@ export class SwUpdaterService {
     });
   }
 
-  private async activateAndReload(): Promise<void> {
-    if (this.reloading || !this.updates) return;
-    this.reloading = true;
+  async reloadUpdate(): Promise<void> {
+    if (!this.updateReady() || !this.updates) return;
     try {
       await this.updates.activateUpdate();
     } catch {

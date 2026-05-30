@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { ForecastApi } from '../forecast/forecast.api';
+import { errorMessage } from '../core/api-error';
 
 @Component({
   selector: 'app-login-landing',
@@ -25,7 +26,7 @@ export class LoginLandingComponent {
       await this.auth.signIn();
       // Page navigates away to Microsoft.
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
       this.signingIn.set(false);
     }
   }
@@ -39,7 +40,7 @@ export class LoginLandingComponent {
       // Reload so /api/config reflects demo mode and MSAL stops mounting.
       window.location.reload();
     } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(errorMessage(err));
       this.enteringDemo.set(false);
     }
   }

@@ -1,6 +1,14 @@
 <app-header />
 <main class="content">
-  @if (showLanding()) {
+  @if (initError(); as error) {
+    <section class="m3-card app-error" role="alert">
+      <span class="material-symbols-outlined" aria-hidden="true">cloud_off</span>
+      <div>
+        <h1>Can’t reach the server</h1>
+        <p>{{ error }}</p>
+      </div>
+    </section>
+  } @else if (showLanding()) {
     <app-login-landing />
   } @else {
     <router-outlet />

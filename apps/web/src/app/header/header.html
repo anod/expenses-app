@@ -22,45 +22,53 @@
     </a>
   </nav>
   <div class="trailing">
-    @if (auth.initError(); as err) {
-      <div class="init-error" role="alert">
-        <span class="material-symbols-outlined">error</span>
-        {{ err }}
-      </div>
+    @if (swUpdater.updateReady()) {
+      <button
+        type="button"
+        class="m3-btn m3-btn--tonal sw-update"
+        (click)="swUpdater.reloadUpdate()"
+        title="Reload to update the app"
+        aria-label="Reload to update the app"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">system_update_alt</span>
+        <span class="sw-update-label">Reload update</span>
+      </button>
     }
-    @if (auth.enabled()) {
-      @if (auth.isSignedIn()) {
-        <div class="user">
-          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-          <span class="who">{{ auth.displayName() }}</span>
-          <button type="button" class="m3-btn m3-btn--icon" (click)="signOut()" title="Sign out">
-            <span class="material-symbols-outlined">logout</span>
+    @if (!auth.initError()) {
+      @if (auth.enabled()) {
+        @if (auth.isSignedIn()) {
+          <div class="user">
+            <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+            <span class="who">{{ auth.displayName() }}</span>
+            <button type="button" class="m3-btn m3-btn--icon" (click)="signOut()" title="Sign out">
+              <span class="material-symbols-outlined">logout</span>
+            </button>
+          </div>
+        } @else {
+          <button type="button" class="m3-btn m3-btn--filled" (click)="signIn()">
+            <span class="material-symbols-outlined">login</span>
+            Sign in
           </button>
-        </div>
+        }
       } @else {
-        <button type="button" class="m3-btn m3-btn--filled" (click)="signIn()">
-          <span class="material-symbols-outlined">login</span>
-          Sign in
-        </button>
-      }
-    } @else {
-      @if (auth.isDemo()) {
-        <div class="user">
-          <span class="avatar demo-avatar" aria-hidden="true">DEMO</span>
-          <span class="who">Demo mode</span>
-          <button
-            type="button"
-            class="m3-btn m3-btn--icon"
-            (click)="exitDemo()"
-            [disabled]="demoBusy()"
-            title="Exit demo mode"
-            aria-label="Exit demo mode"
-          >
-            <span class="material-symbols-outlined">logout</span>
-          </button>
-        </div>
-      } @else {
-        <span class="m3-chip dump-badge">dump mode</span>
+        @if (auth.isDemo()) {
+          <div class="user">
+            <span class="avatar demo-avatar" aria-hidden="true">DEMO</span>
+            <span class="who">Demo mode</span>
+            <button
+              type="button"
+              class="m3-btn m3-btn--icon"
+              (click)="exitDemo()"
+              [disabled]="demoBusy()"
+              title="Exit demo mode"
+              aria-label="Exit demo mode"
+            >
+              <span class="material-symbols-outlined">logout</span>
+            </button>
+          </div>
+        } @else {
+          <span class="m3-chip dump-badge">dump mode</span>
+        }
       }
     }
   </div>
