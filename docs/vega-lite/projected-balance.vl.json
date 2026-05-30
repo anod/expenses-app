@@ -88,10 +88,10 @@
         "type": "bar",
         "cornerRadiusTopLeft": 5,
         "cornerRadiusTopRight": 5,
-        "opacity": 0.96,
+        "opacity": 0.6,
         "width": 56,
-        "stroke": "#ede7ff",
-        "strokeWidth": 0.9
+        "stroke": "#a895c7",
+        "strokeWidth": 0.6
       },
       "encoding": {
         "x": {
@@ -127,7 +127,7 @@
           "type": "nominal",
           "scale": {
             "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
-            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+            "range": ["#7d6d9c", "#f6c177", "#8bd5ff"]
           },
           "legend": {
             "orient": "top",
@@ -215,7 +215,7 @@
           "type": "nominal",
           "scale": {
             "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
-            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+            "range": ["#7d6d9c", "#f6c177", "#8bd5ff"]
           },
           "legend": {
             "orient": "top",
@@ -304,7 +304,7 @@
           "type": "nominal",
           "scale": {
             "domain": ["Anchor balance", "Expected spending", "Split CC @ anchor"],
-            "range": ["#d0bcff", "#80deea", "#ffb4ab"]
+            "range": ["#7d6d9c", "#f6c177", "#8bd5ff"]
           },
           "legend": {
             "orient": "top",

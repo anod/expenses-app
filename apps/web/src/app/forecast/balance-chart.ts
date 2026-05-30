@@ -29,9 +29,10 @@ const CHART_BG = '#211f26';
 const CHART_GRID = '#49454f';
 const CHART_TEXT = '#e6e0e9';
 const CHART_MUTED_TEXT = '#cac4d0';
-const ANCHOR_BALANCE_COLOR = '#d0bcff';
-const EXPECTED_SPENDING_COLOR = '#80deea';
-const SPLIT_CC_COLOR = '#ffb4ab';
+const ANCHOR_BALANCE_COLOR = '#7d6d9c';
+const ANCHOR_BALANCE_STROKE = '#a895c7';
+const EXPECTED_SPENDING_COLOR = '#f6c177';
+const SPLIT_CC_COLOR = '#8bd5ff';
 const ANCHOR_BALANCE_LABEL = 'Anchor balance';
 const EXPECTED_SPENDING_LABEL = 'Expected spending';
 const SPLIT_CC_LABEL = 'Split CC @ anchor';
@@ -272,10 +273,10 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
           type: 'bar',
           cornerRadiusTopLeft: 5,
           cornerRadiusTopRight: 5,
-          opacity: 0.96,
+          opacity: 0.6,
           width: 56,
-          stroke: '#ede7ff',
-          strokeWidth: 0.9,
+          stroke: ANCHOR_BALANCE_STROKE,
+          strokeWidth: 0.6,
         },
         encoding: {
           x,
