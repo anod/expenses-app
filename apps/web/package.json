@@ -7,7 +7,8 @@
     "start": "ng serve --proxy-config proxy.conf.json --port 4200",
     "dev": "ng serve --proxy-config proxy.conf.json --port 4200",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "test": "vitest run"
   },
   "dependencies": {
     "@angular/common": "^21.2.0",
@@ -29,6 +30,7 @@
     "@angular/build": "^21.2.11",
     "@angular/cli": "^21.2.11",
     "@angular/compiler-cli": "^21.2.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
   }
 }
