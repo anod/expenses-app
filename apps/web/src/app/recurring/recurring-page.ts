@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChildren } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -25,7 +26,7 @@ const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as cons
 @Component({
   selector: 'app-recurring-page',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, NgTemplateOutlet],
   templateUrl: './recurring-page.html',
   styleUrl: './recurring-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,8 +35,8 @@ export class RecurringPageComponent {
   private readonly api = inject(ForecastApi);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly editorCard = viewChild<ElementRef<HTMLElement>>('editorCard');
-  private readonly descriptionInput = viewChild<ElementRef<HTMLInputElement>>('descriptionInput');
+  private readonly editorCards = viewChildren<ElementRef<HTMLElement>>('editorCard');
+  private readonly descriptionInputs = viewChildren<ElementRef<HTMLInputElement>>('descriptionInput');
   private suppressWeeklyStartSync = false;
   private lastCadenceKind: CadenceKind = 'monthly';
 
@@ -285,16 +286,31 @@ export class RecurringPageComponent {
     this.templates.update((arr) => arr.filter((x) => x.id !== t.id));
     try {
       await firstValueFrom(this.api.deleteRecurring(t.id));
+      if (this.isEditing(t.id)) this.edit.set({ kind: 'idle' });
     } catch (err) {
       this.templates.set(prev);
       this.error.set(err instanceof Error ? err.message : String(err));
     }
   }
 
+  protected removeEditingTemplate(): void {
+    const state = this.edit();
+    if (state.kind !== 'edit') return;
+    const template = this.templates().find((t) => t.id === state.id);
+    if (!template) return;
+    void this.remove(template);
+  }
+
   private focusEditor(): void {
     queueMicrotask(() => {
-      this.editorCard()?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      this.descriptionInput()?.nativeElement.focus();
+      const editor =
+        this.editorCards().find((el) => el.nativeElement.offsetParent !== null) ??
+        this.editorCards()[0];
+      const input =
+        this.descriptionInputs().find((el) => el.nativeElement.offsetParent !== null) ??
+        this.descriptionInputs()[0];
+      editor?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      input?.nativeElement.focus();
     });
   }
 

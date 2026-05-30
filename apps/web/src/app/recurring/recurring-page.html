@@ -7,9 +7,15 @@
       </h1>
       <p class="subtitle">Scheduled income and expenses that repeat every month or week.</p>
     </div>
-    <button type="button" class="m3-btn m3-btn--filled" (click)="startNew()" [disabled]="!isIdle()">
+    <button
+      type="button"
+      class="m3-btn m3-btn--filled add-template-btn"
+      aria-label="New template"
+      (click)="startNew()"
+      [disabled]="!isIdle()"
+    >
       <span class="material-symbols-outlined">add</span>
-      New template
+      <span class="btn-label">New template</span>
     </button>
   </header>
 
@@ -20,7 +26,7 @@
     </div>
   }
 
-  @if (!isIdle()) {
+  <ng-template #recurringEditor>
     <form #editorCard class="m3-card edit-form" [formGroup]="form" (ngSubmit)="save()">
       <h3 class="form-title">
         <span class="material-symbols-outlined">{{ isNew() ? 'add_circle' : 'edit' }}</span>
@@ -114,6 +120,18 @@
       </div>
 
       <div class="form-actions">
+        @if (!isNew()) {
+          <button
+            type="button"
+            class="m3-btn m3-btn--tonal danger-action"
+            (click)="removeEditingTemplate()"
+            [disabled]="saving()"
+          >
+            <span class="material-symbols-outlined">delete</span>
+            Delete
+          </button>
+        }
+        <span class="form-actions-spacer"></span>
         <button type="button" class="m3-btn" (click)="cancel()" [disabled]="saving()">
           Cancel
         </button>
@@ -127,6 +145,10 @@
         </button>
       </div>
     </form>
+  </ng-template>
+
+  @if (isNew()) {
+    <ng-container [ngTemplateOutlet]="recurringEditor"></ng-container>
   }
 
   @if (loading()) {
@@ -211,12 +233,15 @@
                         (click)="startEdit(t)" [disabled]="!isIdle()">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
-                <button type="button" class="m3-btn m3-btn--icon danger" title="Delete"
-                        (click)="remove(t)" [disabled]="!isIdle()">
-                  <span class="material-symbols-outlined">delete</span>
-                </button>
               </td>
             </tr>
+            @if (isEditing(t.id)) {
+              <tr class="inline-editor-row">
+                <td colspan="7">
+                  <ng-container [ngTemplateOutlet]="recurringEditor"></ng-container>
+                </td>
+              </tr>
+            }
           }
         </tbody>
       </table>
@@ -243,8 +268,14 @@
                     </span>
                   }
                 </div>
-                <div class="template-row-amount" [class.is-negative]="t.amount < 0">
-                  {{ t.amount }}
+                <div class="template-row-side">
+                  <div class="template-row-amount" [class.is-negative]="t.amount < 0">
+                    {{ t.amount }}
+                  </div>
+                  <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                          (click)="startEdit(t)" [disabled]="!isIdle()">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
                 </div>
               </div>
               <div class="template-row-meta">
@@ -262,16 +293,9 @@
               </div>
             </div>
           </div>
-          <div class="template-row-actions">
-            <button type="button" class="m3-btn m3-btn--icon" title="Edit"
-                    (click)="startEdit(t)" [disabled]="!isIdle()">
-              <span class="material-symbols-outlined">edit</span>
-            </button>
-            <button type="button" class="m3-btn m3-btn--icon danger" title="Delete"
-                    (click)="remove(t)" [disabled]="!isIdle()">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
-          </div>
+          @if (isEditing(t.id)) {
+            <ng-container [ngTemplateOutlet]="recurringEditor"></ng-container>
+          }
         </li>
       }
     </ol>
