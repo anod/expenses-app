@@ -89,7 +89,7 @@
         <span class="material-symbols-outlined section-icon">finance_mode</span>
         <div>
           <h2>ESOP workbook settings</h2>
-          <p>Tax assumptions used by the ESOP workbook calculation.</p>
+          <p>Tax assumptions and market source used by the ESOP workbook calculation.</p>
         </div>
       </header>
       @if (esopSettingsLoading()) {
@@ -133,8 +133,63 @@
             }
           </div>
         </form>
+        <form [formGroup]="esopMarketForm" (ngSubmit)="saveEsopMarketSettings()" class="form-grid settings-subform">
+          <div class="subsection-title">
+            <h3>ESOP market source</h3>
+            <p>Yahoo Finance symbols used when refreshing workbook price and FX values.</p>
+          </div>
+          <label class="field">
+            <span>Stock ticker</span>
+            <input type="text" formControlName="esopStockSymbol" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>FX ticker</span>
+            <input type="text" formControlName="esopFxSymbol" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="form-actions">
+            <button
+              type="submit"
+              class="m3-btn primary"
+              [disabled]="esopMarketSaving() || esopMarketForm.invalid || esopMarketForm.pristine"
+            >
+              @if (esopMarketSaving()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Saving…
+              } @else {
+                <span class="material-symbols-outlined">save</span> Save market source
+              }
+            </button>
+            <button
+              type="button"
+              class="m3-btn"
+              (click)="updateEsopMarketFromSource()"
+              [disabled]="esopMarketUpdating() || esopMarketForm.invalid"
+            >
+              @if (esopMarketUpdating()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Updating…
+              } @else {
+                <span class="material-symbols-outlined">sync</span> Refresh workbook prices
+              }
+            </button>
+            @if (esopMarketSaved()) {
+              <span class="inline-status success">
+                <span class="material-symbols-outlined">check_circle</span> Saved
+              </span>
+            }
+            @if (esopMarketMessage(); as message) {
+              <span class="inline-status success">
+                <span class="material-symbols-outlined">check_circle</span> {{ message }}
+              </span>
+            }
+          </div>
+        </form>
       }
       @if (esopSettingsError(); as e) {
+        <div class="status-banner error">
+          <span class="material-symbols-outlined">error</span>
+          {{ e }}
+        </div>
+      }
+      @if (esopMarketError(); as e) {
         <div class="status-banner error">
           <span class="material-symbols-outlined">error</span>
           {{ e }}

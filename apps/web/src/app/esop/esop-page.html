@@ -35,7 +35,7 @@
   }
 
   @if (result(); as esop) {
-    <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
+    <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="updateMarketInputs()">
       <details class="card price-panel" open>
         <summary class="price-summary">
           <span>Price</span>
@@ -44,7 +44,7 @@
             {{ usd(assumptionsForm.controls.currentPriceUsd.value) }}
           </strong>
         </summary>
-        <p class="section-copy">Update USD/NIS and stock price from Yahoo Finance, or edit them for a preview.</p>
+        <p class="section-copy">Edit USD/NIS and stock price, then save them back to the workbook.</p>
 
         <div class="price-row">
           <label class="price-field">
@@ -59,39 +59,17 @@
             type="button"
             class="m3-btn m3-btn--tonal"
             (click)="updateMarketInputs()"
-            [disabled]="loading() || marketLoading() || marketForm.invalid"
+            [disabled]="loading() || marketLoading() || assumptionsForm.invalid"
           >
             <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
             Update & save
           </button>
         </div>
 
-        <details class="advanced">
-          <summary>Market source</summary>
-          <div class="market-tools" [formGroup]="marketForm">
-            <label>
-              <span>Stock ticker</span>
-              <input type="text" formControlName="stockSymbol" />
-            </label>
-            <label>
-              <span>FX ticker</span>
-              <input type="text" formControlName="fxSymbol" />
-            </label>
-          </div>
-        </details>
-
         @if (marketMessage(); as message) {
           <div class="market-message">{{ message }}</div>
         }
         <div class="price-actions">
-          <button
-            type="submit"
-            class="m3-btn m3-btn--filled"
-            [disabled]="loading() || assumptionsForm.invalid || !hasAssumptionChanges()"
-          >
-            <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
-            Recalculate
-          </button>
           <span class="settings-note">
             Tax settings: {{ esop.assumptions.lockDownDays }}d lock ·
             {{ pct(esop.assumptions.incomeTaxRate) }} income tax.

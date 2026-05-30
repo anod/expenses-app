@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -24,33 +23,13 @@ export class EsopPageComponent {
   protected readonly marketLoading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly marketMessage = signal<string | null>(null);
-  private readonly assumptionChangeTick = signal(0);
 
   protected readonly assumptionsForm = this.fb.nonNullable.group({
     usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
     currentPriceUsd: [0, [Validators.required, Validators.min(0)]],
   });
-  protected readonly marketForm = this.fb.nonNullable.group({
-    stockSymbol: ['MSFT', [Validators.required]],
-    fxSymbol: ['USDILS=X', [Validators.required]],
-  });
-
-  protected readonly totals = computed(() => this.result()?.totals ?? null);
-  protected readonly hasAssumptionChanges = computed(() => {
-    this.assumptionChangeTick();
-    const assumptions = this.result()?.assumptions;
-    if (!assumptions) return false;
-    const raw = this.assumptionsForm.getRawValue();
-    return (
-      raw.usdNisRate !== assumptions.usdNisRate ||
-      raw.currentPriceUsd !== assumptions.currentPriceUsd
-    );
-  });
 
   constructor() {
-    this.assumptionsForm.valueChanges
-      .pipe(takeUntilDestroyed())
-      .subscribe(() => this.assumptionChangeTick.update((value) => value + 1));
     void this.load();
   }
 
@@ -72,34 +51,25 @@ export class EsopPageComponent {
     }
   }
 
-  protected async applyOverrides(): Promise<void> {
-    if (this.assumptionsForm.invalid || !this.hasAssumptionChanges()) return;
-    await this.load(true);
-  }
-
   protected async resetWorkbookDefaults(): Promise<void> {
     await this.load(false);
   }
 
   protected async updateMarketInputs(): Promise<void> {
-    if (this.marketForm.invalid) return;
+    if (this.assumptionsForm.invalid) return;
     this.marketLoading.set(true);
     this.error.set(null);
     this.marketMessage.set(null);
     try {
       const update = await firstValueFrom(
-        this.api.updateEsopMarket({
-          ...this.marketForm.getRawValue(),
-        }),
+        this.api.updateEsopMarketValues(this.assumptionOverrides()),
       );
       this.result.set(update.esop);
       this.assumptionsForm.setValue({
         usdNisRate: update.esop.assumptions.usdNisRate,
         currentPriceUsd: update.esop.assumptions.currentPriceUsd,
       });
-      this.marketMessage.set(
-        `Updated ESOP market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
-      );
+      this.marketMessage.set('Saved ESOP market values to the workbook.');
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {

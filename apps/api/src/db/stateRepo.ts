@@ -7,11 +7,16 @@ import type {
   Settings,
 } from '@expenses/shared';
 
+const DEFAULT_ESOP_STOCK_SYMBOL = 'MSFT';
+const DEFAULT_ESOP_FX_SYMBOL = 'USDILS=X';
+
 const DEFAULT_SETTINGS: Settings = {
   threshold: 2000,
   timezone: 'Asia/Jerusalem',
   horizonMonths: 6,
   currency: 'ILS',
+  esopStockSymbol: DEFAULT_ESOP_STOCK_SYMBOL,
+  esopFxSymbol: DEFAULT_ESOP_FX_SYMBOL,
 };
 
 const todayIsoUtc = (): string => new Date().toISOString().slice(0, 10);
@@ -288,7 +293,12 @@ export class StateRepo {
         horizon_months: number;
         currency: string;
         workbook_url: string | null;
-      }>('SELECT threshold, timezone, horizon_months, currency, workbook_url FROM settings WHERE id = 1')
+        esop_stock_symbol: string | null;
+        esop_fx_symbol: string | null;
+      }>(
+        'SELECT threshold, timezone, horizon_months, currency, workbook_url, ' +
+        'esop_stock_symbol, esop_fx_symbol FROM settings WHERE id = 1',
+      )
       .get();
     if (!row) return DEFAULT_SETTINGS;
     const s: Settings = {
@@ -296,6 +306,8 @@ export class StateRepo {
       timezone: row.timezone,
       horizonMonths: row.horizon_months,
       currency: row.currency as 'ILS',
+      esopStockSymbol: row.esop_stock_symbol?.trim() || DEFAULT_ESOP_STOCK_SYMBOL,
+      esopFxSymbol: row.esop_fx_symbol?.trim() || DEFAULT_ESOP_FX_SYMBOL,
     };
     if (row.workbook_url != null && row.workbook_url !== '') {
       s.workbookUrl = row.workbook_url;
@@ -306,11 +318,13 @@ export class StateRepo {
   upsertSettings(s: Settings): void {
     this.db
       .prepare(
-        'INSERT INTO settings(id, threshold, timezone, horizon_months, currency, workbook_url) ' +
-        'VALUES (1, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ' +
+        'INSERT INTO settings(id, threshold, timezone, horizon_months, currency, workbook_url, ' +
+        'esop_stock_symbol, esop_fx_symbol) VALUES (1, ?, ?, ?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(id) DO UPDATE SET ' +
         'threshold=excluded.threshold, timezone=excluded.timezone, ' +
         'horizon_months=excluded.horizon_months, currency=excluded.currency, ' +
-        'workbook_url=excluded.workbook_url',
+        'workbook_url=excluded.workbook_url, esop_stock_symbol=excluded.esop_stock_symbol, ' +
+        'esop_fx_symbol=excluded.esop_fx_symbol',
       )
       .run(
         s.threshold,
@@ -318,6 +332,8 @@ export class StateRepo {
         s.horizonMonths,
         s.currency,
         s.workbookUrl && s.workbookUrl.trim() !== '' ? s.workbookUrl.trim() : null,
+        s.esopStockSymbol?.trim() || DEFAULT_ESOP_STOCK_SYMBOL,
+        s.esopFxSymbol?.trim() || DEFAULT_ESOP_FX_SYMBOL,
       );
   }
 }

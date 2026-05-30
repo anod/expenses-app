@@ -59,10 +59,19 @@ export class SettingsPageComponent {
     lockDownDays: [730, [Validators.required, Validators.min(1)]],
     incomeTaxRate: [0.55, [Validators.required, Validators.min(0), Validators.max(1)]],
   });
+  protected readonly esopMarketForm = this.fb.nonNullable.group({
+    esopStockSymbol: ['MSFT', [Validators.required, Validators.maxLength(64)]],
+    esopFxSymbol: ['USDILS=X', [Validators.required, Validators.maxLength(64)]],
+  });
   protected readonly esopSettingsLoading = signal(true);
   protected readonly esopSettingsSaving = signal(false);
   protected readonly esopSettingsSaved = signal(false);
   protected readonly esopSettingsError = signal<string | null>(null);
+  protected readonly esopMarketSaving = signal(false);
+  protected readonly esopMarketSaved = signal(false);
+  protected readonly esopMarketUpdating = signal(false);
+  protected readonly esopMarketMessage = signal<string | null>(null);
+  protected readonly esopMarketError = signal<string | null>(null);
   protected readonly esopResult = signal<EsopCalculationResult | null>(null);
 
   // --- Demo mode -----------------------------------------------------------
@@ -102,6 +111,10 @@ export class SettingsPageComponent {
         currency: s.currency,
         workbookUrl: s.workbookUrl ?? '',
       });
+      this.esopMarketForm.reset({
+        esopStockSymbol: s.esopStockSymbol ?? 'MSFT',
+        esopFxSymbol: s.esopFxSymbol ?? 'USDILS=X',
+      });
     } catch (err) {
       this.error.set(this.errMsg(err));
     } finally {
@@ -140,23 +153,56 @@ export class SettingsPageComponent {
     this.savingPrefs.set(true);
     this.prefsError.set(null);
     this.prefsSaved.set(false);
-    const v = this.prefsForm.getRawValue();
-    const body: Settings = {
-      threshold: v.threshold,
-      timezone: v.timezone.trim(),
-      horizonMonths: v.horizonMonths,
-      currency: v.currency,
-    };
-    const url = v.workbookUrl.trim();
-    if (url !== '') body.workbookUrl = url;
     try {
-      await firstValueFrom(this.api.patchSettings(body));
+      await firstValueFrom(this.api.patchSettings(this.settingsPayload()));
       this.prefsSaved.set(true);
       setTimeout(() => this.prefsSaved.set(false), 2500);
     } catch (err) {
       this.prefsError.set(this.errMsg(err));
     } finally {
       this.savingPrefs.set(false);
+    }
+  }
+
+  protected async saveEsopMarketSettings(): Promise<void> {
+    if (this.esopMarketForm.invalid || this.esopMarketSaving()) return;
+    this.esopMarketSaving.set(true);
+    this.esopMarketError.set(null);
+    this.esopMarketSaved.set(false);
+    this.esopMarketMessage.set(null);
+    try {
+      await firstValueFrom(this.api.patchSettings(this.marketSettingsPayload()));
+      this.esopMarketSaved.set(true);
+      setTimeout(() => this.esopMarketSaved.set(false), 2500);
+    } catch (err) {
+      this.esopMarketError.set(this.errMsg(err));
+    } finally {
+      this.esopMarketSaving.set(false);
+    }
+  }
+
+  protected async updateEsopMarketFromSource(): Promise<void> {
+    if (this.esopMarketForm.invalid || this.esopMarketUpdating()) return;
+    this.esopMarketUpdating.set(true);
+    this.esopMarketError.set(null);
+    this.esopMarketMessage.set(null);
+    const { esopStockSymbol, esopFxSymbol } = this.esopMarketForm.getRawValue();
+    try {
+      await firstValueFrom(this.api.patchSettings(this.marketSettingsPayload()));
+      const updated = await firstValueFrom(
+        this.api.updateEsopMarket({
+          stockSymbol: esopStockSymbol.trim(),
+          fxSymbol: esopFxSymbol.trim(),
+        }),
+      );
+      this.esopResult.set(updated.esop);
+      this.esopMarketMessage.set(
+        `Updated workbook prices from ${updated.stock.symbol} and ${updated.fx.symbol}.`,
+      );
+    } catch (err) {
+      this.esopMarketError.set(this.errMsg(err));
+    } finally {
+      this.esopMarketUpdating.set(false);
     }
   }
 
@@ -266,5 +312,26 @@ export class SettingsPageComponent {
 
   private errMsg(err: unknown): string {
     return errorMessage(err);
+  }
+
+  private settingsPayload(): Settings {
+    const v = this.prefsForm.getRawValue();
+    const body: Settings = {
+      threshold: v.threshold,
+      timezone: v.timezone.trim(),
+      horizonMonths: v.horizonMonths,
+      currency: v.currency,
+    };
+    const url = v.workbookUrl.trim();
+    if (url !== '') body.workbookUrl = url;
+    return body;
+  }
+
+  private marketSettingsPayload(): Partial<Settings> {
+    const market = this.esopMarketForm.getRawValue();
+    return {
+      esopStockSymbol: market.esopStockSymbol.trim(),
+      esopFxSymbol: market.esopFxSymbol.trim(),
+    };
   }
 }

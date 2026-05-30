@@ -126,6 +126,10 @@ export interface Settings {
    * touching .env.
    */
   workbookUrl?: string;
+  /** Yahoo Finance ticker used to refresh ESOP stock price. */
+  esopStockSymbol?: string;
+  /** Yahoo Finance ticker used to refresh ESOP USD/NIS rate. */
+  esopFxSymbol?: string;
 }
 
 export type ChargeSource =

@@ -91,7 +91,7 @@ export class ForecastApi {
   }
 
   getSettings() { return this.http.get<Settings>('/api/settings'); }
-  patchSettings(body: Settings) {
+  patchSettings(body: Partial<Settings>) {
     return this.http.patch<MutationResult<Settings>>('/api/settings', body);
   }
 
@@ -167,6 +167,13 @@ export class ForecastApi {
       esop: EsopCalculationResult;
       fetchedAt: string;
     }>('/api/esop/market/update', params);
+  }
+
+  updateEsopMarketValues(params: { usdNisRate: number; currentPriceUsd: number }) {
+    return this.http.post<{
+      applied: { usdNisRate: number; currentPriceUsd: number };
+      esop: EsopCalculationResult;
+    }>('/api/esop/market-values/update', params);
   }
 
   updateEsopSettings(params: { lockDownDays: number; incomeTaxRate: number }) {

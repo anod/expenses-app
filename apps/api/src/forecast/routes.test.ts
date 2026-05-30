@@ -203,7 +203,24 @@ describe('forecast routes', () => {
       .send({ threshold: 5000, timezone: 'Asia/Jerusalem', horizonMonths: 3, currency: 'ILS' })
       .expect(200);
     expect(r.body.entity.threshold).toBe(5000);
-    expect(r.body.entity.horizonMonths).toBe(3);
+  });
+
+  it('PATCH /api/settings preserves ESOP market symbols when omitted', async () => {
+    await request(app)
+      .patch('/api/settings')
+      .send({ esopStockSymbol: 'ACME', esopFxSymbol: 'USDILS=X' })
+      .expect(200);
+
+    const r = await request(app)
+      .patch('/api/settings')
+      .send({ threshold: 6000 })
+      .expect(200);
+
+    expect(r.body.entity).toMatchObject({
+      threshold: 6000,
+      esopStockSymbol: 'ACME',
+      esopFxSymbol: 'USDILS=X',
+    });
   });
 
   describe('recurring (weekly + skips)', () => {

@@ -105,6 +105,25 @@
 }
 .field-wide { grid-column: 1 / -1; }
 
+.settings-subform {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.subsection-title {
+  grid-column: 1 / -1;
+}
+.subsection-title h3 {
+  margin: 0 0 0.2rem;
+  font: var(--md-sys-typescale-title-medium);
+}
+.subsection-title p {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-medium);
+}
+
 .setting-preview {
   display: grid;
   align-content: center;

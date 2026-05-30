@@ -343,12 +343,20 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.patch('/settings', (req, res) => {
     try {
       const input = SettingsInput.parse(req.body);
-      const { workbookUrl, ...rest } = input;
-      getRepo().upsertSettings(
-        workbookUrl && workbookUrl.trim() !== ''
-          ? { ...rest, workbookUrl: workbookUrl.trim() }
-          : rest,
-      );
+      const current = getRepo().getSettings();
+      const { workbookUrl, esopStockSymbol, esopFxSymbol } = input;
+      const next = { ...current };
+      if (input.threshold != null) next.threshold = input.threshold;
+      if (input.timezone != null) next.timezone = input.timezone;
+      if (input.horizonMonths != null) next.horizonMonths = input.horizonMonths;
+      if (input.currency != null) next.currency = input.currency;
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'workbookUrl')) {
+        if (workbookUrl && workbookUrl.trim() !== '') next.workbookUrl = workbookUrl.trim();
+        else delete next.workbookUrl;
+      }
+      if (esopStockSymbol != null) next.esopStockSymbol = esopStockSymbol.trim();
+      if (esopFxSymbol != null) next.esopFxSymbol = esopFxSymbol.trim();
+      getRepo().upsertSettings(next);
       withForecast(res, getRepo().getSettings());
     } catch (err) {
       if (!handleZod(err, res)) throw err;

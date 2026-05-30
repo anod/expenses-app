@@ -19,6 +19,11 @@ const MarketQuery = z.object({
 
 const MarketUpdateBody = MarketQuery;
 
+const MarketValuesUpdateBody = z.object({
+  usdNisRate: z.coerce.number().positive(),
+  currentPriceUsd: z.coerce.number().nonnegative(),
+});
+
 const WorkbookSettingsBody = z.object({
   lockDownDays: z.coerce.number().positive(),
   incomeTaxRate: z.coerce.number().min(0).max(1),
@@ -106,6 +111,34 @@ export const buildEsopRoutes = (
         esop,
         fetchedAt: new Date().toISOString(),
       });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: 'VALIDATION', issues: err.issues });
+        return;
+      }
+      next(err);
+    }
+  });
+
+  router.post('/esop/market-values/update', async (req, res, next) => {
+    try {
+      const body = MarketValuesUpdateBody.parse(req.body ?? {});
+
+      if (isDemo()) {
+        res.json({ esop: calculateDemoEsop(body), applied: body });
+        return;
+      }
+      if (!reader) {
+        res.status(501).json({
+          error: 'ESOP_NOT_CONFIGURED',
+          message: 'Set ESOP_WORKBOOK_URL and run in graph mode to enable ESOP.',
+        });
+        return;
+      }
+      const graphToken = graphTokenFromHeader(req, res);
+      if (!graphToken) return;
+      const esop = await reader.updateMarketValues(graphToken, body);
+      res.json({ esop, applied: body });
     } catch (err) {
       if (err instanceof ZodError) {
         res.status(400).json({ error: 'VALIDATION', issues: err.issues });

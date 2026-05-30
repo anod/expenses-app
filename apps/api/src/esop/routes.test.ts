@@ -63,6 +63,19 @@ describe('ESOP routes', () => {
     });
   });
 
+  it('updates direct ESOP market values in demo mode without a Graph token', async () => {
+    const res = await request(mkApp(() => true))
+      .post('/api/esop/market-values/update')
+      .send({ usdNisRate: 3.7, currentPriceUsd: 455 })
+      .expect(200);
+
+    expect(res.body.applied).toEqual({ usdNisRate: 3.7, currentPriceUsd: 455 });
+    expect(res.body.esop.assumptions).toMatchObject({
+      usdNisRate: 3.7,
+      currentPriceUsd: 455,
+    });
+  });
+
   it('requires a Graph token before updating workbook settings', async () => {
     const reader = {
       updateWorkbookSettings: vi.fn(),
@@ -75,6 +88,25 @@ describe('ESOP routes', () => {
 
     expect(res.body.error).toBe('GRAPH_TOKEN_REQUIRED');
     expect(reader.updateWorkbookSettings).not.toHaveBeenCalled();
+  });
+
+  it('passes direct market value updates through to Graph', async () => {
+    const esop = calculateDemoEsop({ usdNisRate: 3.7, currentPriceUsd: 455 });
+    const reader = {
+      updateMarketValues: vi.fn(async () => esop),
+    } as unknown as GraphEsopReader;
+
+    const res = await request(mkApp(() => false, reader))
+      .post('/api/esop/market-values/update')
+      .set('X-MS-Graph-Token', 'token')
+      .send({ usdNisRate: 3.7, currentPriceUsd: 455 })
+      .expect(200);
+
+    expect(reader.updateMarketValues).toHaveBeenCalledWith('token', {
+      usdNisRate: 3.7,
+      currentPriceUsd: 455,
+    });
+    expect(res.body.esop.assumptions.currentPriceUsd).toBe(455);
   });
 
   it('passes workbook settings updates through to Graph', async () => {

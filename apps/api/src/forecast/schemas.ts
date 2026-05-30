@@ -74,11 +74,13 @@ export const LedgerEntryInput = z
   );
 
 export const SettingsInput = z.object({
-  threshold: z.number().nonnegative().finite(),
-  timezone: z.string().min(1).max(64),
-  horizonMonths: z.number().int().min(1).max(24),
-  currency: z.literal('ILS'),
+  threshold: z.number().nonnegative().finite().optional(),
+  timezone: z.string().min(1).max(64).optional(),
+  horizonMonths: z.number().int().min(1).max(24).optional(),
+  currency: z.literal('ILS').optional(),
   workbookUrl: z.string().trim().max(2048).optional().or(z.literal('')),
+  esopStockSymbol: z.string().trim().min(1).max(64).optional(),
+  esopFxSymbol: z.string().trim().min(1).max(64).optional(),
 });
 
 export type AccountInputT = z.infer<typeof AccountInput>;
