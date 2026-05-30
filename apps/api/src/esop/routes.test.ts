@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
+import { calculateDemoEsop } from './demoEsop.js';
 import { buildEsopRoutes } from './routes.js';
 import type { GraphEsopReader } from './graphEsopReader.js';
 
@@ -46,8 +47,53 @@ describe('ESOP routes', () => {
     expect(res.body.esop.assumptions).toMatchObject({
       usdNisRate: 3.6,
       currentPriceUsd: 440,
-      asOf: '2026-05-22',
     });
+  });
+
+  it('updates ESOP workbook settings in demo mode without a Graph token', async () => {
+    const res = await request(mkApp(() => true))
+      .post('/api/esop/settings/update')
+      .send({ lockDownDays: 365, incomeTaxRate: 0.42 })
+      .expect(200);
+
+    expect(res.body.applied).toEqual({ lockDownDays: 365, incomeTaxRate: 0.42 });
+    expect(res.body.esop.assumptions).toMatchObject({
+      lockDownDays: 365,
+      incomeTaxRate: 0.42,
+    });
+  });
+
+  it('requires a Graph token before updating workbook settings', async () => {
+    const reader = {
+      updateWorkbookSettings: vi.fn(),
+    } as unknown as GraphEsopReader;
+
+    const res = await request(mkApp(() => false, reader))
+      .post('/api/esop/settings/update')
+      .send({ lockDownDays: 365, incomeTaxRate: 0.42 })
+      .expect(401);
+
+    expect(res.body.error).toBe('GRAPH_TOKEN_REQUIRED');
+    expect(reader.updateWorkbookSettings).not.toHaveBeenCalled();
+  });
+
+  it('passes workbook settings updates through to Graph', async () => {
+    const esop = calculateDemoEsop({ lockDownDays: 365, incomeTaxRate: 0.42 });
+    const reader = {
+      updateWorkbookSettings: vi.fn(async () => esop),
+    } as unknown as GraphEsopReader;
+
+    const res = await request(mkApp(() => false, reader))
+      .post('/api/esop/settings/update')
+      .set('X-MS-Graph-Token', 'token')
+      .send({ lockDownDays: 365, incomeTaxRate: 0.42 })
+      .expect(200);
+
+    expect(reader.updateWorkbookSettings).toHaveBeenCalledWith('token', {
+      lockDownDays: 365,
+      incomeTaxRate: 0.42,
+    });
+    expect(res.body.esop.assumptions.lockDownDays).toBe(365);
   });
 
   it('still requires Graph configuration when demo mode is off', async () => {

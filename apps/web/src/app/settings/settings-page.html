@@ -83,6 +83,65 @@
       </form>
     </div>
 
+    <!-- ESOP workbook settings -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">finance_mode</span>
+        <div>
+          <h2>ESOP workbook settings</h2>
+          <p>Tax assumptions used by the ESOP workbook calculation.</p>
+        </div>
+      </header>
+      @if (esopSettingsLoading()) {
+        <div class="status-banner info">
+          <span class="material-symbols-outlined spin">progress_activity</span>
+          Loading ESOP settings…
+        </div>
+      } @else {
+        <form [formGroup]="esopSettingsForm" (ngSubmit)="saveEsopSettings()" class="form-grid">
+          <label class="field">
+            <span>Lock period days</span>
+            <input type="number" min="1" step="1" formControlName="lockDownDays" />
+          </label>
+          <label class="field">
+            <span>Income tax rate</span>
+            <input type="number" min="0" max="1" step="0.01" formControlName="incomeTaxRate" />
+            <small>Current value: {{ pct(esopSettingsForm.controls.incomeTaxRate.value) }}</small>
+          </label>
+          @if (esopResult(); as esop) {
+            <div class="setting-preview">
+              <span>Last workbook read</span>
+              <strong>{{ esop.assumptions.asOf }}</strong>
+            </div>
+          }
+          <div class="form-actions">
+            <button
+              type="submit"
+              class="m3-btn primary"
+              [disabled]="esopSettingsSaving() || esopSettingsForm.invalid || esopSettingsForm.pristine"
+            >
+              @if (esopSettingsSaving()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Saving…
+              } @else {
+                <span class="material-symbols-outlined">save</span> Save ESOP settings
+              }
+            </button>
+            @if (esopSettingsSaved()) {
+              <span class="inline-status success">
+                <span class="material-symbols-outlined">check_circle</span> Saved
+              </span>
+            }
+          </div>
+        </form>
+      }
+      @if (esopSettingsError(); as e) {
+        <div class="status-banner error">
+          <span class="material-symbols-outlined">error</span>
+          {{ e }}
+        </div>
+      }
+    </div>
+
     <!-- Import from Excel -->
     <div class="m3-card section-card">
       <header class="section-head">

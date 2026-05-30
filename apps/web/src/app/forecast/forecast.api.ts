@@ -159,9 +159,6 @@ export class ForecastApi {
   updateEsopMarket(params: {
     stockSymbol: string;
     fxSymbol: string;
-    lockDownDays?: number;
-    incomeTaxRate?: number;
-    asOf?: string;
   }) {
     return this.http.post<{
       stock: { symbol: string; price: number; currency: string | null; fetchedAt: string };
@@ -170,6 +167,13 @@ export class ForecastApi {
       esop: EsopCalculationResult;
       fetchedAt: string;
     }>('/api/esop/market/update', params);
+  }
+
+  updateEsopSettings(params: { lockDownDays: number; incomeTaxRate: number }) {
+    return this.http.post<{
+      applied: { lockDownDays: number; incomeTaxRate: number };
+      esop: EsopCalculationResult;
+    }>('/api/esop/settings/update', params);
   }
 }
 

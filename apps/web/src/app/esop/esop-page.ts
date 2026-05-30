@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
@@ -9,7 +10,7 @@ import { errorMessage as formatApiError } from '../core/api-error';
 @Component({
   selector: 'app-esop-page',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './esop-page.html',
   styleUrl: './esop-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,9 +29,6 @@ export class EsopPageComponent {
   protected readonly assumptionsForm = this.fb.nonNullable.group({
     usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
     currentPriceUsd: [0, [Validators.required, Validators.min(0)]],
-    lockDownDays: [730, [Validators.required, Validators.min(1)]],
-    incomeTaxRate: [0.55, [Validators.required, Validators.min(0), Validators.max(1)]],
-    asOf: ['', [Validators.required]],
   });
   protected readonly marketForm = this.fb.nonNullable.group({
     stockSymbol: ['MSFT', [Validators.required]],
@@ -45,10 +43,7 @@ export class EsopPageComponent {
     const raw = this.assumptionsForm.getRawValue();
     return (
       raw.usdNisRate !== assumptions.usdNisRate ||
-      raw.currentPriceUsd !== assumptions.currentPriceUsd ||
-      raw.lockDownDays !== assumptions.lockDownDays ||
-      raw.incomeTaxRate !== assumptions.incomeTaxRate ||
-      raw.asOf !== assumptions.asOf
+      raw.currentPriceUsd !== assumptions.currentPriceUsd
     );
   });
 
@@ -69,9 +64,6 @@ export class EsopPageComponent {
       this.assumptionsForm.setValue({
         usdNisRate: result.assumptions.usdNisRate,
         currentPriceUsd: result.assumptions.currentPriceUsd,
-        lockDownDays: result.assumptions.lockDownDays,
-        incomeTaxRate: result.assumptions.incomeTaxRate,
-        asOf: result.assumptions.asOf,
       });
     } catch (err) {
       this.error.set(errorMessage(err));
@@ -95,22 +87,15 @@ export class EsopPageComponent {
     this.error.set(null);
     this.marketMessage.set(null);
     try {
-      const overrides = this.assumptionOverrides();
       const update = await firstValueFrom(
         this.api.updateEsopMarket({
           ...this.marketForm.getRawValue(),
-          lockDownDays: overrides.lockDownDays,
-          incomeTaxRate: overrides.incomeTaxRate,
-          asOf: overrides.asOf,
         }),
       );
       this.result.set(update.esop);
       this.assumptionsForm.setValue({
         usdNisRate: update.esop.assumptions.usdNisRate,
         currentPriceUsd: update.esop.assumptions.currentPriceUsd,
-        lockDownDays: update.esop.assumptions.lockDownDays,
-        incomeTaxRate: update.esop.assumptions.incomeTaxRate,
-        asOf: update.esop.assumptions.asOf,
       });
       this.marketMessage.set(
         `Updated ESOP market values from ${update.stock.symbol} and ${update.fx.symbol}.`,
@@ -164,9 +149,6 @@ export class EsopPageComponent {
     return {
       usdNisRate: raw.usdNisRate,
       currentPriceUsd: raw.currentPriceUsd,
-      lockDownDays: raw.lockDownDays,
-      incomeTaxRate: raw.incomeTaxRate,
-      asOf: raw.asOf,
     };
   }
 }

@@ -4,6 +4,7 @@ import {
   parseEsopUsedRange,
   type EsopCalculationResult,
   type EsopAssumptions,
+  type RawCellValue,
   type RawUsedRange,
 } from '@expenses/shared';
 import { GraphClient, GraphError } from '../graph/graphClient.js';
@@ -12,6 +13,8 @@ import { encodeWorksheetName } from '../graph/graphReader.js';
 
 const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,text,numberFormat';
 const MARKET_VALUES_RANGE = 'D12:D13';
+const LOCK_DOWN_FALLBACK_ROW = 14;
+const INCOME_TAX_FALLBACK_ROW = 15;
 
 export interface EsopOverrides {
   usdNisRate?: number;
@@ -31,6 +34,11 @@ export interface EsopReaderOptions {
 export interface EsopMarketValues {
   usdNisRate: number;
   currentPriceUsd: number;
+}
+
+export interface EsopWorkbookSettings {
+  lockDownDays: number;
+  incomeTaxRate: number;
 }
 
 export class GraphEsopReader {
@@ -60,7 +68,6 @@ export class GraphEsopReader {
   async updateMarketValues(
     accessToken: string,
     values: EsopMarketValues,
-    overrides: Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> = {},
   ): Promise<EsopCalculationResult> {
     const ref = await this.opts.resolver.resolve(accessToken);
     const ws = encodeWorksheetName(this.opts.worksheetName);
@@ -73,7 +80,33 @@ export class GraphEsopReader {
       accessToken,
       body: { values: [[values.usdNisRate], [values.currentPriceUsd]] },
     });
-    return this.read(accessToken, overrides);
+    return this.read(accessToken);
+  }
+
+  async updateWorkbookSettings(
+    accessToken: string,
+    values: EsopWorkbookSettings,
+  ): Promise<EsopCalculationResult> {
+    const ref = await this.opts.resolver.resolve(accessToken);
+    const usedRange = await this.fetchUsedRange(accessToken, ref);
+    const targets = workbookSettingTargets(usedRange.values);
+    const ws = encodeWorksheetName(this.opts.worksheetName);
+
+    await Promise.all([
+      this.opts.client.request({
+        method: 'PATCH',
+        path: rangePath(ref, ws, targets.lockDownDays),
+        accessToken,
+        body: { values: [[values.lockDownDays]] },
+      }),
+      this.opts.client.request({
+        method: 'PATCH',
+        path: rangePath(ref, ws, targets.incomeTaxRate),
+        accessToken,
+        body: { values: [[values.incomeTaxRate]] },
+      }),
+    ]);
+    return this.read(accessToken);
   }
 
   private async fetchUsedRange(accessToken: string, ref: DriveItemRef): Promise<RawUsedRange> {
@@ -90,6 +123,37 @@ export class GraphEsopReader {
       throw err;
     }
   }
+}
+
+function rangePath(ref: DriveItemRef, worksheet: string, address: string): string {
+  return (
+    `/drives/${ref.driveId}/items/${ref.itemId}/workbook/worksheets('${worksheet}')` +
+    `/range(address='${address}')`
+  );
+}
+
+function workbookSettingTargets(values: RawCellValue[][]): EsopWorkbookSettingsRecord {
+  return {
+    lockDownDays: settingCellAddress(values, 'lock down period', LOCK_DOWN_FALLBACK_ROW),
+    incomeTaxRate: settingCellAddress(values, 'income tax', INCOME_TAX_FALLBACK_ROW),
+  };
+}
+
+interface EsopWorkbookSettingsRecord {
+  lockDownDays: string;
+  incomeTaxRate: string;
+}
+
+function settingCellAddress(values: RawCellValue[][], label: string, fallbackRow: number): string {
+  const rowIndex = values.findIndex((row) => normalizeHeader(row?.[0]) === label);
+  return `D${rowIndex >= 0 ? rowIndex + 1 : fallbackRow}`;
+}
+
+function normalizeHeader(value: RawCellValue | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 }
 
 function definedOverrides(overrides: EsopOverrides): Partial<Omit<EsopAssumptions, 'asOf'>> {

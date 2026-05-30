@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { Settings } from '@expenses/shared';
+import type { EsopCalculationResult, Settings } from '@expenses/shared';
 import { AuthService } from '../auth/auth.service';
 import { errorMessage } from '../core/api-error';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -54,6 +54,17 @@ export class SettingsPageComponent {
   protected readonly prefsSaved = signal(false);
   protected readonly prefsError = signal<string | null>(null);
 
+  // --- ESOP workbook settings ----------------------------------------------
+  protected readonly esopSettingsForm = this.fb.nonNullable.group({
+    lockDownDays: [730, [Validators.required, Validators.min(1)]],
+    incomeTaxRate: [0.55, [Validators.required, Validators.min(0), Validators.max(1)]],
+  });
+  protected readonly esopSettingsLoading = signal(true);
+  protected readonly esopSettingsSaving = signal(false);
+  protected readonly esopSettingsSaved = signal(false);
+  protected readonly esopSettingsError = signal<string | null>(null);
+  protected readonly esopResult = signal<EsopCalculationResult | null>(null);
+
   // --- Demo mode -----------------------------------------------------------
   protected readonly demoEnabled = signal(false);
   protected readonly demoBusy = signal(false);
@@ -76,6 +87,7 @@ export class SettingsPageComponent {
   constructor() {
     void this.load();
     void this.loadDemo();
+    void this.loadEsopSettings();
   }
 
   private async load(): Promise<void> {
@@ -148,6 +160,45 @@ export class SettingsPageComponent {
     }
   }
 
+  protected async loadEsopSettings(): Promise<void> {
+    this.esopSettingsLoading.set(true);
+    this.esopSettingsError.set(null);
+    try {
+      const esop = await firstValueFrom(this.api.getEsop());
+      this.esopResult.set(esop);
+      this.esopSettingsForm.reset({
+        lockDownDays: esop.assumptions.lockDownDays,
+        incomeTaxRate: esop.assumptions.incomeTaxRate,
+      });
+    } catch (err) {
+      this.esopSettingsError.set(this.errMsg(err));
+    } finally {
+      this.esopSettingsLoading.set(false);
+    }
+  }
+
+  protected async saveEsopSettings(): Promise<void> {
+    if (this.esopSettingsForm.invalid || this.esopSettingsSaving()) return;
+    this.esopSettingsSaving.set(true);
+    this.esopSettingsError.set(null);
+    this.esopSettingsSaved.set(false);
+    const body = this.esopSettingsForm.getRawValue();
+    try {
+      const updated = await firstValueFrom(this.api.updateEsopSettings(body));
+      this.esopResult.set(updated.esop);
+      this.esopSettingsForm.reset({
+        lockDownDays: updated.esop.assumptions.lockDownDays,
+        incomeTaxRate: updated.esop.assumptions.incomeTaxRate,
+      });
+      this.esopSettingsSaved.set(true);
+      setTimeout(() => this.esopSettingsSaved.set(false), 2500);
+    } catch (err) {
+      this.esopSettingsError.set(this.errMsg(err));
+    } finally {
+      this.esopSettingsSaving.set(false);
+    }
+  }
+
   protected async sync(): Promise<void> {
     if (this.syncForm.invalid || this.syncing()) return;
     this.syncing.set(true);
@@ -203,6 +254,14 @@ export class SettingsPageComponent {
     } catch {
       return null;
     }
+  }
+
+  protected pct(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'percent',
+      maximumFractionDigits: 1,
+    }).format(value);
   }
 
   private errMsg(err: unknown): string {

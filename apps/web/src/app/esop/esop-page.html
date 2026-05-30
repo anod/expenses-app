@@ -36,7 +36,7 @@
 
   @if (result(); as esop) {
     <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="applyOverrides()">
-      <details class="card price-panel">
+      <details class="card price-panel" open>
         <summary class="price-summary">
           <span>Price</span>
           <strong>
@@ -83,25 +83,7 @@
         @if (marketMessage(); as message) {
           <div class="market-message">{{ message }}</div>
         }
-      </details>
-
-      <details class="card tax-panel">
-        <summary>Workbook tax settings</summary>
-        <div class="fields compact">
-          <label>
-            <span>Lock period days</span>
-            <input type="number" step="1" formControlName="lockDownDays" />
-          </label>
-          <label>
-            <span>Income tax rate</span>
-            <input type="number" step="0.01" min="0" max="1" formControlName="incomeTaxRate" />
-          </label>
-          <label>
-            <span>As of</span>
-            <input type="date" formControlName="asOf" />
-          </label>
-        </div>
-        <div class="actions">
+        <div class="price-actions">
           <button
             type="submit"
             class="m3-btn m3-btn--filled"
@@ -110,6 +92,11 @@
             <span class="material-symbols-outlined" [class.spin]="loading()">calculate</span>
             Recalculate
           </button>
+          <span class="settings-note">
+            Tax settings: {{ esop.assumptions.lockDownDays }}d lock ·
+            {{ pct(esop.assumptions.incomeTaxRate) }} income tax.
+            <a routerLink="/settings">Edit in Settings</a>
+          </span>
         </div>
       </details>
     </form>
@@ -148,17 +135,17 @@
         <div class="forecast-grid">
           @for (forecast of esop.unblockForecasts; track forecast.id) {
             <div class="forecast-item">
-              <div>
+              <div class="forecast-main">
                 <span>{{ forecast.label }}</span>
                 <strong>{{ forecast.totalAmount }} shares</strong>
                 <small>+{{ forecast.unlockedAmount }} unlocked</small>
               </div>
-              <div>
-                <span>Sum</span>
+              <div class="forecast-metric">
+                <span>Gross</span>
                 <strong>{{ nis(forecast.sumNis) }}</strong>
                 <small>{{ signedNis(forecast.sumDeltaNis) }}</small>
               </div>
-              <div>
+              <div class="forecast-metric net-metric">
                 <span>Net</span>
                 <strong>{{ nis(forecast.netNis) }}</strong>
                 <small>{{ signedNis(forecast.netDeltaNis) }}</small>

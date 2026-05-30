@@ -17,10 +17,11 @@ const MarketQuery = z.object({
   fxSymbol: z.string().trim().min(1).default('USDILS=X'),
 });
 
-const MarketUpdateBody = MarketQuery.extend({
-  lockDownDays: z.coerce.number().positive().optional(),
-  incomeTaxRate: z.coerce.number().min(0).max(1).optional(),
-  asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+const MarketUpdateBody = MarketQuery;
+
+const WorkbookSettingsBody = z.object({
+  lockDownDays: z.coerce.number().positive(),
+  incomeTaxRate: z.coerce.number().min(0).max(1),
 });
 
 export const buildEsopRoutes = (
@@ -55,7 +56,6 @@ export const buildEsopRoutes = (
   router.post('/esop/market/update', async (req, res, next) => {
     try {
       const body = MarketUpdateBody.parse(req.body ?? {});
-      const overrides = marketUpdateOverrides(body);
 
       if (isDemo()) {
         const [stock, fx] = await Promise.all([
@@ -63,7 +63,6 @@ export const buildEsopRoutes = (
           fetchYahooQuote(body.fxSymbol),
         ]);
         const esop = calculateDemoEsop({
-          ...overrides,
           usdNisRate: fx.price,
           currentPriceUsd: stock.price,
         });
@@ -93,11 +92,10 @@ export const buildEsopRoutes = (
         fetchYahooQuote(body.stockSymbol),
         fetchYahooQuote(body.fxSymbol),
       ]);
-      const esop = await reader.updateMarketValues(
-        graphToken,
-        { usdNisRate: fx.price, currentPriceUsd: stock.price },
-        overrides,
-      );
+      const esop = await reader.updateMarketValues(graphToken, {
+        usdNisRate: fx.price,
+        currentPriceUsd: stock.price,
+      });
       res.json({
         stock,
         fx,
@@ -108,6 +106,34 @@ export const buildEsopRoutes = (
         esop,
         fetchedAt: new Date().toISOString(),
       });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: 'VALIDATION', issues: err.issues });
+        return;
+      }
+      next(err);
+    }
+  });
+
+  router.post('/esop/settings/update', async (req, res, next) => {
+    try {
+      const body = WorkbookSettingsBody.parse(req.body ?? {});
+
+      if (isDemo()) {
+        res.json({ esop: calculateDemoEsop(body), applied: body });
+        return;
+      }
+      if (!reader) {
+        res.status(501).json({
+          error: 'ESOP_NOT_CONFIGURED',
+          message: 'Set ESOP_WORKBOOK_URL and run in graph mode to enable ESOP.',
+        });
+        return;
+      }
+      const graphToken = graphTokenFromHeader(req, res);
+      if (!graphToken) return;
+      const esop = await reader.updateWorkbookSettings(graphToken, body);
+      res.json({ esop, applied: body });
     } catch (err) {
       if (err instanceof ZodError) {
         res.status(400).json({ error: 'VALIDATION', issues: err.issues });
@@ -186,14 +212,4 @@ function graphTokenFromHeader(req: Request, res: Response): string | null {
     return null;
   }
   return header.trim();
-}
-
-function marketUpdateOverrides(
-  body: z.infer<typeof MarketUpdateBody>,
-): Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> {
-  const overrides: Omit<EsopOverrides, 'usdNisRate' | 'currentPriceUsd'> = {};
-  if (body.lockDownDays !== undefined) overrides.lockDownDays = body.lockDownDays;
-  if (body.incomeTaxRate !== undefined) overrides.incomeTaxRate = body.incomeTaxRate;
-  if (body.asOf !== undefined) overrides.asOf = body.asOf;
-  return overrides;
 }

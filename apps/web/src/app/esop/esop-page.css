@@ -81,20 +81,17 @@
   gap: 0.75rem;
 }
 
-.price-panel,
-.tax-panel {
+.price-panel {
   display: grid;
   gap: 0.75rem;
 }
 
-.price-panel > summary,
-.tax-panel > summary {
+.price-panel > summary {
   cursor: pointer;
   list-style: none;
 }
 
-.price-panel > summary::-webkit-details-marker,
-.tax-panel > summary::-webkit-details-marker {
+.price-panel > summary::-webkit-details-marker {
   display: none;
 }
 
@@ -107,16 +104,14 @@
   font: var(--md-sys-typescale-label-large);
 }
 
-.price-summary::after,
-.tax-panel > summary::after {
+.price-summary::after {
   content: 'expand_more';
   font-family: 'Material Symbols Outlined';
   font-size: 1.25rem;
   line-height: 1;
 }
 
-.price-panel[open] .price-summary::after,
-.tax-panel[open] > summary::after {
+.price-panel[open] .price-summary::after {
   content: 'expand_less';
 }
 
@@ -124,15 +119,6 @@
   color: var(--md-sys-color-on-surface);
   font: var(--md-sys-typescale-title-medium);
   text-align: right;
-}
-
-.tax-panel > summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  align-items: center;
-  color: var(--md-sys-color-on-surface-variant);
-  font: var(--md-sys-typescale-label-large);
 }
 
 .section-copy {
@@ -218,6 +204,24 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.price-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.settings-note {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.settings-note a {
+  color: var(--md-sys-color-primary);
+}
+
 .advanced {
   margin-top: 0.75rem;
   border-top: 1px solid var(--md-sys-color-outline-variant);
@@ -248,12 +252,6 @@ input {
   font: var(--md-sys-typescale-body-large);
   color: var(--md-sys-color-on-surface);
   background: var(--md-sys-color-surface);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 1rem;
 }
 
 .summary-grid {
@@ -410,10 +408,17 @@ td {
   }
 
   .forecast-item {
-    grid-template-columns: 1fr;
-    gap: 0.35rem;
-    padding: 0.6rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.65rem;
   }
+
+  .forecast-main {
+    grid-column: 1 / -1;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+
 }
 
 @media (max-width: 640px) {
@@ -450,8 +455,19 @@ td {
     padding-top: 0.55rem;
   }
 
-  .actions {
-    margin-top: 0.65rem;
+  .price-actions {
+    align-items: stretch;
+  }
+
+  .price-actions .m3-btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .settings-note {
+    display: block;
+    width: 100%;
+    line-height: 1.35;
   }
 
   .summary-card {
@@ -495,18 +511,24 @@ td {
   tr {
     border: 1px solid var(--md-sys-color-outline-variant);
     border-radius: var(--md-sys-shape-corner-md);
-    padding: 0.2rem 0.6rem;
+    padding: 0.7rem;
     background: var(--md-sys-color-surface);
   }
 
   td {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+    align-items: baseline;
     justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.28rem 0;
+    gap: 0.5rem;
+    padding: 0.22rem 0;
     white-space: normal;
     text-align: right;
     border-bottom: 0;
+  }
+
+  td.net {
+    color: var(--md-sys-color-primary);
   }
 
   td::before {
