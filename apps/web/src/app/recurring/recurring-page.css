@@ -248,7 +248,7 @@ tr.is-editing td {
 }
 .template-row-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   min-height: 32px;
@@ -256,8 +256,10 @@ tr.is-editing td {
 .template-row-title {
   flex: 1 1 auto;
   min-width: 0;
+  align-self: center;
   font: var(--md-sys-typescale-body-medium);
   font-weight: 600;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -277,13 +279,13 @@ tr.is-editing td {
   white-space: nowrap;
   font: var(--md-sys-typescale-title-small);
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1;
 }
 .template-row-amount.is-negative { color: var(--md-sys-color-error); }
 
 .template-row-side {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex: none;
   gap: 0.125rem;
 }
@@ -327,7 +329,7 @@ tr.is-editing td {
     min-height: 28px;
   }
   .template-row-side {
-    height: 28px;
+    min-height: 28px;
   }
   .template-row-side .m3-btn--icon {
     width: 32px;
