@@ -476,7 +476,12 @@ export const forecast = (input: {
     ? input.account.asOf
     : input.today;
   const endDate = addMonths(visibleStart, input.settings.horizonMonths);
-  const virtuals = generateVirtualOccurrences(input.templates, input.account.asOf, endDate);
+  const virtualStart = input.cards.reduce(
+    (start, card) =>
+      card.mode !== 'debit' && compareIso(card.asOf, start) < 0 ? card.asOf : start,
+    input.account.asOf,
+  );
+  const virtuals = generateVirtualOccurrences(input.templates, virtualStart, endDate);
   const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards, input.templates);
   return project(effective, input.account, input.cards, input.settings, input.today);
 };
