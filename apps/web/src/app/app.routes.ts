@@ -18,11 +18,6 @@ export const routes: Routes = [
       import('./settings/settings-page').then((m) => m.SettingsPageComponent),
   },
   {
-    path: 'history',
-    loadComponent: () =>
-      import('./expenses/expenses-table').then((m) => m.ExpensesTableComponent),
-  },
-  {
     path: 'esop',
     loadComponent: () =>
       import('./esop/esop-page').then((m) => m.EsopPageComponent),

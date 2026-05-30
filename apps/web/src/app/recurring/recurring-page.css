@@ -248,9 +248,10 @@ tr.is-editing td {
 }
 .template-row-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 0.5rem;
+  min-height: 32px;
 }
 .template-row-title {
   flex: 1 1 auto;
@@ -282,7 +283,7 @@ tr.is-editing td {
 
 .template-row-side {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex: none;
   gap: 0.125rem;
 }
@@ -320,6 +321,12 @@ tr.is-editing td {
   }
   .template-row-icon {
     width: 28px;
+    height: 28px;
+  }
+  .template-row-head {
+    min-height: 28px;
+  }
+  .template-row-side {
     height: 28px;
   }
   .template-row-side .m3-btn--icon {

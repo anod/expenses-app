@@ -10,7 +10,6 @@ import { AuthService } from './auth.service';
  * strings and resource ids (e.g. `/api/ledger/<id>`) still match.
  */
 const GRAPH_PASSTHROUGH_PREFIXES: ReadonlyArray<string> = [
-  '/api/expenses',
   '/api/workbook/',
   '/api/import/',
   '/api/sync/',

@@ -193,6 +193,17 @@ export class SettingsPageComponent {
     }
   }
 
+  protected workbookLink(): string | null {
+    const value = this.prefsForm.controls.workbookUrl.value.trim();
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+
   private errMsg(err: unknown): string {
     if (typeof err === 'object' && err && 'error' in err) {
       const body = (err as { error?: { message?: string; error?: string } }).error;

@@ -54,6 +54,12 @@
             spellcheck="false"
           />
           <small>Used by Import &amp; Sync. Leave empty to fall back to <code>ONEDRIVE_WORKBOOK_URL</code> env.</small>
+          @if (workbookLink(); as url) {
+            <a class="workbook-link" [href]="url" target="_blank" rel="noreferrer">
+              <span class="material-symbols-outlined">open_in_new</span>
+              Open OneDrive spreadsheet
+            </a>
+          }
         </label>
         <div class="form-actions">
           <button type="submit" class="m3-btn primary" [disabled]="savingPrefs() || prefsForm.invalid || prefsForm.pristine">

@@ -378,8 +378,13 @@ td {
   }
 
   .page-head {
-    display: grid;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .page-head h1 {
+    font: var(--md-sys-typescale-title-large);
+    margin: 0;
   }
 
   .page-head p {

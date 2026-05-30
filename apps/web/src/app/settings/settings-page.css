@@ -1,9 +1,16 @@
-.page-head { margin-bottom: 1.5rem; }
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
 .page-head h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 0.25rem;
+  white-space: nowrap;
 }
 .page-head h1 .material-symbols-outlined { color: var(--md-sys-color-primary); }
 .subtitle {
@@ -97,6 +104,18 @@
   font-size: 0.78rem;
 }
 .field-wide { grid-column: 1 / -1; }
+
+.workbook-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: max-content;
+  color: var(--md-sys-color-primary);
+  font: var(--md-sys-typescale-label-large);
+  text-decoration: none;
+}
+.workbook-link:hover { text-decoration: underline; }
+.workbook-link .material-symbols-outlined { font-size: 1.15rem; }
 
 .form-actions {
   grid-column: 1 / -1;
@@ -216,4 +235,18 @@
 .m3-switch:focus-visible .m3-switch-track {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 2px;
+}
+
+@media (max-width: 719px) {
+  .page-head {
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .page-head h1 {
+    font: var(--md-sys-typescale-title-large);
+    margin: 0;
+  }
+  .subtitle {
+    display: none;
+  }
 }
