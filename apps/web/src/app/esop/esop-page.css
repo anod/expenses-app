@@ -76,49 +76,24 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.assumptions {
-  display: grid;
-  gap: 0.75rem;
-}
-
 .price-panel {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
-}
-
-.price-panel > summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.price-panel > summary::-webkit-details-marker {
-  display: none;
+  flex-wrap: wrap;
 }
 
 .price-summary {
   display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
   align-items: baseline;
+  gap: 0.75rem;
   color: var(--md-sys-color-on-surface-variant);
   font: var(--md-sys-typescale-label-large);
-}
-
-.price-summary::after {
-  content: 'expand_more';
-  font-family: 'Material Symbols Outlined';
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.price-panel[open] .price-summary::after {
-  content: 'expand_less';
 }
 
 .price-summary strong {
   color: var(--md-sys-color-on-surface);
   font: var(--md-sys-typescale-title-medium);
-  text-align: right;
 }
 
 .section-copy {
@@ -168,38 +143,6 @@
   background: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
   box-shadow: var(--md-sys-elevation-level2);
-}
-
-.fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.75rem;
-}
-
-.price-row {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) max-content;
-  align-items: end;
-  gap: 0.75rem;
-}
-
-.price-field input {
-  font: var(--md-sys-typescale-headline-small);
-  padding: 0.85rem 1rem;
-}
-
-.market-message {
-  margin-top: 0.75rem;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.price-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-top: 0.75rem;
 }
 
 .settings-note {
@@ -370,16 +313,6 @@ td {
     justify-self: start;
   }
 
-  .price-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-    gap: 0.5rem;
-  }
-
-  .price-row .m3-btn {
-    min-width: 0;
-    padding-inline: 0.7rem;
-  }
-
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
@@ -421,40 +354,23 @@ td {
 
   .price-summary {
     align-items: center;
+    flex: 1 1 auto;
   }
 
   .price-summary strong {
     font: var(--md-sys-typescale-body-large);
   }
 
-  .price-field input {
-    font: var(--md-sys-typescale-title-medium);
-    padding: 0.65rem 0.75rem;
-  }
-
-  .price-actions {
-    align-items: stretch;
-  }
-
-  .price-row {
-    align-items: end;
-  }
-
-  .price-row .m3-btn {
-    align-self: end;
-    min-height: 2.8rem;
-  }
-
-  .price-row .m3-btn .material-symbols-outlined {
+  .price-panel .m3-btn .material-symbols-outlined {
     margin-inline-end: 0;
   }
 
-  .price-row .m3-btn {
+  .price-panel .m3-btn {
     font-size: 0;
     gap: 0;
   }
 
-  .price-row .m3-btn .material-symbols-outlined {
+  .price-panel .m3-btn .material-symbols-outlined {
     font-size: 1.25rem;
   }
 

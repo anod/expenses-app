@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -9,41 +8,28 @@ import { errorMessage as formatApiError } from '../core/api-error';
 @Component({
   selector: 'app-esop-page',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [RouterLink],
   templateUrl: './esop-page.html',
   styleUrl: './esop-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EsopPageComponent {
   private readonly api = inject(ForecastApi);
-  private readonly fb = inject(FormBuilder);
 
   protected readonly result = signal<EsopCalculationResult | null>(null);
   protected readonly loading = signal(true);
-  protected readonly marketLoading = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly marketMessage = signal<string | null>(null);
-
-  protected readonly assumptionsForm = this.fb.nonNullable.group({
-    usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
-    currentPriceUsd: [0, [Validators.required, Validators.min(0)]],
-  });
 
   constructor() {
     void this.load();
   }
 
-  protected async load(overrides = false): Promise<void> {
+  protected async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const payload = overrides ? this.assumptionOverrides() : undefined;
-      const result = await firstValueFrom(this.api.getEsop(payload));
+      const result = await firstValueFrom(this.api.getEsop());
       this.result.set(result);
-      this.assumptionsForm.setValue({
-        usdNisRate: result.assumptions.usdNisRate,
-        currentPriceUsd: result.assumptions.currentPriceUsd,
-      });
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {
@@ -52,29 +38,7 @@ export class EsopPageComponent {
   }
 
   protected async resetWorkbookDefaults(): Promise<void> {
-    await this.load(false);
-  }
-
-  protected async updateMarketInputs(): Promise<void> {
-    if (this.assumptionsForm.invalid) return;
-    this.marketLoading.set(true);
-    this.error.set(null);
-    this.marketMessage.set(null);
-    try {
-      const update = await firstValueFrom(
-        this.api.updateEsopMarketValues(this.assumptionOverrides()),
-      );
-      this.result.set(update.esop);
-      this.assumptionsForm.setValue({
-        usdNisRate: update.esop.assumptions.usdNisRate,
-        currentPriceUsd: update.esop.assumptions.currentPriceUsd,
-      });
-      this.marketMessage.set('Saved ESOP market values to the workbook.');
-    } catch (err) {
-      this.error.set(errorMessage(err));
-    } finally {
-      this.marketLoading.set(false);
-    }
+    await this.load();
   }
 
   protected nis(value: number | null | undefined): string {
@@ -112,14 +76,6 @@ export class EsopPageComponent {
 
   protected isLockedGrant(row: EsopComputedGrant, esop: EsopCalculationResult): boolean {
     return row.ageDays < esop.assumptions.lockDownDays;
-  }
-
-  private assumptionOverrides() {
-    const raw = this.assumptionsForm.getRawValue();
-    return {
-      usdNisRate: raw.usdNisRate,
-      currentPriceUsd: raw.currentPriceUsd,
-    };
   }
 }
 

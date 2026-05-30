@@ -14,10 +14,6 @@
       </div>
       <p>Estimate net sale proceeds from the ESOP workbook formulas.</p>
     </div>
-    <button type="button" class="m3-btn m3-btn--tonal" (click)="resetWorkbookDefaults()" [disabled]="loading()">
-      <span class="material-symbols-outlined" [class.spin]="loading()">refresh</span>
-      Refresh workbook
-    </button>
   </div>
 
   @if (error(); as e) {
@@ -35,49 +31,23 @@
   }
 
   @if (result(); as esop) {
-    <form class="assumptions" [formGroup]="assumptionsForm" (ngSubmit)="updateMarketInputs()">
-      <details class="card price-panel" open>
-        <summary class="price-summary">
-          <span>Price</span>
-          <strong>
-            {{ assumptionsForm.controls.usdNisRate.value }} ₪/$ ·
-            {{ usd(assumptionsForm.controls.currentPriceUsd.value) }}
-          </strong>
-        </summary>
-        <p class="section-copy">Edit USD/NIS and stock price, then save them back to the workbook.</p>
-
-        <div class="price-row">
-          <label class="price-field">
-            <span>USD/NIS rate</span>
-            <input type="number" step="0.0001" formControlName="usdNisRate" />
-          </label>
-          <label class="price-field">
-            <span>Current stock price</span>
-            <input type="number" step="0.01" formControlName="currentPriceUsd" />
-          </label>
-          <button
-            type="button"
-            class="m3-btn m3-btn--tonal"
-            (click)="updateMarketInputs()"
-            [disabled]="loading() || marketLoading() || assumptionsForm.invalid"
-          >
-            <span class="material-symbols-outlined" [class.spin]="marketLoading()">sync</span>
-            Update & save
-          </button>
-        </div>
-
-        @if (marketMessage(); as message) {
-          <div class="market-message">{{ message }}</div>
-        }
-        <div class="price-actions">
-          <span class="settings-note">
-            Tax settings: {{ esop.assumptions.lockDownDays }}d lock ·
-            {{ pct(esop.assumptions.incomeTaxRate) }} income tax.
-            <a routerLink="/settings">Edit in Settings</a>
-          </span>
-        </div>
-      </details>
-    </form>
+    <div class="card price-panel">
+      <div class="price-summary">
+        <span>Price</span>
+        <strong>
+          {{ esop.assumptions.usdNisRate }} ₪/$ ·
+          {{ usd(esop.assumptions.currentPriceUsd) }}
+        </strong>
+      </div>
+      <button type="button" class="m3-btn m3-btn--tonal" (click)="resetWorkbookDefaults()" [disabled]="loading()">
+        <span class="material-symbols-outlined" [class.spin]="loading()">refresh</span>
+        Update
+      </button>
+      <span class="settings-note">
+        Market values and tax settings are managed in
+        <a routerLink="/settings">Settings</a>.
+      </span>
+    </div>
 
     <div class="summary-grid">
       <div class="summary-card">
