@@ -16,7 +16,7 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @expenses/api\" \"npm run dev -w @expenses/web\""
   },
   "dependencies": {
-    "@azure/msal-node": "^2.16.2",
+    "@azure/msal-node": "^5.2.3",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
