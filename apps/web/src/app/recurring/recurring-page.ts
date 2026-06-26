@@ -15,7 +15,7 @@ import { errorMessage } from '../core/api-error';
 import { ForecastApi } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
-type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string };
+type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 
 type CadenceKind = 'monthly' | 'weekly' | 'monthly_prediction';
 
@@ -437,6 +437,18 @@ export class RecurringPageComponent {
     return s.kind === 'edit' && s.id === id;
   }
   protected isLedgerIdle(): boolean { return this.ledgerEdit().kind === 'idle'; }
+  protected isLedgerNew(): boolean { return this.ledgerEdit().kind === 'new'; }
+
+  protected startNewLedger(): void {
+    this.ledgerForm.reset({
+      description: '',
+      amount: 0,
+      channel: 'bank',
+      date: todayIsoLocal(),
+      status: 'pending',
+    });
+    this.ledgerEdit.set({ kind: 'new' });
+  }
 
   protected startEditLedger(e: LedgerEntry): void {
     this.ledgerForm.reset({
@@ -460,7 +472,7 @@ export class RecurringPageComponent {
       return;
     }
     const state = this.ledgerEdit();
-    if (state.kind !== 'edit') return;
+    if (state.kind === 'idle') return;
     const v = this.ledgerForm.getRawValue();
     const body = {
       description: v.description.trim(),
@@ -472,8 +484,13 @@ export class RecurringPageComponent {
     this.saving.set(true);
     this.error.set(null);
     try {
-      const res = await firstValueFrom(this.api.updateLedger(state.id, body));
-      this.ledger.update((arr) => arr.map((e) => (e.id === state.id ? res.entity : e)));
+      if (state.kind === 'new') {
+        const res = await firstValueFrom(this.api.createLedger(body));
+        this.ledger.update((arr) => [...arr, res.entity]);
+      } else {
+        const res = await firstValueFrom(this.api.updateLedger(state.id, body));
+        this.ledger.update((arr) => arr.map((e) => (e.id === state.id ? res.entity : e)));
+      }
       this.ledgerEdit.set({ kind: 'idle' });
     } catch (err) {
       this.error.set(errorMessage(err));

@@ -12,7 +12,7 @@
       class="m3-btn m3-btn--filled add-template-btn"
       aria-label="New template"
       (click)="startNew()"
-      [disabled]="!isIdle()"
+      [disabled]="!isIdle() || !isLedgerIdle()"
     >
       <span class="material-symbols-outlined">add</span>
       <span class="btn-label">New template</span>
@@ -230,7 +230,7 @@
               </td>
               <td class="actions-col">
                 <button type="button" class="m3-btn m3-btn--icon" title="Edit"
-                        (click)="startEdit(t)" [disabled]="!isIdle()">
+                        (click)="startEdit(t)" [disabled]="!isIdle() || !isLedgerIdle()">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
               </td>
@@ -273,7 +273,7 @@
                     {{ t.amount }}
                   </div>
                   <button type="button" class="m3-btn m3-btn--icon" title="Edit"
-                          (click)="startEdit(t)" [disabled]="!isIdle()">
+                          (click)="startEdit(t)" [disabled]="!isIdle() || !isLedgerIdle()">
                     <span class="material-symbols-outlined">edit</span>
                   </button>
                 </div>
@@ -305,70 +305,88 @@
        One-time payments. These are concrete dated entries rather than
        repeating templates. Editable amount/description/date/status/channel
        so imported or manually-created dated payments can still be tweaked
-       from one place.
+       from one place. Use "New one-time" to add a single expense or cash
+       injection on a specific day.
        ========================================================= -->
-  @if (oneOffLedger().length > 0) {
-    <header class="page-head" style="margin-top: 2rem;">
-      <div>
-        <h2 style="margin: 0;">
-          <span class="material-symbols-outlined">receipt_long</span>
-          One-time payments
-        </h2>
-        <p class="subtitle">
-          Concrete dated payments that are not generated from a recurring template.
-        </p>
-      </div>
-    </header>
+  <header class="page-head" style="margin-top: 2rem;">
+    <div>
+      <h2 style="margin: 0;">
+        <span class="material-symbols-outlined">receipt_long</span>
+        One-time payments
+      </h2>
+      <p class="subtitle">
+        A single expense or cash injection on a specific day, not generated from a
+        recurring template.
+      </p>
+    </div>
+    <button
+      type="button"
+      class="m3-btn m3-btn--filled add-template-btn"
+      aria-label="New one-time payment"
+      (click)="startNewLedger()"
+      [disabled]="!isIdle() || !isLedgerIdle()"
+    >
+      <span class="material-symbols-outlined">add</span>
+      <span class="btn-label">New one-time</span>
+    </button>
+  </header>
 
-    @if (!isLedgerIdle()) {
-      <form class="m3-card edit-form" [formGroup]="ledgerForm" (ngSubmit)="saveLedger()">
-        <h3 class="form-title">
-          <span class="material-symbols-outlined">edit</span>
-          Edit entry
-        </h3>
-        <div class="form-grid">
-          <label class="field field-span-2">
-            <span class="field-label">Description</span>
-            <input type="text" formControlName="description" />
-          </label>
-          <label class="field">
-            <span class="field-label">Amount</span>
-            <input type="number" formControlName="amount" step="1" />
-          </label>
-          <label class="field">
-            <span class="field-label">Channel</span>
-            <select formControlName="channel">
-              @for (opt of channelOptions(); track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Date</span>
-            <input type="date" formControlName="date" />
-          </label>
-          <label class="field">
-            <span class="field-label">Status</span>
-            <select formControlName="status">
-              <option value="pending">Pending</option>
-              <option value="cleared">Cleared</option>
-            </select>
-          </label>
-        </div>
-        <div class="form-actions">
-          <button type="button" class="m3-btn" (click)="cancelLedger()" [disabled]="saving()">Cancel</button>
-          <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || ledgerForm.invalid">
-            @if (saving()) {
-              <span class="material-symbols-outlined spin">progress_activity</span>
-            } @else {
-              <span class="material-symbols-outlined">save</span>
+  @if (!isLedgerIdle()) {
+    <form class="m3-card edit-form" [formGroup]="ledgerForm" (ngSubmit)="saveLedger()">
+      <h3 class="form-title">
+        <span class="material-symbols-outlined">{{ isLedgerNew() ? 'add_circle' : 'edit' }}</span>
+        {{ isLedgerNew() ? 'New one-time payment' : 'Edit entry' }}
+      </h3>
+      <div class="form-grid">
+        <label class="field field-span-2">
+          <span class="field-label">Description</span>
+          <input type="text" formControlName="description" placeholder="e.g. car repair / bonus" />
+        </label>
+        <label class="field">
+          <span class="field-label">Amount (negative = expense)</span>
+          <input type="number" formControlName="amount" step="1" />
+        </label>
+        <label class="field">
+          <span class="field-label">Channel</span>
+          <select formControlName="channel">
+            @for (opt of channelOptions(); track opt.value) {
+              <option [value]="opt.value">{{ opt.label }}</option>
             }
-            Save
-          </button>
-        </div>
-      </form>
-    }
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Date</span>
+          <input type="date" formControlName="date" />
+        </label>
+        <label class="field">
+          <span class="field-label">Status</span>
+          <select formControlName="status">
+            <option value="pending">Pending</option>
+            <option value="cleared">Cleared</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="m3-btn" (click)="cancelLedger()" [disabled]="saving()">Cancel</button>
+        <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || ledgerForm.invalid">
+          @if (saving()) {
+            <span class="material-symbols-outlined spin">progress_activity</span>
+          } @else {
+            <span class="material-symbols-outlined">save</span>
+          }
+          Save
+        </button>
+      </div>
+    </form>
+  }
 
+  @if (oneOffLedger().length === 0 && isLedgerIdle()) {
+    <div class="m3-card empty-state">
+      <span class="material-symbols-outlined empty-icon">receipt_long</span>
+      <h3>No one-time payments yet</h3>
+      <p>Use “New one-time” to add a single expense or cash injection on a specific day.</p>
+    </div>
+  } @else if (oneOffLedger().length > 0) {
     <div class="m3-card table-card">
       <table class="m3-table">
         <thead>
