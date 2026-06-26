@@ -184,6 +184,13 @@ export interface ForecastResult {
   startDate: IsoDate;
   endDate: IsoDate;
   days: DailyProjection[];
+  /**
+   * Historical days already elapsed in the *current* anchor period, from the
+   * period's anchor start (or the snapshot date, whichever is later) up to the
+   * day before `startDate`. Lets the UI chart the part of the current period
+   * that has already passed. Empty when the snapshot date is today.
+   */
+  priorDays: DailyProjection[];
   status: ForecastStatus;
   minBalance: number;
   minBalanceDate: IsoDate;

@@ -201,16 +201,22 @@ export class ForecastHomeComponent {
   }
 
   /**
-   * Forecast days for the current anchor period: from the first projected
-   * day (today) through and including the next anchor day (10th). Used by
+   * Forecast days for the current anchor period: the already-elapsed days
+   * (from the period's anchor start / snapshot date) followed by the
+   * projected days through and including the next anchor day (10th). Used by
    * the day-by-day current-period balance chart.
    */
   protected readonly currentPeriodDays = computed(() => {
     const f = this.forecast();
     if (!f) return [];
     const anchorIdx = f.days.findIndex((d) => d.isAnchor);
-    return anchorIdx >= 0 ? f.days.slice(0, anchorIdx + 1) : f.days;
+    const forward = anchorIdx >= 0 ? f.days.slice(0, anchorIdx + 1) : f.days;
+    return [...(f.priorDays ?? []), ...forward];
   });
+
+  /** Today as `YYYY-MM-DD`, derived from the forecast so it matches the
+   * timezone the days are computed in and sits within the chart domain. */
+  protected readonly chartToday = computed(() => this.forecast()?.days[0]?.date ?? '');
 
   protected fmt(amount: number): string {
     return new Intl.NumberFormat('he-IL', {

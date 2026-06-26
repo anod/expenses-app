@@ -94,6 +94,7 @@
           <app-period-balance-chart
             [days]="currentPeriodDays()"
             [threshold]="settings()?.threshold ?? 0"
+            [todayIso]="chartToday()"
           />
         } @else {
           <app-balance-chart
