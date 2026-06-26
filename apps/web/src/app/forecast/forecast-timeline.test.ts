@@ -6,7 +6,11 @@ import {
   type LedgerEntry,
   type Settings,
 } from '@expenses/shared';
-import { buildForecastTimeline, type ChargeItem } from './forecast-timeline';
+import {
+  buildCurrentPeriodDays,
+  buildForecastTimeline,
+  type ChargeItem,
+} from './forecast-timeline';
 
 const settings: Settings = {
   threshold: 2000,
@@ -141,5 +145,116 @@ describe('forecast timeline', () => {
 
     expect(timeline.find((item) => item.date === '2026-06-02')).toBeUndefined();
     expect(timeline.find((item) => item.date === '2026-07-02')).toBeUndefined();
+  });
+});
+
+describe('buildCurrentPeriodDays', () => {
+  const baseSettings: Settings = {
+    threshold: 0,
+    timezone: 'Asia/Jerusalem',
+    horizonMonths: 2,
+    currency: 'ILS',
+  };
+
+  it('reconstructs the elapsed period back to the previous anchor when the snapshot is today', () => {
+    const rent: LedgerEntry = {
+      id: 'rent',
+      description: 'Rent',
+      amount: -3000,
+      channel: 'bank',
+      date: '2026-06-20',
+      status: 'pending',
+    };
+    const result = forecast({
+      persisted: [rent],
+      templates: [],
+      account: { bankBalance: 12_000, asOf: '2026-06-26' },
+      cards: [],
+      settings: baseSettings,
+      today: '2026-06-26',
+    });
+    // The pipeline drops the pre-asOf charge, so there is no elapsed history.
+    expect(result.priorDays).toHaveLength(0);
+    expect(result.days[0]?.date).toBe('2026-06-26');
+
+    const days = buildCurrentPeriodDays({
+      forecast: result,
+      ledger: [rent],
+      templates: [],
+      cards: [],
+      todayIso: '2026-06-26',
+    });
+
+    // Starts at the previous anchor (the 10th), not today.
+    expect(days[0]?.date).toBe('2026-06-10');
+    expect(days[0]?.balance).toBe(15_000);
+
+    const charged = days.find((d) => d.date === '2026-06-20');
+    expect(charged?.delta).toBe(-3000);
+    expect(charged?.balance).toBe(12_000);
+    expect(charged?.charges.map((c) => c.description)).toContain('Rent');
+
+    // Continuous with the projected line: the day before today equals today.
+    const dayBeforeToday = days.find((d) => d.date === '2026-06-25');
+    expect(dayBeforeToday?.balance).toBe(12_000);
+    const todayDay = days.find((d) => d.date === '2026-06-26');
+    expect(todayDay?.balance).toBe(12_000);
+
+    // Forward part still runs through the next anchor (the 10th).
+    expect(days.some((d) => d.date === '2026-07-10' && d.isAnchor)).toBe(true);
+  });
+
+  it('shows a flat elapsed line from the anchor when nothing happened yet this period', () => {
+    const result = forecast({
+      persisted: [],
+      templates: [],
+      account: { bankBalance: 12_000, asOf: '2026-06-26' },
+      cards: [],
+      settings: baseSettings,
+      today: '2026-06-26',
+    });
+
+    const days = buildCurrentPeriodDays({
+      forecast: result,
+      ledger: [],
+      templates: [],
+      cards: [],
+      todayIso: '2026-06-26',
+    });
+
+    expect(days[0]?.date).toBe('2026-06-10');
+    expect(days.every((d) => d.date > '2026-07-10' || d.balance === 12_000)).toBe(true);
+  });
+
+  it('prefers the pipeline-provided elapsed days when the snapshot is in the past', () => {
+    const rent: LedgerEntry = {
+      id: 'rent',
+      description: 'Rent',
+      amount: -3000,
+      channel: 'bank',
+      date: '2026-06-20',
+      status: 'pending',
+    };
+    const result = forecast({
+      persisted: [rent],
+      templates: [],
+      account: { bankBalance: 15_000, asOf: '2026-06-18' },
+      cards: [],
+      settings: baseSettings,
+      today: '2026-06-26',
+    });
+    expect(result.priorDays.length).toBeGreaterThan(0);
+
+    const days = buildCurrentPeriodDays({
+      forecast: result,
+      ledger: [rent],
+      templates: [],
+      cards: [],
+      todayIso: '2026-06-26',
+    });
+
+    // Cannot go earlier than the snapshot date — balances before it are unknown.
+    expect(days[0]?.date).toBe('2026-06-18');
+    expect(days.find((d) => d.date === '2026-06-20')?.balance).toBe(12_000);
   });
 });
