@@ -11,6 +11,7 @@ import type {
 import { descriptionLabel } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
+import { PeriodBalanceChartComponent } from './period-balance-chart';
 import { errorMessage } from '../core/api-error';
 import {
   buildForecastTimeline,
@@ -33,7 +34,7 @@ interface CardSummary {
 @Component({
   selector: 'app-forecast-home',
   standalone: true,
-  imports: [BalanceChartComponent, ReactiveFormsModule],
+  imports: [BalanceChartComponent, PeriodBalanceChartComponent, ReactiveFormsModule],
   templateUrl: './forecast-home.html',
   styleUrl: './forecast-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +51,8 @@ export class ForecastHomeComponent {
   protected readonly error = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly channelFilter = signal<ChannelFilter>('all');
+  /** Which chart is shown in the chart card. */
+  protected readonly chartView = signal<'period' | 'projected'>('period');
   /** Set of billKeys currently expanded to show their contributing charges. */
   protected readonly expandedBills = signal<ReadonlySet<string>>(new Set());
 
@@ -192,6 +195,22 @@ export class ForecastHomeComponent {
   protected setFilter(f: ChannelFilter): void {
     this.channelFilter.set(f);
   }
+
+  protected setChartView(v: 'period' | 'projected'): void {
+    this.chartView.set(v);
+  }
+
+  /**
+   * Forecast days for the current anchor period: from the first projected
+   * day (today) through and including the next anchor day (10th). Used by
+   * the day-by-day current-period balance chart.
+   */
+  protected readonly currentPeriodDays = computed(() => {
+    const f = this.forecast();
+    if (!f) return [];
+    const anchorIdx = f.days.findIndex((d) => d.isAnchor);
+    return anchorIdx >= 0 ? f.days.slice(0, anchorIdx + 1) : f.days;
+  });
 
   protected fmt(amount: number): string {
     return new Intl.NumberFormat('he-IL', {

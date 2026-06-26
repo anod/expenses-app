@@ -182,7 +182,8 @@
   flex-direction: column;
 }
 
-.chart-card app-balance-chart {
+.chart-card app-balance-chart,
+.chart-card app-period-balance-chart {
   flex: 1;
   display: flex;
   align-items: center;
