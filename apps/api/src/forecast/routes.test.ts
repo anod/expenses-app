@@ -2,7 +2,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDb } from '../db/openDb.js';
 import { StateRepo } from '../db/stateRepo.js';
 import { buildForecastRoutes } from './routes.js';
@@ -10,7 +10,11 @@ import { buildForecastRoutes } from './routes.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, '..', '..', 'migrations');
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// Freeze "today" so date-relative forecast assertions are deterministic and
+// don't rot as real time advances. Only the clock is faked (not timers), so
+// supertest's async HTTP keeps working. The fixture dates below all fall in
+// [TODAY, TODAY + 6 months] under the default Asia/Jerusalem timezone.
+const TODAY = '2026-05-01';
 
 const mkApp = () => {
   const db = openDb({ path: ':memory:', migrationsDir });
@@ -24,6 +28,15 @@ const mkApp = () => {
 describe('forecast routes', () => {
   let app: express.Express;
   let repo: StateRepo;
+
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${TODAY}T12:00:00Z`));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     ({ app, repo } = mkApp());

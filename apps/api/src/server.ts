@@ -50,6 +50,9 @@ const log = pino({
       '*.idToken',
       '*.id_token',
       '*.secret',
+      // OneDrive share URL carries a capability token — treat as a secret.
+      '*.workbookUrl',
+      '*.shareUrl',
     ],
     censor: '[REDACTED]',
   },

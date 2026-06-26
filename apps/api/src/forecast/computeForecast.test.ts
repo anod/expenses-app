@@ -1,6 +1,6 @@
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { openDb } from '../db/openDb.js';
 import { StateRepo } from '../db/stateRepo.js';
 import { computeForecast } from './computeForecast.js';
@@ -9,6 +9,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, '..', '..', 'migrations');
 
 describe('computeForecast', () => {
+  // Freeze "today" to the snapshot date so the account/card asOf (2026-05-15)
+  // is valid (not future) and the fixed fixture dates below stay within the
+  // forecast window. Default timezone is Asia/Jerusalem, horizon 6 months.
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-05-15T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it('empty DB → flat zero-balance forecast', () => {
     const db = openDb({ path: ':memory:', migrationsDir });
     const repo = new StateRepo(db);

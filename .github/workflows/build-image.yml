@@ -11,7 +11,28 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package (consumed by api/web tests)
+        run: npm run build --workspace=packages/shared
+
+      - name: Run tests (all workspaces)
+        run: npm test
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io

@@ -1,15 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseWorkbookDump, normalizeMonthLabel } from '../parsers/usedRange.js';
 import { parseCurrencyFormat } from '../parsers/currency.js';
 import type { RawWorkbookDump } from '../parsers/usedRange.js';
 
+// dumps/ lives at the repo root (two levels up from this file's package) and
+// is gitignored personal data, so it is absent in CI and fresh checkouts.
+const dumpsDir = resolve(__dirname, '../../../../dumps');
+const dumpFiles = existsSync(dumpsDir)
+  ? readdirSync(dumpsDir).filter((f) => f.startsWith('dump-') && f.endsWith('.json')).sort()
+  : [];
+const hasDump = dumpFiles.length > 0;
+
 function loadLatestDump(): RawWorkbookDump {
-  // dumps/ lives at the repo root (two levels up from this file's package).
-  const dumpsDir = resolve(__dirname, '../../../../dumps');
-  const files = readdirSync(dumpsDir).filter((f) => f.startsWith('dump-') && f.endsWith('.json')).sort();
-  const latest = files[files.length - 1];
+  const latest = dumpFiles[dumpFiles.length - 1];
   if (!latest) throw new Error('No dump file found in dumps/');
   return JSON.parse(readFileSync(resolve(dumpsDir, latest), 'utf8')) as RawWorkbookDump;
 }
@@ -44,8 +49,14 @@ describe('parseCurrencyFormat', () => {
   });
 });
 
-describe('parseWorkbookDump (live data)', () => {
-  const snapshot = parseWorkbookDump(loadLatestDump(), { fetchedAt: '2026-05-15T20:00:00Z' });
+// Live-data assertions depend on the gitignored dumps/ snapshot; skip the
+// whole suite when it's absent (e.g. CI) so the gate stays green, while the
+// pure-unit suites above always run.
+describe.skipIf(!hasDump)('parseWorkbookDump (live data)', () => {
+  let snapshot: ReturnType<typeof parseWorkbookDump>;
+  beforeAll(() => {
+    snapshot = parseWorkbookDump(loadLatestDump(), { fetchedAt: '2026-05-15T20:00:00Z' });
+  });
 
   it('detects 9 month columns starting in May 2026', () => {
     expect(snapshot.months).toHaveLength(9);

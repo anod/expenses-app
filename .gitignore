@@ -12,9 +12,13 @@ node_modules/
 
 # SQLite database (contains personal financial data)
 data/
+*.db
+*.db-shm
+*.db-wal
 
 # Live workbook dumps (contain personal financial data)
 dumps/
+*.xlsx
 
 # Build outputs
 dist/
