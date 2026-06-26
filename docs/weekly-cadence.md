@@ -20,18 +20,16 @@ npm run -s test --workspace=packages/shared
 ### Deploy
 The image is built by `.github/workflows/build-image.yml` on every push to
 `main` and published to `ghcr.io/anod/expenses-app:latest`. To roll the
-LXC (192.168.1.139, container `expenses`, compose `/opt/expenses/compose.deploy.yml`):
+deployment LXC (SSH target + container/compose path are kept in the
+gitignored `.env` as `DEPLOY_SSH`; see `docs/deploy.md`):
 
 ```sh
-# from a host with SSH access to the LXC:
-ssh root@192.168.1.139 'cd /opt/expenses && \
-  docker compose -f compose.deploy.yml pull && \
-  docker compose -f compose.deploy.yml up -d && \
-  docker ps --filter name=expenses --format "{{.Status}}"'
+# from a host with SSH access to the LXC (see .env DEPLOY_SSH):
+ssh "$DEPLOY_SSH" 'cd /opt/expenses && bash scripts/update.sh'
 ```
 
 Health probe: `docker logs expenses` should show `API listening` and no
-migration errors. Live URL: https://alex-expenses.tailc369.ts.net
+migration errors.
 
 ### Database
 Schema lives in `apps/api/migrations/NNN-*.sql` and is applied in order on
