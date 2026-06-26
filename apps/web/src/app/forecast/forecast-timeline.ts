@@ -1,5 +1,6 @@
 import type {
   CreditCard,
+  DailyProjection,
   ForecastResult,
   LedgerEntry,
   PaymentProgress,
@@ -7,6 +8,7 @@ import type {
   RecurringTemplate,
 } from '@expenses/shared';
 import {
+  addDays,
   addMonths,
   firstBillingDayStrictlyAfter,
   generateVirtualOccurrences,
@@ -373,6 +375,116 @@ export const buildForecastTimeline = ({
     if (a.kind === b.kind) return 0;
     return a.kind === 'anchor' ? 1 : -1;
   });
+};
+
+export interface CurrentPeriodInput {
+  forecast: ForecastResult;
+  ledger: ReadonlyArray<LedgerEntry>;
+  templates: ReadonlyArray<RecurringTemplate>;
+  cards: ReadonlyArray<CreditCard>;
+  todayIso?: string;
+}
+
+/** A timeline charge item turned into a `ProjectionCharge` for the chart. */
+const chargeFromItem = (item: ChargeItem): ProjectionCharge => {
+  if (item.channel === 'cc') {
+    return {
+      description: item.description,
+      amount: item.amount,
+      source: { kind: 'cc-bill', cardId: item.cardId ?? '', billedEntries: [] },
+    };
+  }
+  return {
+    description: item.description,
+    amount: item.amount,
+    source: {
+      kind: 'ledger',
+      entryId: item.entryId ?? '',
+      ...(item.recurringId ? { recurringId: item.recurringId } : {}),
+    },
+  };
+};
+
+/**
+ * Daily bank-balance projections for the *current* anchor period — the
+ * already-elapsed days (back to the previous anchor / 10th) followed by the
+ * projected days through and including the next anchor day.
+ *
+ * The forecast pipeline only emits days from the snapshot date (`asOf`)
+ * onward and drops charges already reflected in the bank balance, so when the
+ * user's last balance snapshot is today there is no elapsed history in
+ * `forecast.days`/`priorDays`. To draw the elapsed part we reuse the same
+ * past records the timeline shows (`buildForecastTimeline`) and reconstruct
+ * the bank balance *backward* from today's opening balance: each elapsed day's
+ * balance is today's balance minus the net of the charges that happened after
+ * it. This keeps the elapsed line continuous with the projected line.
+ */
+export const buildCurrentPeriodDays = ({
+  forecast,
+  ledger,
+  templates,
+  cards,
+  todayIso = todayIsoLocal(),
+}: CurrentPeriodInput): DailyProjection[] => {
+  const visibleStart = forecast.days[0]?.date ?? todayIso;
+
+  // Projected part: days from today through (and including) the next anchor.
+  const anchorIdx = forecast.days.findIndex((d) => d.isAnchor);
+  const forward = anchorIdx >= 0 ? forecast.days.slice(0, anchorIdx + 1) : forecast.days.slice();
+
+  // Prefer the pipeline-provided elapsed days when present (snapshot in the
+  // past); they already carry the correct balances and charges.
+  if (forecast.priorDays.length > 0) {
+    return [...forecast.priorDays, ...forward];
+  }
+
+  const windowStart = lastPastAnchor(todayIso);
+  if (windowStart >= visibleStart) return forward; // nothing elapsed this period
+
+  // Aggregate the net bank delta per elapsed day from the timeline's past
+  // records (bank charges, debit charges, and credit-card bills all move the
+  // bank balance on their shown date; their `.amount` matches the pipeline's
+  // per-date bank delta).
+  const items = buildForecastTimeline({
+    forecast,
+    threshold: 0,
+    filter: 'all',
+    ledger,
+    templates,
+    cards,
+    todayIso,
+  });
+  const byDate = new Map<string, { delta: number; charges: ProjectionCharge[] }>();
+  for (const item of items) {
+    if (item.kind !== 'charge') continue;
+    if (item.date < windowStart || item.date >= visibleStart) continue;
+    const bucket = byDate.get(item.date) ?? { delta: 0, charges: [] };
+    bucket.delta += item.amount;
+    bucket.charges.push(chargeFromItem(item));
+    byDate.set(item.date, bucket);
+  }
+
+  // Reconstruct backward: balance at the start of the window is today's
+  // opening balance minus every elapsed delta.
+  const todayBalance = forecast.days[0]?.balance ?? 0;
+  let running = todayBalance;
+  for (const bucket of byDate.values()) running -= bucket.delta;
+
+  const elapsed: DailyProjection[] = [];
+  for (let date = windowStart; date < visibleStart; date = addDays(date, 1)) {
+    const bucket = byDate.get(date);
+    const delta = bucket?.delta ?? 0;
+    running += delta;
+    elapsed.push({
+      date,
+      balance: running,
+      delta,
+      charges: bucket?.charges ?? [],
+      isAnchor: Number(date.slice(8, 10)) === 10,
+    });
+  }
+
+  return [...elapsed, ...forward];
 };
 
 /** Today as YYYY-MM-DD in the user's local time zone. */

@@ -14,6 +14,7 @@ import { BalanceChartComponent } from './balance-chart';
 import { PeriodBalanceChartComponent } from './period-balance-chart';
 import { errorMessage } from '../core/api-error';
 import {
+  buildCurrentPeriodDays,
   buildForecastTimeline,
   type AnchorItem,
   type BilledChargeRow,
@@ -209,9 +210,12 @@ export class ForecastHomeComponent {
   protected readonly currentPeriodDays = computed(() => {
     const f = this.forecast();
     if (!f) return [];
-    const anchorIdx = f.days.findIndex((d) => d.isAnchor);
-    const forward = anchorIdx >= 0 ? f.days.slice(0, anchorIdx + 1) : f.days;
-    return [...(f.priorDays ?? []), ...forward];
+    return buildCurrentPeriodDays({
+      forecast: f,
+      ledger: this.ledger(),
+      templates: this.templates(),
+      cards: this.cards(),
+    });
   });
 
   /** Today as `YYYY-MM-DD`, derived from the forecast so it matches the
