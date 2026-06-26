@@ -90,18 +90,19 @@
             </button>
           </div>
         </header>
-        @if (chartView() === 'period') {
-          <app-period-balance-chart
-            [days]="currentPeriodDays()"
-            [threshold]="settings()?.threshold ?? 0"
-            [todayIso]="chartToday()"
-          />
-        } @else {
-          <app-balance-chart
-            [days]="f.days"
-            [templates]="templates()"
-          />
-        }
+        <app-period-balance-chart
+          [class.chart-hidden]="chartView() !== 'period'"
+          [attr.aria-hidden]="chartView() !== 'period'"
+          [days]="currentPeriodDays()"
+          [threshold]="settings()?.threshold ?? 0"
+          [todayIso]="chartToday()"
+        />
+        <app-balance-chart
+          [class.chart-hidden]="chartView() !== 'projected'"
+          [attr.aria-hidden]="chartView() !== 'projected'"
+          [days]="f.days"
+          [templates]="templates()"
+        />
       </article>
     </section>
 

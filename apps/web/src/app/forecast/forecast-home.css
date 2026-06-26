@@ -189,6 +189,10 @@
   align-items: center;
 }
 
+.chart-card .chart-hidden {
+  display: none;
+}
+
 /* ---------- Card header ---------- */
 
 .card-header {
