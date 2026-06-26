@@ -71,13 +71,36 @@
         <header class="card-header">
           <h2>
             <span class="material-symbols-outlined">show_chart</span>
-            Projected balance
+            {{ chartView() === 'period' ? 'Current period' : 'Projected balance' }}
           </h2>
+          <div class="filter-chips chart-toggle" role="tablist">
+            <button class="m3-chip"
+                    role="tab"
+                    [attr.aria-pressed]="chartView() === 'period'"
+                    (click)="setChartView('period')">
+              <span class="material-symbols-outlined">timeline</span>
+              Current period
+            </button>
+            <button class="m3-chip"
+                    role="tab"
+                    [attr.aria-pressed]="chartView() === 'projected'"
+                    (click)="setChartView('projected')">
+              <span class="material-symbols-outlined">bar_chart</span>
+              Projected balance
+            </button>
+          </div>
         </header>
-        <app-balance-chart
-          [days]="f.days"
-          [templates]="templates()"
-        />
+        @if (chartView() === 'period') {
+          <app-period-balance-chart
+            [days]="currentPeriodDays()"
+            [threshold]="settings()?.threshold ?? 0"
+          />
+        } @else {
+          <app-balance-chart
+            [days]="f.days"
+            [templates]="templates()"
+          />
+        }
       </article>
     </section>
 
