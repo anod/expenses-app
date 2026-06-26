@@ -25,7 +25,7 @@ interface DayDatum {
 }
 
 const CHART_WIDTH = 680;
-const CHART_HEIGHT = 340;
+const CHART_HEIGHT = 320;
 const CHART_BG = '#211f26';
 const CHART_GRID = '#49454f';
 const CHART_TEXT = '#e6e0e9';
@@ -86,7 +86,7 @@ const ANCHOR_COLOR = '#d0bcff';
       }
       .empty-chart {
         display: grid;
-        min-height: 340px;
+        min-height: 320px;
         margin: 0;
         place-items: center;
         color: var(--md-sys-color-on-surface-variant);
