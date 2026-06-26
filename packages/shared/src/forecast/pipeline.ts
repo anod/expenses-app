@@ -43,6 +43,19 @@ const firstWeekdayOnOrAfter = (from: IsoDate, dayOfWeek: number): IsoDate => {
   return diff === 0 ? from : addDays(from, diff);
 };
 
+/**
+ * Start of the current anchor period: the most recent anchor day (the 10th)
+ * on or before `today`. Matches the pipeline's `isAnchor = d === 10` rule.
+ */
+const ANCHOR_DAY_OF_MONTH = 10;
+const currentPeriodAnchorStart = (today: IsoDate): IsoDate => {
+  const { y, m, d } = parseIso(today);
+  if (d >= ANCHOR_DAY_OF_MONTH) return formatIso(y, m, ANCHOR_DAY_OF_MONTH);
+  const prevMonth = addMonths(formatIso(y, m, 1), -1);
+  const { y: py, m: pm } = parseIso(prevMonth);
+  return formatIso(py, pm, ANCHOR_DAY_OF_MONTH);
+};
+
 /** Generate all virtual recurring occurrences within [startDate, endDate]. */
 export const generateVirtualOccurrences = (
   templates: ReadonlyArray<RecurringTemplate>,
@@ -360,9 +373,13 @@ export const project = (
   }
 
   // Walk from walkStart (the asOf date) so charges between asOf and today are
-  // applied to the bank balance, but only emit days from visibleStart onward
-  // (we don't show historical days in the UI; they've already happened).
+  // applied to the bank balance. Emit forecast days from visibleStart onward,
+  // and separately collect the already-elapsed days of the current anchor
+  // period (from the period's anchor start, or asOf if later) so the UI can
+  // chart the part of the period that has already passed.
+  const periodStart = currentPeriodAnchorStart(today);
   const days: DailyProjection[] = [];
+  const priorDays: DailyProjection[] = [];
   let balance = account.bankBalance;
   let cur = walkStart;
   while (compareIso(cur, endDate) <= 0) {
@@ -376,7 +393,16 @@ export const project = (
         balance,
         delta,
         charges,
-        isAnchor: d === 10,
+        isAnchor: d === ANCHOR_DAY_OF_MONTH,
+      });
+    } else if (compareIso(cur, periodStart) >= 0) {
+      const { d } = parseIso(cur);
+      priorDays.push({
+        date: cur,
+        balance,
+        delta,
+        charges,
+        isAnchor: d === ANCHOR_DAY_OF_MONTH,
       });
     }
     cur = addDays(cur, 1);
@@ -455,7 +481,7 @@ export const project = (
   });
 
   return {
-    startDate: visibleStart, endDate, days, status, minBalance, minBalanceDate,
+    startDate: visibleStart, endDate, days, priorDays, status, minBalance, minBalanceDate,
     cards: cardForecasts,
     account: { asOf: account.asOf, bankBalance: account.bankBalance },
   };

@@ -41,6 +41,36 @@ describe('forecast pipeline', () => {
     expect(r.status).toBe('safe');
   });
 
+  it('priorDays: emits elapsed current-period days from the anchor with running balances', () => {
+    const charge: LedgerEntry = {
+      id: 'e1', description: 'rent', amount: -1000, channel: 'bank',
+      date: '2026-05-12', status: 'pending',
+    };
+    // Snapshot taken on the period anchor (10th); today is the 16th.
+    const r = project([charge], acct(10_000, '2026-05-10'), [], baseSettings, '2026-05-16');
+    expect(r.priorDays.map((d) => d.date)).toEqual([
+      '2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14', '2026-05-15',
+    ]);
+    expect(r.priorDays[0].balance).toBe(10_000);
+    expect(r.priorDays.find((d) => d.date === '2026-05-12')!.balance).toBe(9000);
+    expect(r.priorDays[r.priorDays.length - 1].balance).toBe(9000);
+    // The forward series continues from today at the same running balance.
+    expect(r.days[0].date).toBe('2026-05-16');
+    expect(r.days[0].balance).toBe(9000);
+  });
+
+  it('priorDays: empty when the snapshot is today', () => {
+    const r = project([], acct(5000, '2026-05-16'), [], baseSettings, '2026-05-16');
+    expect(r.priorDays).toEqual([]);
+  });
+
+  it('priorDays: clamps the period start to the previous month before the 10th', () => {
+    // Today is the 5th, so the current period started on the previous 10th.
+    const r = project([], acct(5000, '2026-04-10'), [], baseSettings, '2026-05-05');
+    expect(r.priorDays[0].date).toBe('2026-04-10');
+    expect(r.priorDays[r.priorDays.length - 1].date).toBe('2026-05-04');
+  });
+
   // 2
   it('single mortgage on the 10th drops balance', () => {
     const entry: LedgerEntry = {
