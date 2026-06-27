@@ -333,6 +333,23 @@ export class RecurringPageComponent {
     this.form.controls.startDate.setValue(todayIsoLocal());
   }
 
+  /**
+   * Billing day of the card selected in the channel field, or null when the
+   * channel is the bank account (or the card has no known billing day).
+   */
+  protected selectedCardBillingDay(): number | null {
+    const channel = this.form.controls.channel.value;
+    if (!channel.startsWith('cc:')) return null;
+    const card = this.cards().find((c) => `cc:${c.id}` === channel);
+    return card?.billingDayOfMonth ?? null;
+  }
+
+  /** Fill the day-of-month with the selected card's billing day. */
+  protected useCardBillingDay(): void {
+    const day = this.selectedCardBillingDay();
+    if (day != null) this.form.controls.day.setValue(day);
+  }
+
   protected setStartDateNextScheduled(): void {
     this.form.controls.startDate.setValue(
       firstScheduledDateOnOrAfter(todayIsoLocal(), this.formCadence()),

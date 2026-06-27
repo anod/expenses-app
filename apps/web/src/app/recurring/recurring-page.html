@@ -66,6 +66,13 @@
           <label class="field">
             <span class="field-label">Day of month (1–31)</span>
             <input type="number" formControlName="day" min="1" max="31" />
+            @if (selectedCardBillingDay() !== null) {
+              <div class="date-shortcuts">
+                <button type="button" class="m3-chip" (click)="useCardBillingDay()">
+                  Card billing day ({{ selectedCardBillingDay() }})
+                </button>
+              </div>
+            }
           </label>
         } @else if (form.controls.cadenceKind.value === 'monthly_prediction') {
           <div class="field">

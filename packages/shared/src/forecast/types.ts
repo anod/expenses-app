@@ -10,7 +10,8 @@ export type EntryStatus = 'pending' | 'cleared';
  * Channel that this ledger entry affects.
  * - 'bank'        directly hits the bank balance on its date
  * - 'cc:<cardId>' adds to a credit card's balance and hits the bank on the
- *                 first billing day strictly after the entry date.
+ *                 first billing day on or after the entry date (a charge dated
+ *                 on the billing day settles on that same day's bill).
  */
 export type Channel = 'bank' | `cc:${string}`;
 

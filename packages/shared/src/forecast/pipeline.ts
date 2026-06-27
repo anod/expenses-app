@@ -3,6 +3,7 @@ import {
   addMonths,
   clampDayInMonth,
   compareIso,
+  firstBillingDayOnOrAfter,
   firstBillingDayStrictlyAfter,
   formatIso,
   monthlyPredictionDate,
@@ -219,9 +220,11 @@ export const mergeWithOverrides = (
  * Project a daily balance series from startDate to endDate (inclusive).
  * - bank entries hit the bank on their date.
  * - cc entries are aggregated per card per billing day into one synthetic
- *   "Credit card bill" charge.
+ *   "Credit card bill" charge. A charge dated ON the billing day belongs to
+ *   that same day's bill (`firstBillingDayOnOrAfter`).
  * - Each card's `currentDebit` becomes a bank debit on
- *   `firstBillingDayStrictlyAfter(card.asOf, billingDay)`.
+ *   `firstBillingDayStrictlyAfter(card.asOf, billingDay)` (the snapshot's
+ *   outstanding is settled on the next bill strictly after `asOf`).
  */
 export const project = (
   effective: ReadonlyArray<LedgerEntry>,
@@ -304,7 +307,7 @@ export const project = (
         });
         continue;
       }
-      const billDate = firstBillingDayStrictlyAfter(e.date, card.billingDayOfMonth);
+      const billDate = firstBillingDayOnOrAfter(e.date, card.billingDayOfMonth);
       if (compareIso(billDate, walkStart) < 0) continue;
       if (compareIso(billDate, endDate) > 0) continue;
       pushCc(cardId, billDate, e);
