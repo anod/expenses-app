@@ -181,6 +181,62 @@ describe('forecast timeline', () => {
     );
   });
 
+  it('past opening bill: a post-asOf installment already in currentDebit is accounted, not double-added', () => {
+    // Stale snapshot: asOf is in the past, the opening bill (2026-07-02) has
+    // already happened, and a fixed-term installment billed it.
+    const staleCard: CreditCard = {
+      id: 'visa', name: 'Visa', currentDebit: 300, asOf: '2026-06-28', billingDayOfMonth: 2,
+    };
+    const installment = {
+      id: 'installment-tv',
+      description: 'TV installment',
+      amount: -200,
+      channel: 'cc:visa' as const,
+      startDate: '2026-07-01',
+      endDate: '2026-12-01',
+      cadence: { kind: 'monthly' as const, day: 1, monthEndPolicy: 'clamp' as const },
+    };
+    const result = forecast({
+      persisted: [],
+      templates: [installment],
+      account: { bankBalance: 10_000, asOf: '2026-06-28' },
+      cards: [staleCard],
+      settings,
+      today: '2026-07-05',
+    });
+
+    const timeline = buildForecastTimeline({
+      forecast: result,
+      threshold: settings.threshold,
+      filter: 'all',
+      ledger: [],
+      templates: [installment],
+      cards: [staleCard],
+      todayIso: '2026-07-05',
+    }).filter((item): item is ChargeItem => item.kind === 'charge');
+
+    const pastBill = ccBillOn(timeline, '2026-07-02');
+    // currentDebit (300) already covers the installment (200): amount = -300,
+    // NOT -500.
+    expect(pastBill.amount).toBe(-300);
+    expect(pastBill.past).toBe(true);
+    expect(pastBill.billedEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: 'TV installment',
+          amount: -200,
+          past: true,
+          recurringId: 'installment-tv',
+        }),
+        expect.objectContaining({
+          description: 'Opening balance (from Excel snapshot)',
+          amount: -100,
+          past: true,
+        }),
+      ]),
+    );
+  });
+
   it('does not show skipped installments in current or next cc bill breakdowns', () => {
     const skippedTemplate = {
       ...installmentTemplate,

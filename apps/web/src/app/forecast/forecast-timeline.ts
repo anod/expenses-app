@@ -286,7 +286,17 @@ export const buildForecastTimeline = ({
       if (inPastWindow(billDate)) {
         const bucket = bucketFor(cardId, billDate);
         const openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
-        if (entry.date <= card.asOf && card.currentDebit !== 0 && billDate === openingBillDate) {
+        // An entry is already inside `currentDebit` for the opening bill when
+        // it either predates the snapshot (the opening-balance breakdown) or is
+        // a fixed-term installment occurrence billing the opening bill. Mirror
+        // the engine's classification so past opening bills don't double-count.
+        const isInstallment =
+          entry.recurringId != null && templatesById.get(entry.recurringId)?.endDate != null;
+        const inOpeningDebit =
+          card.currentDebit !== 0 &&
+          billDate === openingBillDate &&
+          (entry.date <= card.asOf || isInstallment);
+        if (inOpeningDebit) {
           bucket.accountedEntries.push(entry);
         } else {
           bucket.entries.push(entry);

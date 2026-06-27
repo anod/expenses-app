@@ -487,6 +487,12 @@ export const project = (
     const card = cardById.get(cardId);
     // Debit cards don't accumulate outstanding — each charge already hit the bank.
     if (card?.mode === 'debit') continue;
+    // Installments already folded into the opening currentDebit must not also
+    // accrue into outstanding before the opening bill — that would inflate the
+    // pre-bill outstanding (and the card summary's derived "next bill" amount).
+    if (card && isAccountedInOpeningDebit(card, firstBillingDayOnOrAfter(e.date, card.billingDayOfMonth), e)) {
+      continue;
+    }
     let m = ccChargesByCardDate.get(cardId);
     if (!m) {
       m = new Map();
