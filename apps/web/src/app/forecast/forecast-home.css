@@ -708,6 +708,14 @@
   vertical-align: 1px;
 }
 
+.full-price {
+  margin-inline-start: 0.3rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-small);
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}
+
 .row-actions {
   display: inline-flex;
   gap: 0.15rem;

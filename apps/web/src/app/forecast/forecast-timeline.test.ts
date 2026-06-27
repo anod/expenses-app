@@ -84,6 +84,7 @@ describe('forecast timeline', () => {
           past: true,
           recurringId: 'installment-phone',
           progress: { paid: 1, total: 3 },
+          fullPrice: -600,
         }),
         expect.objectContaining({
           date: '2026-05-20',
@@ -103,9 +104,78 @@ describe('forecast timeline', () => {
         amount: -200,
         recurringId: 'installment-phone',
         progress: { paid: 2, total: 3 },
+        fullPrice: -600,
       }),
     ]);
     expect(nextBill.billedEntries?.[0]).not.toHaveProperty('past');
+  });
+
+  it('exposes installment full price on a bank-channel charge (stored value wins over derived)', () => {
+    // Stored fullPrice (-7663.10) must override the amount × count fallback.
+    const arnona = {
+      id: 'arnona',
+      description: 'арнона',
+      amount: -638.59,
+      channel: 'bank' as const,
+      startDate: '2026-06-02',
+      endDate: '2027-05-02',
+      cadence: { kind: 'monthly' as const, day: 2, monthEndPolicy: 'clamp' as const },
+      fullPrice: -7663.1,
+    };
+    const result = forecast({
+      persisted: [],
+      templates: [arnona],
+      account: { bankBalance: 10_000, asOf: '2026-06-01' },
+      cards: [],
+      settings,
+      today: '2026-06-01',
+    });
+    const timeline = buildForecastTimeline({
+      forecast: result,
+      threshold: settings.threshold,
+      filter: 'all',
+      ledger: [],
+      templates: [arnona],
+      cards: [],
+      todayIso: '2026-06-01',
+    }).filter((item): item is ChargeItem => item.kind === 'charge');
+
+    const charge = timeline.find((c) => c.recurringId === 'arnona');
+    expect(charge).toBeDefined();
+    expect(charge!.progress).toEqual({ paid: 1, total: 12 });
+    expect(charge!.fullPrice).toBe(-7663.1);
+  });
+
+  it('leaves fullPrice null for open-ended recurring charges', () => {
+    const salary = {
+      id: 'salary',
+      description: 'salary',
+      amount: 15_000,
+      channel: 'bank' as const,
+      startDate: '2026-06-01',
+      cadence: { kind: 'monthly' as const, day: 1, monthEndPolicy: 'clamp' as const },
+    };
+    const result = forecast({
+      persisted: [],
+      templates: [salary],
+      account: { bankBalance: 10_000, asOf: '2026-06-01' },
+      cards: [],
+      settings,
+      today: '2026-06-01',
+    });
+    const timeline = buildForecastTimeline({
+      forecast: result,
+      threshold: settings.threshold,
+      filter: 'all',
+      ledger: [],
+      templates: [salary],
+      cards: [],
+      todayIso: '2026-06-01',
+    }).filter((item): item is ChargeItem => item.kind === 'charge');
+
+    const charge = timeline.find((c) => c.recurringId === 'salary');
+    expect(charge).toBeDefined();
+    expect(charge!.fullPrice == null).toBe(true);
   });
 
   it('treats a post-asOf installment that bills the opening cycle as accounted (already in currentDebit)', () => {
