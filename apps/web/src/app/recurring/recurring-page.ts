@@ -1,12 +1,14 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChildren } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type { Channel, CreditCard, LedgerEntry, RecurringTemplate } from '@expenses/shared';
 import {
   descriptionLabel,
   endDateForPaymentCount,
+  installmentFinalPayment,
+  installmentPerPayment,
   paymentProgress,
   scheduledPaymentCount,
   type PaymentProgress,
@@ -18,6 +20,7 @@ type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new'
 type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 
 type CadenceKind = 'monthly' | 'weekly' | 'monthly_prediction';
+type RecurrenceType = 'recurring' | 'installment';
 
 type SortColumn = 'description' | 'channel' | 'day' | 'amount' | 'startDate' | 'endDate';
 type SortDir = 'asc' | 'desc';
@@ -124,7 +127,9 @@ export class RecurringPageComponent {
 
   protected readonly form = this.fb.group({
     description: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
+    recurrenceType: this.fb.nonNullable.control('recurring' as RecurrenceType, [Validators.required]),
     amount: this.fb.nonNullable.control(0, [Validators.required]),
+    fullPrice: this.fb.control<number | null>(null, [Validators.min(0)]),
     channel: this.fb.nonNullable.control('bank' as Channel, [Validators.required]),
     cadenceKind: this.fb.nonNullable.control('monthly' as CadenceKind, [Validators.required]),
     day: this.fb.nonNullable.control(1, [Validators.min(1), Validators.max(31)]),
@@ -134,7 +139,62 @@ export class RecurringPageComponent {
     paymentCount: this.fb.control<number | null>(null, [Validators.min(1), Validators.max(240)]),
   });
 
+  /** Live snapshot of the form value, so installment-preview computeds react. */
+  private readonly formValue = toSignal(this.form.valueChanges, {
+    initialValue: this.form.getRawValue(),
+  });
+
   protected readonly weekdayOptions = WEEKDAY_LABELS.map((label, value) => ({ value, label }));
+
+  /** True when the editor is in installment mode (full price split across N payments). */
+  protected isInstallmentMode(): boolean {
+    return this.formValue() != null && this.form.controls.recurrenceType.value === 'installment';
+  }
+
+  /**
+   * Live single-charge preview for installment mode: the per-payment amount,
+   * the (different) final payment that absorbs the rounding remainder, the
+   * payment count and the derived end date. Returns `null` until the full
+   * price and a valid payment count are entered. Full price is entered as a
+   * positive magnitude; installments are expenses, so the stored amounts are
+   * negative.
+   */
+  protected readonly installmentPreview = computed<{
+    perPayment: number;
+    finalPayment: number;
+    count: number;
+    endDate: string;
+  } | null>(() => {
+    const v = this.formValue();
+    if (v == null || v.recurrenceType !== 'installment') return null;
+    const fullPrice = v.fullPrice;
+    const count = v.paymentCount;
+    if (fullPrice == null || !(fullPrice > 0) || count == null || !(count >= 1)) return null;
+    const signedFull = -Math.abs(fullPrice);
+    const cadence = { kind: 'monthly' as const, day: v.day ?? 1, monthEndPolicy: 'clamp' as const };
+    return {
+      perPayment: installmentPerPayment(signedFull, count),
+      finalPayment: installmentFinalPayment(signedFull, count),
+      count,
+      endDate: endDateForPaymentCount({ startDate: v.startDate ?? todayIsoLocal(), cadence }, count),
+    };
+  });
+
+  private applyRecurrenceTypeValidators(type: RecurrenceType): void {
+    const { amount, fullPrice, paymentCount } = this.form.controls;
+    if (type === 'installment') {
+      amount.clearValidators();
+      fullPrice.setValidators([Validators.required, Validators.min(0.01)]);
+      paymentCount.setValidators([Validators.required, Validators.min(1), Validators.max(240)]);
+    } else {
+      amount.setValidators([Validators.required]);
+      fullPrice.setValidators([Validators.min(0)]);
+      paymentCount.setValidators([Validators.min(1), Validators.max(240)]);
+    }
+    amount.updateValueAndValidity({ emitEvent: false });
+    fullPrice.updateValueAndValidity({ emitEvent: false });
+    paymentCount.updateValueAndValidity({ emitEvent: false });
+  }
 
   protected readonly ledgerForm = this.fb.nonNullable.group({
     description: ['', [Validators.required, Validators.maxLength(200)]],
@@ -145,6 +205,10 @@ export class RecurringPageComponent {
   });
 
   constructor() {
+    this.form.controls.recurrenceType.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((type) => this.applyRecurrenceTypeValidators(type));
+
     this.form.controls.cadenceKind.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((kind) => {
@@ -194,18 +258,28 @@ export class RecurringPageComponent {
   }
 
   protected startEdit(t: RecurringTemplate): void {
+    const isInstallment = t.cadence.kind === 'monthly' && t.endDate != null;
+    const total = isInstallment ? scheduledPaymentCount(t) : null;
+    const fullPriceMagnitude =
+      t.fullPrice != null
+        ? Math.abs(t.fullPrice)
+        : isInstallment && total
+          ? roundCents(Math.abs(t.amount) * total)
+          : null;
     this.withSuppressedWeeklyStartSync(() => this.form.reset({
       description: t.description,
+      recurrenceType: isInstallment ? 'installment' : 'recurring',
       amount: t.amount,
+      fullPrice: fullPriceMagnitude,
       channel: t.channel,
       cadenceKind: t.cadence.kind,
       day: t.cadence.kind === 'monthly' ? t.cadence.day : 1,
       dayOfWeek: t.cadence.kind === 'weekly' ? t.cadence.dayOfWeek : 5,
       startDate: t.startDate,
       endDate: t.endDate ?? '',
-      paymentCount:
-        t.cadence.kind === 'monthly' && t.endDate ? scheduledPaymentCount(t) : null,
+      paymentCount: total,
     }));
+    this.applyRecurrenceTypeValidators(isInstallment ? 'installment' : 'recurring');
     this.lastCadenceKind = t.cadence.kind;
     this.edit.set({ kind: 'edit', id: t.id });
     this.focusEditor();
@@ -215,7 +289,9 @@ export class RecurringPageComponent {
     const today = todayIsoLocal();
     this.withSuppressedWeeklyStartSync(() => this.form.reset({
       description: '',
+      recurrenceType: 'recurring',
       amount: 0,
+      fullPrice: null,
       channel: 'bank',
       cadenceKind: 'monthly',
       day: 1,
@@ -224,6 +300,7 @@ export class RecurringPageComponent {
       endDate: '',
       paymentCount: null,
     }));
+    this.applyRecurrenceTypeValidators('recurring');
     this.lastCadenceKind = 'monthly';
     this.edit.set({ kind: 'new' });
     this.focusEditor();
@@ -242,27 +319,10 @@ export class RecurringPageComponent {
     const state = this.edit();
     if (state.kind === 'idle') return;
     const v = this.form.getRawValue();
-    const cadence =
-      v.cadenceKind === 'weekly'
-        ? { kind: 'weekly' as const, dayOfWeek: v.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
-        : v.cadenceKind === 'monthly_prediction'
-          ? { kind: 'monthly_prediction' as const }
-          : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
-    const paymentCount =
-      v.cadenceKind === 'monthly' && v.paymentCount != null && v.paymentCount > 0
-        ? v.paymentCount
-        : null;
-    const derivedEndDate = paymentCount
-      ? endDateForPaymentCount({ startDate: v.startDate, cadence }, paymentCount)
-      : null;
-    const body = {
-      description: v.description.trim(),
-      amount: v.amount,
-      channel: v.channel,
-      cadence,
-      startDate: v.startDate,
-      ...((derivedEndDate ?? v.endDate) ? { endDate: derivedEndDate ?? v.endDate } : {}),
-    };
+    const body =
+      v.recurrenceType === 'installment'
+        ? this.installmentBody(v)
+        : this.recurringBody(v);
     this.saving.set(true);
     this.error.set(null);
     try {
@@ -279,6 +339,47 @@ export class RecurringPageComponent {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private recurringBody(v: ReturnType<typeof this.form.getRawValue>): import('../forecast/forecast.api').RecurringWriteBody {
+    const cadence =
+      v.cadenceKind === 'weekly'
+        ? { kind: 'weekly' as const, dayOfWeek: v.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
+        : v.cadenceKind === 'monthly_prediction'
+          ? { kind: 'monthly_prediction' as const }
+          : { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
+    const paymentCount =
+      v.cadenceKind === 'monthly' && v.paymentCount != null && v.paymentCount > 0
+        ? v.paymentCount
+        : null;
+    const derivedEndDate = paymentCount
+      ? endDateForPaymentCount({ startDate: v.startDate, cadence }, paymentCount)
+      : null;
+    return {
+      description: v.description.trim(),
+      amount: v.amount,
+      channel: v.channel,
+      cadence,
+      startDate: v.startDate,
+      ...((derivedEndDate ?? v.endDate) ? { endDate: derivedEndDate ?? v.endDate } : {}),
+    };
+  }
+
+  private installmentBody(v: ReturnType<typeof this.form.getRawValue>): import('../forecast/forecast.api').RecurringWriteBody {
+    const count = v.paymentCount as number;
+    const signedFull = -Math.abs(v.fullPrice as number);
+    const cadence = { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
+    const perPayment = installmentPerPayment(signedFull, count);
+    const endDate = endDateForPaymentCount({ startDate: v.startDate, cadence }, count);
+    return {
+      description: v.description.trim(),
+      amount: perPayment,
+      fullPrice: signedFull,
+      channel: v.channel,
+      cadence,
+      startDate: v.startDate,
+      endDate,
+    };
   }
 
   protected async remove(t: RecurringTemplate): Promise<void> {
@@ -439,6 +540,18 @@ export class RecurringPageComponent {
     return paymentProgress(t, today);
   }
 
+  /**
+   * Signed full price for a monthly fixed-term (installment) template: the
+   * stored `fullPrice` when present, else derived from amount × total. Returns
+   * `null` for open-ended / non-monthly templates.
+   */
+  protected installmentFullPrice(t: RecurringTemplate): number | null {
+    if (t.cadence.kind !== 'monthly' || t.endDate == null) return null;
+    if (t.fullPrice != null) return t.fullPrice;
+    const total = scheduledPaymentCount(t);
+    return total ? roundCents(t.amount * total) : null;
+  }
+
   protected isEditing(id: string): boolean {
     const s = this.edit();
     return s.kind === 'edit' && s.id === id;
@@ -446,6 +559,11 @@ export class RecurringPageComponent {
 
   protected isNew(): boolean { return this.edit().kind === 'new'; }
   protected isIdle(): boolean { return this.edit().kind === 'idle'; }
+
+  /** Format a signed amount with two decimals for the installment preview. */
+  protected fmt(value: number): string {
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
   // ---------- One-off ledger entries ----------
 
@@ -527,6 +645,10 @@ export class RecurringPageComponent {
       this.error.set(errorMessage(err));
     }
   }
+}
+
+function roundCents(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function todayIsoLocal(): string {

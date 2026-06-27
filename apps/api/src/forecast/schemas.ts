@@ -45,6 +45,7 @@ export const RecurringInput = z
     channel,
     startDate: isoDate,
     endDate: isoDate.optional(),
+    fullPrice: z.number().finite().optional(),
     // Either the new discriminated shape OR the legacy flat shape
     // (kept for backwards-compat with older web clients that send
     // top-level day + monthEndPolicy and don't know about cadence).

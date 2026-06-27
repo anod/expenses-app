@@ -237,6 +237,7 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
         cadence: cadenceFromInput(input),
         startDate: input.startDate,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
+        ...(input.fullPrice != null ? { fullPrice: input.fullPrice } : {}),
       };
       getRepo().upsertRecurring(tmpl);
       withForecast(res, getRepo().listRecurring().find((t) => t.id === tmpl.id) ?? tmpl);
@@ -255,6 +256,7 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
         cadence: cadenceFromInput(input),
         startDate: input.startDate,
         ...(input.endDate != null ? { endDate: input.endDate } : {}),
+        ...(input.fullPrice != null ? { fullPrice: input.fullPrice } : {}),
       };
       getRepo().upsertRecurring(tmpl);
       withForecast(res, getRepo().listRecurring().find((t) => t.id === req.params.id) ?? null);

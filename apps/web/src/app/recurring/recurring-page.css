@@ -199,7 +199,23 @@ tr.is-editing td {
   vertical-align: 1px;
 }
 
-/* ---------- Mobile stacked list (alternative to the table) ---------- */
+.full-price {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.installment-preview {
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.installment-preview-line {
+  font: var(--md-sys-typescale-body-medium);
+  font-variant-numeric: tabular-nums;
+}
 .template-list {
   list-style: none;
   margin: 0;

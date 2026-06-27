@@ -89,6 +89,14 @@ export interface RecurringTemplate {
   /** Inclusive ISO date when the cadence ends. Omit for open-ended. */
   endDate?: IsoDate;
   /**
+   * For installments: the full (signed) price of the purchase, split across
+   * the scheduled payments. When set, `amount` is the standard rounded
+   * per-payment value and the FINAL scheduled occurrence absorbs the rounding
+   * remainder so the occurrences sum exactly to `fullPrice`. Same sign
+   * convention as `amount` (negative = expense). Omit for non-installments.
+   */
+  fullPrice?: Amount;
+  /**
    * ISO dates the user has marked as skipped — neither virtual nor
    * persisted ledger rows with `occurrenceKey === occurrenceKeyOf(id,date)`
    * appear in any forecast or report. Sorted ascending, deduped.

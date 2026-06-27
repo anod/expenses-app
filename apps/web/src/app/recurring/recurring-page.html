@@ -40,8 +40,11 @@
         </label>
 
         <label class="field">
-          <span class="field-label">Amount (negative = expense)</span>
-          <input type="number" formControlName="amount" step="1" />
+          <span class="field-label">Type</span>
+          <select formControlName="recurrenceType">
+            <option value="recurring">Recurring (ongoing)</option>
+            <option value="installment">Installment (split a full price)</option>
+          </select>
         </label>
 
         <label class="field">
@@ -53,16 +56,19 @@
           </select>
         </label>
 
-        <label class="field">
-          <span class="field-label">Cadence</span>
-          <select formControlName="cadenceKind">
-            <option value="monthly">Monthly (day of month)</option>
-            <option value="weekly">Weekly (day of week)</option>
-            <option value="monthly_prediction">Monthly prediction (no exact date)</option>
-          </select>
-        </label>
+        @if (isInstallmentMode()) {
+          <label class="field">
+            <span class="field-label">Full price</span>
+            <input type="number" formControlName="fullPrice" min="0" step="0.01" placeholder="e.g. 7663.10" />
+            <small>Total price of the purchase. Split into equal monthly charges (treated as an expense).</small>
+          </label>
 
-        @if (form.controls.cadenceKind.value === 'monthly') {
+          <label class="field">
+            <span class="field-label">Number of payments</span>
+            <input type="number" formControlName="paymentCount" min="1" step="1" placeholder="e.g. 12" />
+            <small>Payment 1 is the first scheduled month from the start date.</small>
+          </label>
+
           <label class="field">
             <span class="field-label">Day of month (1–31)</span>
             <input type="number" formControlName="day" min="1" max="31" />
@@ -74,55 +80,115 @@
               </div>
             }
           </label>
-        } @else if (form.controls.cadenceKind.value === 'monthly_prediction') {
-          <div class="field">
-            <span class="field-label">Posting</span>
-            <div>Projected once per month on the anchor day (10th). Credit-card channels bill from that anchor date.</div>
-          </div>
+
+          <label class="field">
+            <span class="field-label">Start date</span>
+            <input type="date" formControlName="startDate" />
+            <small class="date-helper">
+              {{ describeDateInput(form.controls.startDate.value, 'Choose when this starts') }}
+            </small>
+            <div class="date-shortcuts">
+              <button type="button" class="m3-chip" (click)="setStartDateToday()">Today</button>
+              <button type="button" class="m3-chip" (click)="setStartDateNextScheduled()">
+                Next {{ nextStartShortcutLabel() }}
+              </button>
+            </div>
+          </label>
+
+          @if (installmentPreview(); as p) {
+            <div class="field field-span-2 installment-preview">
+              <span class="field-label">Single-charge preview</span>
+              <div class="installment-preview-line">
+                Each payment <strong>{{ fmt(p.perPayment) }}</strong>
+                @if (p.finalPayment !== p.perPayment) {
+                  · final payment <strong>{{ fmt(p.finalPayment) }}</strong>
+                }
+                · {{ p.count }} payments
+                · ends {{ describeDateInput(p.endDate, '') }}
+              </div>
+              <small>
+                The last payment absorbs the rounding remainder so the {{ p.count }}
+                charges sum exactly to the full price.
+              </small>
+            </div>
+          }
         } @else {
           <label class="field">
-            <span class="field-label">Day of week</span>
-            <select formControlName="dayOfWeek">
-              @for (opt of weekdayOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
+            <span class="field-label">Amount (negative = expense)</span>
+            <input type="number" formControlName="amount" step="1" />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Cadence</span>
+            <select formControlName="cadenceKind">
+              <option value="monthly">Monthly (day of month)</option>
+              <option value="weekly">Weekly (day of week)</option>
+              <option value="monthly_prediction">Monthly prediction (no exact date)</option>
             </select>
           </label>
-        }
 
-        <label class="field">
-          <span class="field-label">Start date</span>
-          <input type="date" formControlName="startDate" />
-          <small class="date-helper">
-            {{ describeDateInput(form.controls.startDate.value, 'Choose when this starts') }}
-          </small>
-          <div class="date-shortcuts">
-            <button type="button" class="m3-chip" (click)="setStartDateToday()">Today</button>
-            <button type="button" class="m3-chip" (click)="setStartDateNextScheduled()">
-              Next {{ nextStartShortcutLabel() }}
-            </button>
-          </div>
-        </label>
+          @if (form.controls.cadenceKind.value === 'monthly') {
+            <label class="field">
+              <span class="field-label">Day of month (1–31)</span>
+              <input type="number" formControlName="day" min="1" max="31" />
+              @if (selectedCardBillingDay() !== null) {
+                <div class="date-shortcuts">
+                  <button type="button" class="m3-chip" (click)="useCardBillingDay()">
+                    Card billing day ({{ selectedCardBillingDay() }})
+                  </button>
+                </div>
+              }
+            </label>
+          } @else if (form.controls.cadenceKind.value === 'monthly_prediction') {
+            <div class="field">
+              <span class="field-label">Posting</span>
+              <div>Projected once per month on the anchor day (10th). Credit-card channels bill from that anchor date.</div>
+            </div>
+          } @else {
+            <label class="field">
+              <span class="field-label">Day of week</span>
+              <select formControlName="dayOfWeek">
+                @for (opt of weekdayOptions; track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </label>
+          }
 
-        <label class="field">
-          <span class="field-label">End date (optional)</span>
-          <input type="date" formControlName="endDate" />
-          <small class="date-helper">
-            {{ describeDateInput(form.controls.endDate.value, 'No end date') }}
-          </small>
-          <div class="date-shortcuts">
-            <button type="button" class="m3-chip" (click)="clearEndDate()">No end</button>
-            <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(1)">+1 month</button>
-            <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(3)">+3 months</button>
-          </div>
-        </label>
-
-        @if (form.controls.cadenceKind.value === 'monthly') {
           <label class="field">
-            <span class="field-label">Number of payments (optional)</span>
-            <input type="number" formControlName="paymentCount" min="1" step="1" placeholder="e.g. 12" />
-            <small>For installments, payment 1 is the first scheduled month from the start date.</small>
+            <span class="field-label">Start date</span>
+            <input type="date" formControlName="startDate" />
+            <small class="date-helper">
+              {{ describeDateInput(form.controls.startDate.value, 'Choose when this starts') }}
+            </small>
+            <div class="date-shortcuts">
+              <button type="button" class="m3-chip" (click)="setStartDateToday()">Today</button>
+              <button type="button" class="m3-chip" (click)="setStartDateNextScheduled()">
+                Next {{ nextStartShortcutLabel() }}
+              </button>
+            </div>
           </label>
+
+          <label class="field">
+            <span class="field-label">End date (optional)</span>
+            <input type="date" formControlName="endDate" />
+            <small class="date-helper">
+              {{ describeDateInput(form.controls.endDate.value, 'No end date') }}
+            </small>
+            <div class="date-shortcuts">
+              <button type="button" class="m3-chip" (click)="clearEndDate()">No end</button>
+              <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(1)">+1 month</button>
+              <button type="button" class="m3-chip" (click)="setEndDateMonthsFromStart(3)">+3 months</button>
+            </div>
+          </label>
+
+          @if (form.controls.cadenceKind.value === 'monthly') {
+            <label class="field">
+              <span class="field-label">Number of payments (optional)</span>
+              <input type="number" formControlName="paymentCount" min="1" step="1" placeholder="e.g. 12" />
+              <small>For installments, payment 1 is the first scheduled month from the start date.</small>
+            </label>
+          }
         }
       </div>
 
@@ -230,6 +296,11 @@
                     <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
                       {{ p.paid }}/{{ p.total }}
                     </span>
+                    @if (installmentFullPrice(t); as fp) {
+                      <span class="full-price" [title]="'Full price ' + fmt(fp)">
+                        of {{ fmt(fp) }}
+                      </span>
+                    }
                   }
                 } @else {
                   —
@@ -296,6 +367,12 @@
                   <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
                     {{ p.paid }}/{{ p.total }}
                   </span>
+                  @if (installmentFullPrice(t); as fp) {
+                    <span class="dot">·</span>
+                    <span class="full-price" [title]="'Full price ' + fmt(fp)">
+                      of {{ fmt(fp) }}
+                    </span>
+                  }
                 }
               </div>
             </div>
