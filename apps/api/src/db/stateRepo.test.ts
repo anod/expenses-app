@@ -201,7 +201,7 @@ describe('StateRepo', () => {
 
       // Apply the remaining migrations (007 onwards) in order: 007 rebuilds the
       // recurring_template table and must preserve the seeded child rows; later
-      // migrations (e.g. 009 full_price) then layer onto the rebuilt table.
+      // migrations (e.g. 010 full_price) then layer onto the rebuilt table.
       for (const file of readdirSync(migrationsDir).filter((f) => /^\d+-.*\.sql$/.test(f) && Number(f.slice(0, 3)) >= 7)) {
         copyFileSync(join(migrationsDir, file), join(tempDir, file));
       }
