@@ -698,7 +698,8 @@
 /* Payment progress badge on timeline rows (X of Y for fixed-term templates). */
 .payment-progress {
   display: inline-block;
-  margin-inline-start: 0.4rem;
+  min-width: 2.9rem;
+  text-align: center;
   padding: 0 0.4rem;
   border-radius: 999px;
   background: var(--md-sys-color-surface-container-high);
@@ -708,8 +709,19 @@
   vertical-align: 1px;
 }
 
+/* Group the installment X/Y badge and full price and push them to the right
+ * edge of the row so they line up in consistent columns across rows. */
+.charge-installment {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .full-price {
-  margin-inline-start: 0.3rem;
+  min-width: 6.5rem;
+  text-align: right;
   color: var(--md-sys-color-on-surface-variant);
   font: var(--md-sys-typescale-label-small);
   font-variant-numeric: tabular-nums;
