@@ -10,6 +10,7 @@ import type {
 import {
   addDays,
   addMonths,
+  firstBillingDayOnOrAfter,
   firstBillingDayStrictlyAfter,
   generateVirtualOccurrences,
   paymentProgress,
@@ -233,7 +234,7 @@ export const buildForecastTimeline = ({
     const openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);
     return entries.filter((entry) => {
       if (entry.date < start || entry.channel !== `cc:${cardId}`) return false;
-      const entryBillDate = firstBillingDayStrictlyAfter(entry.date, card.billingDayOfMonth);
+      const entryBillDate = firstBillingDayOnOrAfter(entry.date, card.billingDayOfMonth);
       if (entryBillDate !== billDate) return false;
       if (entry.date <= card.asOf) {
         return card.currentDebit !== 0 && billDate === openingBillDate;
@@ -281,7 +282,7 @@ export const buildForecastTimeline = ({
       const cardId = entry.channel.slice(3);
       const card = cardsById.get(cardId);
       if (!card || card.mode === 'debit') continue;
-      const billDate = firstBillingDayStrictlyAfter(entry.date, card.billingDayOfMonth);
+      const billDate = firstBillingDayOnOrAfter(entry.date, card.billingDayOfMonth);
       if (inPastWindow(billDate)) {
         const bucket = bucketFor(cardId, billDate);
         const openingBillDate = firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth);

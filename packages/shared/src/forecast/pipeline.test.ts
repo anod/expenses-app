@@ -7,6 +7,7 @@ import {
   type Account,
   type CreditCard,
   type LedgerEntry,
+  type ProjectionCharge,
   type RecurringTemplate,
   type Settings,
   occurrenceKeyOf,
@@ -104,15 +105,36 @@ describe('forecast pipeline', () => {
   });
 
   // 5
-  it('cc charge ON billing day rolls to next month', () => {
+  it('cc charge ON billing day is included in that same-day bill', () => {
     const card = { ...visa, asOf: '2026-05-01' };
     const entry: LedgerEntry = {
       id: 'c1', description: 'on-bill-day', amount: -100, channel: 'cc:visa',
       date: '2026-06-02', status: 'pending',
     };
     const r = project([entry], acct(20_000, '2026-05-01'), [card], baseSettings, '2026-05-01');
-    expect(r.days.find((x) => x.date === '2026-06-02')!.delta).toBe(0);
-    expect(r.days.find((x) => x.date === '2026-07-02')!.delta).toBe(-100);
+    expect(r.days.find((x) => x.date === '2026-06-02')!.delta).toBe(-100);
+    expect(r.days.find((x) => x.date === '2026-07-02')!.delta).toBe(0);
+  });
+
+  // 5b — regression: a recurring whose cadence day equals the card billing day
+  // settles on the same day's bill (the "Кофемашина" case).
+  it('recurring on billing day settles same-day bill (via forecast)', () => {
+    const card: CreditCard = { ...visa, id: 'cal', name: 'Cal', currentDebit: 0, asOf: '2026-05-20' };
+    const tmpl: RecurringTemplate = {
+      id: 'coffee', description: 'Кофемашина', amount: -1819, channel: 'cc:cal',
+      cadence: { kind: 'monthly', day: 2, monthEndPolicy: 'clamp' },
+      startDate: '2026-06-02', endDate: '2026-09-02',
+    };
+    const r = forecast({
+      templates: [tmpl], persisted: [], account: acct(50_000, '2026-05-20'),
+      cards: [card], settings: { ...baseSettings, horizonMonths: 6 }, today: '2026-05-20',
+    });
+    const billOn = (date: string): ProjectionCharge | undefined =>
+      r.days
+        .find((d) => d.date === date)
+        ?.charges.find((c) => c.source.kind === 'cc-bill');
+    // First occurrence (Jun 2) settles on the Jun 2 bill, not Jul 2.
+    expect(billOn('2026-06-02')?.amount).toBe(-1819);
   });
 
   // 6
@@ -404,7 +426,7 @@ describe('forecast pipeline', () => {
 
   it('weekly cadence: cc-bill routes per-occurrence into matching bill', () => {
     // 4 Fridays in June 2026 routed through cal (billingDay=2) → all land
-    // on the first cc-bill strictly after each charge, which is Jul 2.
+    // on the first cc-bill on/after each charge, which is Jul 2.
     const card: CreditCard = { ...visa, id: 'cal', name: 'Cal' };
     const tmpl: RecurringTemplate = {
       id: 'rw', description: 'therapy', amount: -205, channel: 'cc:cal',
