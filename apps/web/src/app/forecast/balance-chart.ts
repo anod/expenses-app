@@ -182,7 +182,17 @@ export class BalanceChartComponent {
 
         spendInPeriod += Math.abs(charge.amount);
         if (charge.source.kind === 'cc-bill') {
-          for (const entry of charge.source.billedEntries) {
+          // Include installments already accounted in the opening currentDebit:
+          // they are part of this bill's spend (inside the opening-balance lump),
+          // so the split-CC metric must count them too, de-duped by id.
+          const seen = new Set<string>();
+          const ccEntries = [
+            ...charge.source.billedEntries,
+            ...(charge.source.accountedEntries ?? []),
+          ];
+          for (const entry of ccEntries) {
+            if (seen.has(entry.id)) continue;
+            seen.add(entry.id);
             const template = entry.recurringId ? templateById.get(entry.recurringId) : undefined;
             if (template && template.channel !== 'bank' && template.endDate) {
               splitCcInPeriod += Math.abs(entry.amount);

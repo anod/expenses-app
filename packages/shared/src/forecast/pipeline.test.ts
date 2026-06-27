@@ -246,6 +246,39 @@ describe('forecast pipeline', () => {
     expect(nextBill.source.accountedEntries).toBeUndefined();
   });
 
+  it('per-card outstanding does not double-count a mid-cycle installment already in currentDebit', () => {
+    const card: CreditCard = {
+      ...visa, id: 'cal', name: 'Cal', currentDebit: 1000, asOf: '2026-05-20',
+    };
+    // Fixed-term installment dated mid-cycle (after asOf, before the opening
+    // bill on 2026-06-02). currentDebit already includes it.
+    const installment: RecurringTemplate = {
+      id: 'inst', description: 'installment', amount: -200, channel: 'cc:cal',
+      cadence: { kind: 'monthly', day: 25, monthEndPolicy: 'clamp' },
+      startDate: '2026-05-25', endDate: '2026-12-25',
+    };
+    const r = forecast({
+      templates: [installment], persisted: [], account: acct(50_000, '2026-05-20'),
+      cards: [card], settings: baseSettings, today: '2026-05-20',
+    });
+
+    const cardFc = r.cards.find((c) => c.cardId === 'cal')!;
+    const dayOf = (d: string) => cardFc.days.find((x) => x.date === d)!;
+    // Mid-cycle: outstanding stays at currentDebit (no double-count from the
+    // installment that is already inside currentDebit).
+    expect(dayOf('2026-05-25').outstanding).toBe(1000);
+    expect(dayOf('2026-06-01').outstanding).toBe(1000);
+    // On the opening bill day the whole bill settles to 0.
+    expect(dayOf('2026-06-02').outstanding).toBe(0);
+    // The opening bill itself only subtracts currentDebit (installment accounted).
+    const openingBill = r.days
+      .find((d) => d.date === '2026-06-02')!
+      .charges.find((c) => c.source.kind === 'cc-bill');
+    expect(openingBill?.amount).toBe(-1000);
+    // The NEXT cycle's installment accrues normally into outstanding.
+    expect(dayOf('2026-06-25').outstanding).toBe(200);
+  });
+
   // 8
   it('recurring salary on the 1st raises balance', () => {
     const tmpl: RecurringTemplate = {
