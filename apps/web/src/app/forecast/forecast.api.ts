@@ -95,7 +95,7 @@ export class ForecastApi {
     return this.http.patch<MutationResult<Settings>>('/api/settings', body);
   }
 
-  syncExcel(body: { mode: 'overwrite' | 'new'; targetSheet?: string; rawSheetName?: string }) {
+  backupExcel(body: { mode: 'overwrite' | 'new'; targetSheet?: string; rawSheetName?: string }) {
     return this.http.post<{
       workbook: string;
       targetSheet: string;
@@ -105,7 +105,7 @@ export class ForecastApi {
       anchorCols: number;
       rawRows: number;
       syncedAt: string;
-    }>('/api/sync/excel', body);
+    }>('/api/backup/excel', body);
   }
 
   getDemo() {
@@ -114,26 +114,6 @@ export class ForecastApi {
 
   setDemo(enabled: boolean) {
     return this.http.post<{ enabled: boolean }>('/api/demo', { enabled });
-  }
-
-  importExcel() {
-    return this.http.post<{
-      summary: {
-        workbook: string;
-        worksheet: string;
-        monthsParsed: number;
-        startDate: string;
-        startBalance: number;
-        cardsCreated: number;
-        recurringCreated: number;
-        ledgerCreated: number;
-        orphanedLedger: number;
-        orphanedRecurring: number;
-        warnings: string[];
-        skippedRows: { label: string; reason: string }[];
-      };
-      forecast: ForecastResult;
-    }>('/api/import/excel', {});
   }
 
   getEsop(params?: {

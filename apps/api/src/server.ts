@@ -24,8 +24,7 @@ import { DemoController } from './demo/demoController.js';
 import { buildDemoRoutes } from './demo/routes.js';
 import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
-import { buildSyncRoutes } from './sync/routes.js';
-import { buildImportRoutes } from './import/routes.js';
+import { buildBackupRoutes } from './backup/routes.js';
 import { GraphEsopReader } from './esop/graphEsopReader.js';
 import { MarketDataTimeoutError } from './esop/marketData.js';
 import { buildEsopRoutes } from './esop/routes.js';
@@ -261,27 +260,16 @@ if (protectApi) {
     '/api',
     conditionalBearer,
     conditionalGraphToken,
-    buildSyncRoutes(getRepo, excelWriter, isDemo),
-  );
-  app.use(
-    '/api',
-    conditionalBearer,
-    conditionalGraphToken,
-    buildImportRoutes(getRepo, graphReader, isDemo, log),
+    buildBackupRoutes(getRepo, excelWriter, isDemo),
   );
   app.use('/api', conditionalBearer, conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
   log.info(
     { allowedOids: config.ALLOWED_OIDS.length },
-    'REQUIRE_AUTH=true: forecast + sync routes gated by JWKS-validated Bearer',
+    'REQUIRE_AUTH=true: forecast + backup routes gated by JWKS-validated Bearer',
   );
 } else {
   app.use('/api', buildForecastRoutes(getRepo));
-  app.use('/api', conditionalGraphToken, buildSyncRoutes(getRepo, excelWriter, isDemo));
-  app.use(
-    '/api',
-    conditionalGraphToken,
-    buildImportRoutes(getRepo, graphReader, isDemo, log),
-  );
+  app.use('/api', conditionalGraphToken, buildBackupRoutes(getRepo, excelWriter, isDemo));
   app.use('/api', conditionalGraphToken, buildEsopRoutes(esopReader, isDemo));
 }
 
@@ -439,8 +427,7 @@ function needsGraphPassthroughToken(path: string): boolean {
   return (
     path === '/expenses' ||
     path.startsWith('/workbook/') ||
-    path.startsWith('/import/') ||
-    path.startsWith('/sync/') ||
+    path.startsWith('/backup/') ||
     path === '/esop' ||
     path.startsWith('/esop/status')
   );

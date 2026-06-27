@@ -9,11 +9,7 @@ import { AuthService } from './auth.service';
  * Microsoft Graph on the user's behalf. We use prefix matching so query
  * strings and resource ids (e.g. `/api/ledger/<id>`) still match.
  */
-const GRAPH_PASSTHROUGH_PREFIXES: ReadonlyArray<string> = [
-  '/api/workbook/',
-  '/api/import/',
-  '/api/sync/',
-];
+const GRAPH_PASSTHROUGH_PREFIXES: ReadonlyArray<string> = ['/api/workbook/', '/api/backup/'];
 
 function needsGraphToken(url: string): boolean {
   return (

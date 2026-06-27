@@ -28,7 +28,6 @@ Run from the repo root unless noted.
 | Single vitest file | `npm run -s test --workspace=apps/api -- src/auth.test.ts` |
 | Single test by name | append `-- -t "pattern"` to a workspace `test` command |
 | Dump workbook to `dumps/` | `npm run dump` |
-| Import Excel snapshot into SQLite | `npm --workspace @expenses/api run import:excel` |
 | SQLite online backup | `npm --workspace @expenses/api run backup:db` |
 
 Web has no test runner wired up; Angular `ng test` is not configured. Don't
@@ -59,10 +58,10 @@ add one unless asked.
   uses `better-sqlite3`; schema lives in `apps/api/migrations/NNN-*.sql` applied
   in order by `openDb.ts`. Add new schema as the next-numbered migration; do
   not edit prior ones.
-- **Excel import reconciliation.** `apps/api/src/scripts/import-excel.ts` uses
-  deterministic IDs prefixed `excel:` for workbook-sourced rows and reconciles
-  on re-import (orphan GC at end). Rows with non-`excel:` IDs are user-created
-  and must survive re-imports — preserve this when touching the importer.
+- **Historical `excel:` IDs.** Rows seeded from the workbook use deterministic
+  IDs prefixed `excel:`; non-`excel:` IDs are user-created. The DB is now the
+  sole source of truth (no workbook→DB import) — both kinds are user-managed
+  and edited directly.
 - **Demo mode.** Toggled from the in-app Settings page; persisted in
   `data/demo-mode.json`. When on, the API serves in-memory fake data through
   `demo/demoController.ts` and `demo/routes.ts` — real DB and workbook are not
@@ -71,9 +70,10 @@ add one unless asked.
   to fetch `/api/config` and initialize `AuthService` before bootstrap; the
   HTTP `authInterceptor` attaches the bearer and retries once on 401 with a
   silent refresh.
-- **Forecast / sync / import routes** live in their own folders under
-  `apps/api/src/{forecast,sync,import}` and are mounted as `build*Routes()`
+- **Forecast / backup routes** live in their own folders under
+  `apps/api/src/{forecast,backup}` and are mounted as `build*Routes()`
   factories from `server.ts`. Follow that factory pattern for new route groups.
+  Excel backup is one-way (DB→workbook); there is no workbook→DB import.
 
 ## Conventions
 

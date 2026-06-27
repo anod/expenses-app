@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { StateRepo } from '../db/stateRepo.js';
 import type { ExcelWriter, SyncMode } from '../graph/excelWriter.js';
 
-const syncBodySchema = z
+const backupBodySchema = z
   .object({
     targetSheet: z.string().trim().min(1).max(31).optional(),
     rawSheetName: z.string().trim().min(1).max(31).optional(),
@@ -11,30 +11,30 @@ const syncBodySchema = z
   })
   .strict();
 
-export const buildSyncRoutes = (
+export const buildBackupRoutes = (
   getRepo: () => StateRepo,
   writer: ExcelWriter | null,
   isDemo: () => boolean,
 ): Router => {
   const router = Router();
 
-  router.post('/sync/excel', async (req, res, next) => {
+  router.post('/backup/excel', async (req, res, next) => {
     try {
       if (isDemo()) {
         res.status(409).json({
           error: 'DEMO_MODE_ACTIVE',
-          message: 'Excel sync is disabled while demo mode is on. Turn off demo mode in Settings to sync.',
+          message: 'Excel backup is disabled while demo mode is on. Turn off demo mode in Settings to back up.',
         });
         return;
       }
       if (!writer) {
         res.status(503).json({
           error: 'GRAPH_NOT_CONFIGURED',
-          message: 'Excel sync is unavailable: no Graph workbook is configured for this server.',
+          message: 'Excel backup is unavailable: no Graph workbook is configured for this server.',
         });
         return;
       }
-      const parsed = syncBodySchema.safeParse(req.body ?? {});
+      const parsed = backupBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         res.status(400).json({ error: 'BAD_REQUEST', issues: parsed.error.issues });
         return;
@@ -54,7 +54,7 @@ export const buildSyncRoutes = (
       if (!req.graphToken) {
         res.status(400).json({
           error: 'GRAPH_TOKEN_MISSING',
-          message: 'X-MS-Graph-Token header is required for Excel sync',
+          message: 'X-MS-Graph-Token header is required for Excel backup',
         });
         return;
       }
