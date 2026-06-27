@@ -196,6 +196,56 @@ describe('forecast pipeline', () => {
     expect(bill.source.billedEntries[0]?.id).toBe('virtual:inst:2026-05-15');
   });
 
+  it('installments already in currentDebit are excluded from the opening bill and surfaced as accountedEntries', () => {
+    // Cal-like card: opening bill is the first billing day strictly after asOf.
+    const card: CreditCard = {
+      ...visa, id: 'cal', name: 'Cal', currentDebit: 1000, asOf: '2026-05-20',
+    };
+    // Fixed-term installment (endDate set) whose occurrence bills on 2026-06-02.
+    const installment: RecurringTemplate = {
+      id: 'inst', description: 'installment', amount: -200, channel: 'cc:cal',
+      cadence: { kind: 'monthly', day: 25, monthEndPolicy: 'clamp' },
+      startDate: '2026-05-25', endDate: '2026-12-25',
+    };
+    // Open-ended recurring (no endDate) that also bills on 2026-06-02.
+    const recurring: RecurringTemplate = {
+      id: 'water', description: 'water', amount: -50, channel: 'cc:cal',
+      cadence: { kind: 'monthly', day: 28, monthEndPolicy: 'clamp' },
+      startDate: '2026-05-28',
+    };
+
+    const r = forecast({
+      templates: [installment, recurring],
+      persisted: [],
+      account: acct(50_000, '2026-05-20'),
+      cards: [card],
+      settings: baseSettings,
+      today: '2026-05-20',
+    });
+
+    const openingBill = r.days
+      .find((x) => x.date === '2026-06-02')!
+      .charges.find((c) => c.source.kind === 'cc-bill');
+    expect(openingBill?.source.kind).toBe('cc-bill');
+    if (openingBill?.source.kind !== 'cc-bill') throw new Error('expected cc bill');
+    // currentDebit (1000) already covers the installment (200); only the
+    // open-ended recurring (50) is additive: amount = -(1000 + 50).
+    expect(openingBill.amount).toBe(-1050);
+    expect(openingBill.source.billedEntries.map((e) => e.description)).toEqual(['water']);
+    expect(openingBill.source.accountedEntries?.map((e) => e.description)).toEqual([
+      'installment',
+    ]);
+
+    // The NEXT bill (2026-07-02) is not the opening bill, so the installment
+    // is a normal additive charge again.
+    const nextBill = r.days
+      .find((x) => x.date === '2026-07-02')!
+      .charges.find((c) => c.source.kind === 'cc-bill');
+    if (nextBill?.source.kind !== 'cc-bill') throw new Error('expected cc bill');
+    expect(nextBill.amount).toBe(-250);
+    expect(nextBill.source.accountedEntries).toBeUndefined();
+  });
+
   // 8
   it('recurring salary on the 1st raises balance', () => {
     const tmpl: RecurringTemplate = {

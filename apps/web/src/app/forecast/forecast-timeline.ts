@@ -344,18 +344,24 @@ export const buildForecastTimeline = ({
   for (const day of forecast.days) {
     if (filter !== 'anchors') {
       for (const charge of day.charges) {
-        const row = toChargeItem(
-          day.date,
-          charge,
-          charge.source.kind === 'cc-bill'
-            ? accountedCreditCardEntriesForBill(
-                charge.source.cardId,
-                day.date,
-                [...virtualBillCandidates, ...persistedBillCandidates],
-                billLookbackStart,
-              )
-            : [],
-        );
+        let accounted: ReadonlyArray<LedgerEntry> = [];
+        if (charge.source.kind === 'cc-bill') {
+          const clientAccounted = accountedCreditCardEntriesForBill(
+            charge.source.cardId,
+            day.date,
+            [...virtualBillCandidates, ...persistedBillCandidates],
+            billLookbackStart,
+          );
+          // Installments already folded into the card's opening currentDebit
+          // come from the engine; merge them with the client-derived past
+          // entries, de-duplicating by id.
+          const seen = new Set(clientAccounted.map((e) => e.id));
+          const engineAccounted = (charge.source.accountedEntries ?? []).filter(
+            (e) => !seen.has(e.id),
+          );
+          accounted = [...clientAccounted, ...engineAccounted];
+        }
+        const row = toChargeItem(day.date, charge, accounted);
         if (filter === 'all' || row.channel === filter) {
           items.push(row);
         }
