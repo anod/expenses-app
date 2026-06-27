@@ -108,6 +108,79 @@ describe('forecast timeline', () => {
     expect(nextBill.billedEntries?.[0]).not.toHaveProperty('past');
   });
 
+  it('treats a post-asOf installment that bills the opening cycle as accounted (already in currentDebit)', () => {
+    // Installment occurrence falls AFTER asOf but bills on the opening cycle
+    // (2026-06-02): currentDebit already includes it, so it must render as a
+    // past sub-row and be excluded from the additive bill amount.
+    const openingInstallment = {
+      id: 'installment-fridge',
+      description: 'Fridge installment',
+      amount: -200,
+      channel: 'cc:visa' as const,
+      startDate: '2026-06-01',
+      endDate: '2026-09-01',
+      cadence: { kind: 'monthly' as const, day: 1, monthEndPolicy: 'clamp' as const },
+    };
+    // Open-ended recurring also billing the opening cycle stays additive.
+    const openEnded = {
+      id: 'water',
+      description: 'Water',
+      amount: -50,
+      channel: 'cc:visa' as const,
+      startDate: '2026-06-01',
+      cadence: { kind: 'monthly' as const, day: 1, monthEndPolicy: 'clamp' as const },
+    };
+
+    const result = forecast({
+      persisted: [],
+      templates: [openingInstallment, openEnded],
+      account: { bankBalance: 10_000, asOf: '2026-05-30' },
+      cards: [creditCard],
+      settings,
+      today: '2026-05-30',
+    });
+
+    const timeline = buildForecastTimeline({
+      forecast: result,
+      threshold: settings.threshold,
+      filter: 'all',
+      ledger: [],
+      templates: [openingInstallment, openEnded],
+      cards: [creditCard],
+      todayIso: '2026-05-30',
+    }).filter((item): item is ChargeItem => item.kind === 'charge');
+
+    const openingBill = ccBillOn(timeline, '2026-06-02');
+    // currentDebit (300) covers the installment (200); only the open-ended
+    // recurring (50) is additive: amount = -(300 + 50).
+    expect(openingBill.amount).toBe(-350);
+    // The installment renders as a past sub-row; the open-ended one does not.
+    expect(openingBill.billedEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: 'Fridge installment',
+          amount: -200,
+          past: true,
+          recurringId: 'installment-fridge',
+        }),
+        expect.objectContaining({ description: 'Water', amount: -50 }),
+      ]),
+    );
+    expect(
+      openingBill.billedEntries?.find((r) => r.description === 'Water'),
+    ).not.toHaveProperty('past');
+    // Opening balance sub-row = currentDebit minus the accounted installment.
+    expect(openingBill.billedEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: 'Opening balance (from Excel snapshot)',
+          amount: -100,
+          past: true,
+        }),
+      ]),
+    );
+  });
+
   it('does not show skipped installments in current or next cc bill breakdowns', () => {
     const skippedTemplate = {
       ...installmentTemplate,

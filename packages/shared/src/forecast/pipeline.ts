@@ -232,6 +232,7 @@ export const project = (
   cards: ReadonlyArray<CreditCard>,
   settings: Settings,
   today: IsoDate,
+  installmentIds: ReadonlySet<string> = new Set(),
 ): ForecastResult => {
   validateNotFuture(account.asOf, today, 'account');
   for (const c of cards) {
@@ -320,7 +321,15 @@ export const project = (
   // Emitting them as one row prevents two confusing entries on the same day
   // for the same card, while keeping the per-charge breakdown attached via
   // billedEntries (rendered as expandable sub-rows in the UI).
-  type CardBillBucket = { entries: LedgerEntry[]; openingDebit: number };
+  //
+  // `accountedEntries` holds fixed-term installment occurrences that bill on a
+  // card's opening bill: `currentDebit` already includes them, so they are
+  // surfaced for display but excluded from the additive bill total.
+  type CardBillBucket = {
+    entries: LedgerEntry[];
+    accountedEntries: LedgerEntry[];
+    openingDebit: number;
+  };
   const cardBills = new Map<string, Map<IsoDate, CardBillBucket>>();
   const getBucket = (cardId: string, billDate: IsoDate): CardBillBucket => {
     let perDate = cardBills.get(cardId);
@@ -330,11 +339,35 @@ export const project = (
     }
     let b = perDate.get(billDate);
     if (!b) {
-      b = { entries: [], openingDebit: 0 };
+      b = { entries: [], accountedEntries: [], openingDebit: 0 };
       perDate.set(billDate, b);
     }
     return b;
   };
+
+  // The "opening bill" of each credit card is the first bill strictly after
+  // its `asOf` — the bill that settles `currentDebit`.
+  const openingBillDateByCard = new Map<string, IsoDate>();
+  for (const card of cards) {
+    if (card.mode === 'debit') continue;
+    openingBillDateByCard.set(
+      card.id,
+      firstBillingDayStrictlyAfter(card.asOf, card.billingDayOfMonth),
+    );
+  }
+
+  // An entry is "already accounted" in `currentDebit` when it is a fixed-term
+  // installment occurrence billing on its card's opening bill (and the card
+  // actually carries a non-zero currentDebit covering it).
+  const isAccountedInOpeningDebit = (
+    card: CreditCard,
+    billDate: IsoDate,
+    entry: LedgerEntry,
+  ): boolean =>
+    card.currentDebit !== 0 &&
+    billDate === openingBillDateByCard.get(card.id) &&
+    entry.recurringId != null &&
+    installmentIds.has(entry.recurringId);
 
   // Seed buckets with currentDebit rollups (credit cards only).
   for (const card of cards) {
@@ -346,11 +379,19 @@ export const project = (
     getBucket(card.id, billDate).openingDebit += card.currentDebit;
   }
 
-  // Pour per-card cc charges into the same buckets.
+  // Pour per-card cc charges into the same buckets. Installments already
+  // reflected in the opening currentDebit are diverted to `accountedEntries`.
   for (const [cardId, perDate] of ccByCardBillDate.entries()) {
+    const card = cardById.get(cardId);
     for (const [billDate, entries] of perDate.entries()) {
       const b = getBucket(cardId, billDate);
-      for (const e of entries) b.entries.push(e);
+      for (const e of entries) {
+        if (card && isAccountedInOpeningDebit(card, billDate, e)) {
+          b.accountedEntries.push(e);
+        } else {
+          b.entries.push(e);
+        }
+      }
     }
   }
 
@@ -370,7 +411,14 @@ export const project = (
       pushBank(billDate, {
         description: `Credit card bill (${card.name}, ${summary})`,
         amount,
-        source: { kind: 'cc-bill', cardId, billedEntries: b.entries.slice() },
+        source: {
+          kind: 'cc-bill',
+          cardId,
+          billedEntries: b.entries.slice(),
+          ...(b.accountedEntries.length > 0
+            ? { accountedEntries: b.accountedEntries.slice() }
+            : {}),
+        },
       });
     }
   }
@@ -512,5 +560,10 @@ export const forecast = (input: {
   );
   const virtuals = generateVirtualOccurrences(input.templates, virtualStart, endDate);
   const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards, input.templates);
-  return project(effective, input.account, input.cards, input.settings, input.today);
+  // Fixed-term installments (templates with an end date) are the charges whose
+  // occurrences may already be folded into a card's opening currentDebit.
+  const installmentIds = new Set(
+    input.templates.filter((t) => t.endDate != null).map((t) => t.id),
+  );
+  return project(effective, input.account, input.cards, input.settings, input.today, installmentIds);
 };

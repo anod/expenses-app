@@ -142,7 +142,19 @@ export type ChargeSource =
       /** Set IFF `recurringId` is set; format `${recurringId}@${date}`. */
       occurrenceKey?: string;
     }
-  | { kind: 'cc-bill'; cardId: string; billedEntries: LedgerEntry[] };
+  | {
+      kind: 'cc-bill';
+      cardId: string;
+      billedEntries: LedgerEntry[];
+      /**
+       * Fixed-term installment occurrences that are already included in the
+       * card's `currentDebit` for its opening bill (the first bill strictly
+       * after `card.asOf`). They are surfaced for display as "already
+       * accounted" sub-rows but are NOT added to the bill `amount` — the
+       * `currentDebit` rollup already covers them.
+       */
+      accountedEntries?: LedgerEntry[];
+    };
 
 export interface ProjectionCharge {
   description: string;
