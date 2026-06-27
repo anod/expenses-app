@@ -290,6 +290,11 @@
                   <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
                     {{ p.paid }}/{{ p.total }}
                   </span>
+                  @if (item.fullPrice; as fp) {
+                    <span class="full-price" [title]="'Full price ' + fmt(fp)">
+                      of {{ fmt(fp) }}
+                    </span>
+                  }
                 }
               </div>
               <span class="charge-amount" [class.is-negative]="item.amount < 0">
@@ -343,6 +348,11 @@
                       <span class="payment-progress" [title]="p.paid + ' of ' + p.total + ' payments'">
                         {{ p.paid }}/{{ p.total }}
                       </span>
+                      @if (sub.fullPrice; as fp) {
+                        <span class="full-price" [title]="'Full price ' + fmt(fp)">
+                          of {{ fmt(fp) }}
+                        </span>
+                      }
                     }
                   </div>
                   <span class="charge-amount" [class.is-negative]="sub.amount < 0">
