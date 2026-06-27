@@ -9,7 +9,6 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "import:excel": "tsx src/scripts/import-excel.ts",
     "backup:db": "node dist/scripts/backup-db.js"
   },
   "dependencies": {

@@ -108,7 +108,7 @@ Recurring templates support three schedule shapes:
 - **Monthly prediction** — one projected occurrence per month without an exact
   business day
 
-When syncing back to Excel, only exact monthly day-of-month templates are
+When backing up to Excel, only exact monthly day-of-month templates are
 round-trippable in the current workbook format. Weekly and monthly-prediction
 templates are excluded from the export sheets with a warning.
 

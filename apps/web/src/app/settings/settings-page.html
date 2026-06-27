@@ -4,7 +4,7 @@
       <span class="material-symbols-outlined">tune</span>
       Settings
     </h1>
-    <p class="subtitle">Forecasting preferences, OneDrive integration, and import / sync.</p>
+    <p class="subtitle">Forecasting preferences, OneDrive integration, and Excel backup.</p>
   </header>
 
   @if (loading()) {
@@ -53,7 +53,7 @@
             autocomplete="off"
             spellcheck="false"
           />
-          <small>Used by Import &amp; Sync. Leave empty to fall back to <code>ONEDRIVE_WORKBOOK_URL</code> env.</small>
+          <small>Used by Excel backup. Leave empty to fall back to <code>ONEDRIVE_WORKBOOK_URL</code> env.</small>
           @if (workbookLink(); as url) {
             <a class="workbook-link" [href]="url" target="_blank" rel="noreferrer">
               <span class="material-symbols-outlined">open_in_new</span>
@@ -229,61 +229,13 @@
       }
     </div>
 
-    <!-- Import from Excel -->
-    <div class="m3-card section-card">
-      <header class="section-head">
-        <span class="material-symbols-outlined section-icon">cloud_download</span>
-        <div>
-          <h2>Import from OneDrive</h2>
-          <p>Re-read the workbook and reconcile recurring templates, ledger entries and credit-card snapshots. User-created rows survive; cleared status is preserved.</p>
-        </div>
-      </header>
-      @if (auth.isDemo()) {
-        <div class="status-banner info">
-          <span class="material-symbols-outlined">info</span>
-          Disabled in demo mode.
-        </div>
-      } @else {
-        <div class="form-actions">
-          <button type="button" class="m3-btn primary" (click)="runImport()" [disabled]="importing()">
-            @if (importing()) {
-              <span class="material-symbols-outlined spin">progress_activity</span> Importing…
-            } @else {
-              <span class="material-symbols-outlined">download</span> Import now
-            }
-          </button>
-        </div>
-        @if (importResult(); as r) {
-          <div class="status-banner success">
-            <span class="material-symbols-outlined">check_circle</span>
-            <div>
-              Imported <strong>{{ r.workbook }}</strong> / <em>{{ r.worksheet }}</em>
-              at {{ r.importedAt | date:'mediumTime' }}.
-              <div class="muted small">
-                {{ r.monthsParsed }} months · {{ r.cardsCreated }} cards · {{ r.recurringCreated }} recurring · {{ r.ledgerCreated }} ledger
-                @if (r.orphanedLedger > 0 || r.orphanedRecurring > 0) {
-                  · removed {{ r.orphanedLedger }} stale ledger / {{ r.orphanedRecurring }} recurring
-                }
-              </div>
-            </div>
-          </div>
-        }
-        @if (importError(); as e) {
-          <div class="status-banner error">
-            <span class="material-symbols-outlined">error</span>
-            {{ e }}
-          </div>
-        }
-      }
-    </div>
-
-    <!-- Sync to Excel -->
+    <!-- Backup to Excel -->
     <div class="m3-card section-card">
       <header class="section-head">
         <span class="material-symbols-outlined section-icon">cloud_upload</span>
         <div>
-          <h2>Sync to Excel</h2>
-          <p>Write current state to a sheet in your OneDrive workbook. <code>StateRaw</code> is always written alongside for round-trip debugging.</p>
+          <h2>Backup to Excel</h2>
+          <p>Write current state to a sheet in your OneDrive workbook as a one-way backup. <code>StateRaw</code> is always written alongside for round-trip debugging.</p>
         </div>
       </header>
       @if (auth.isDemo()) {
@@ -292,7 +244,7 @@
           Disabled in demo mode.
         </div>
       } @else {
-        <form [formGroup]="syncForm" (ngSubmit)="sync()" class="form-grid">
+        <form [formGroup]="backupForm" (ngSubmit)="backup()" class="form-grid">
           <label class="field">
             <span>Target sheet</span>
             <input formControlName="targetSheet" type="text" maxlength="31" />
@@ -311,22 +263,22 @@
             </div>
           </div>
           <div class="form-actions">
-            <button type="submit" class="m3-btn primary" [disabled]="syncing() || syncForm.invalid">
-              @if (syncing()) {
-                <span class="material-symbols-outlined spin">progress_activity</span> Syncing…
+            <button type="submit" class="m3-btn primary" [disabled]="backingUp() || backupForm.invalid">
+              @if (backingUp()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Backing up…
               } @else {
-                <span class="material-symbols-outlined">cloud_sync</span> Sync now
+                <span class="material-symbols-outlined">cloud_sync</span> Back up now
               }
             </button>
           </div>
         </form>
-        @if (syncResult(); as r) {
+        @if (backupResult(); as r) {
           <div class="status-banner success">
             <span class="material-symbols-outlined">check_circle</span>
-            Wrote <strong>{{ r.targetSheet }}</strong> &amp; <strong>{{ r.rawSheet }}</strong> to <em>{{ r.workbook }}</em> at {{ r.syncedAt | date:'mediumTime' }}.
+            Wrote <strong>{{ r.targetSheet }}</strong> &amp; <strong>{{ r.rawSheet }}</strong> to <em>{{ r.workbook }}</em> at {{ r.backedUpAt | date:'mediumTime' }}.
           </div>
         }
-        @if (syncError(); as e) {
+        @if (backupError(); as e) {
           <div class="status-banner error">
             <span class="material-symbols-outlined">error</span>
             {{ e }}

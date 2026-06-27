@@ -18,7 +18,7 @@ export interface AuthConfig {
   /**
    * Scopes for the Microsoft Graph token, attached as
    * `X-MS-Graph-Token: <token>` on Graph-passthrough routes
-   * (e.g. /api/import/*, /api/sync/*).
+   * (e.g. /api/workbook/*, /api/backup/*).
    */
   graphScopes: string[];
 }

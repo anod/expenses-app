@@ -7,23 +7,11 @@ import { AuthService } from '../auth/auth.service';
 import { errorMessage } from '../core/api-error';
 import { ForecastApi } from '../forecast/forecast.api';
 
-interface SyncResultView {
+interface BackupResultView {
   workbook: string;
   targetSheet: string;
   rawSheet: string;
-  syncedAt: string;
-}
-
-interface ImportResultView {
-  workbook: string;
-  worksheet: string;
-  monthsParsed: number;
-  cardsCreated: number;
-  recurringCreated: number;
-  ledgerCreated: number;
-  orphanedLedger: number;
-  orphanedRecurring: number;
-  importedAt: string;
+  backedUpAt: string;
 }
 
 @Component({
@@ -85,19 +73,14 @@ export class SettingsPageComponent {
   protected readonly demoBusy = signal(false);
   protected readonly demoError = signal<string | null>(null);
 
-  // --- Excel sync ----------------------------------------------------------
-  protected readonly syncForm = this.fb.nonNullable.group({
+  // --- Excel backup --------------------------------------------------------
+  protected readonly backupForm = this.fb.nonNullable.group({
     targetSheet: ['Snapshot', [Validators.required, Validators.maxLength(31)]],
     mode: this.fb.nonNullable.control<'overwrite' | 'new'>('overwrite'),
   });
-  protected readonly syncing = signal(false);
-  protected readonly syncResult = signal<SyncResultView | null>(null);
-  protected readonly syncError = signal<string | null>(null);
-
-  // --- Import from Excel ---------------------------------------------------
-  protected readonly importing = signal(false);
-  protected readonly importResult = signal<ImportResultView | null>(null);
-  protected readonly importError = signal<string | null>(null);
+  protected readonly backingUp = signal(false);
+  protected readonly backupResult = signal<BackupResultView | null>(null);
+  protected readonly backupError = signal<string | null>(null);
 
   constructor() {
     void this.load();
@@ -277,49 +260,24 @@ export class SettingsPageComponent {
     }
   }
 
-  protected async sync(): Promise<void> {
-    if (this.syncForm.invalid || this.syncing()) return;
-    this.syncing.set(true);
-    this.syncError.set(null);
-    this.syncResult.set(null);
-    const { targetSheet, mode } = this.syncForm.getRawValue();
+  protected async backup(): Promise<void> {
+    if (this.backupForm.invalid || this.backingUp()) return;
+    this.backingUp.set(true);
+    this.backupError.set(null);
+    this.backupResult.set(null);
+    const { targetSheet, mode } = this.backupForm.getRawValue();
     try {
-      const res = await firstValueFrom(this.api.syncExcel({ targetSheet, mode }));
-      this.syncResult.set({
+      const res = await firstValueFrom(this.api.backupExcel({ targetSheet, mode }));
+      this.backupResult.set({
         workbook: res.workbook,
         targetSheet: res.targetSheet,
         rawSheet: res.rawSheet,
-        syncedAt: res.syncedAt,
+        backedUpAt: res.syncedAt,
       });
     } catch (err) {
-      this.syncError.set(this.errMsg(err));
+      this.backupError.set(this.errMsg(err));
     } finally {
-      this.syncing.set(false);
-    }
-  }
-
-  protected async runImport(): Promise<void> {
-    if (this.importing()) return;
-    this.importing.set(true);
-    this.importError.set(null);
-    this.importResult.set(null);
-    try {
-      const res = await firstValueFrom(this.api.importExcel());
-      this.importResult.set({
-        workbook: res.summary.workbook,
-        worksheet: res.summary.worksheet,
-        monthsParsed: res.summary.monthsParsed,
-        cardsCreated: res.summary.cardsCreated,
-        recurringCreated: res.summary.recurringCreated,
-        ledgerCreated: res.summary.ledgerCreated,
-        orphanedLedger: res.summary.orphanedLedger,
-        orphanedRecurring: res.summary.orphanedRecurring,
-        importedAt: new Date().toISOString(),
-      });
-    } catch (err) {
-      this.importError.set(this.errMsg(err));
-    } finally {
-      this.importing.set(false);
+      this.backingUp.set(false);
     }
   }
 
