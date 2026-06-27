@@ -25,6 +25,11 @@ import {
   type Settings,
   occurrenceKeyOf,
 } from './types.js';
+import {
+  installmentFinalPayment,
+  installmentPerPayment,
+  scheduledPaymentCount,
+} from './paymentProgress.js';
 
 const validateNotFuture = (date: IsoDate, today: IsoDate, what: string): void => {
   if (compareIso(date, today) > 0) {
@@ -70,13 +75,31 @@ export const generateVirtualOccurrences = (
     if (compareIso(t.startDate, effectiveEnd) > 0) continue;
 
     const skipSet = new Set(t.skips ?? []);
+
+    // Installments split a full price across the scheduled payments. Every
+    // occurrence uses the standard per-payment amount except the final one,
+    // which absorbs the rounding remainder so the occurrences sum exactly to
+    // `fullPrice`.
+    const installmentCount =
+      t.fullPrice != null && t.cadence.kind === 'monthly' && t.endDate != null
+        ? scheduledPaymentCount(t)
+        : null;
+    const isInstallment = installmentCount != null && installmentCount >= 1;
+    const perPayment = isInstallment
+      ? installmentPerPayment(t.fullPrice as number, installmentCount as number)
+      : t.amount;
+    const finalPayment = isInstallment
+      ? installmentFinalPayment(t.fullPrice as number, installmentCount as number)
+      : t.amount;
+
     const emit = (date: IsoDate): void => {
       if (skipSet.has(date)) return;
       if (compareIso(date, startDate) < 0) return;
+      const amount = isInstallment && date === t.endDate ? finalPayment : perPayment;
       out.push({
         id: `virtual:${t.id}:${date}`,
         description: t.description,
-        amount: t.amount,
+        amount,
         channel: t.channel,
         date,
         status: 'pending',

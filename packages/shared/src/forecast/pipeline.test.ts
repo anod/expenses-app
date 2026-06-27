@@ -486,6 +486,25 @@ describe('forecast pipeline', () => {
     ]);
   });
 
+  it('installment fullPrice: per-payment amounts sum exactly to the full price', () => {
+    // 7663.10 over 12 monthly payments on day 2, starting Jun 2026.
+    const tmpl: RecurringTemplate = {
+      id: 'inst', description: 'арнона', amount: -638.59, channel: 'bank',
+      cadence: { kind: 'monthly', day: 2, monthEndPolicy: 'clamp' },
+      startDate: '2026-06-02', endDate: '2027-05-02',
+      fullPrice: -7663.1,
+    };
+    const out = generateVirtualOccurrences([tmpl], '2026-06-01', '2027-05-31');
+    expect(out).toHaveLength(12);
+    // Every payment but the last uses the standard per-payment amount.
+    for (const e of out.slice(0, 11)) expect(e.amount).toBe(-638.59);
+    // The final occurrence absorbs the rounding remainder.
+    expect(out[11]!.date).toBe('2027-05-02');
+    expect(out[11]!.amount).toBe(-638.61);
+    const sum = out.reduce((acc, e) => acc + e.amount, 0);
+    expect(Math.round(sum * 100) / 100).toBe(-7663.1);
+  });
+
   it('mergeWithOverrides: skipped persisted entry is filtered out', () => {
     const tmpl: RecurringTemplate = {
       id: 'rw', description: 'therapy', amount: -205, channel: 'bank',

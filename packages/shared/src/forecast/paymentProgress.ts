@@ -73,6 +73,31 @@ export const scheduledPaymentCount = (
   return total;
 };
 
+/** Round a signed amount to whole cents (2 decimals). */
+const roundCents = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * Standard per-payment amount of an installment: the full (signed) price
+ * divided across `count` payments, rounded to cents. Every payment uses this
+ * value except the final one (see {@link installmentFinalPayment}).
+ */
+export const installmentPerPayment = (fullPrice: number, count: number): number => {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`installment count must be >= 1 (got ${count})`);
+  }
+  return roundCents(fullPrice / count);
+};
+
+/**
+ * Final per-payment amount of an installment. It absorbs the rounding
+ * remainder so that `(count - 1) * perPayment + finalPayment === fullPrice`
+ * exactly (to cent precision).
+ */
+export const installmentFinalPayment = (fullPrice: number, count: number): number => {
+  const per = installmentPerPayment(fullPrice, count);
+  return roundCents(fullPrice - per * (count - 1));
+};
+
 export interface PaymentProgress {
   /** Total non-skipped scheduled occurrences from start through end, inclusive. */
   total: number;

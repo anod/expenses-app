@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { endDateForPaymentCount, paymentProgress, scheduledPaymentCount } from './paymentProgress.js';
+import {
+  endDateForPaymentCount,
+  installmentFinalPayment,
+  installmentPerPayment,
+  paymentProgress,
+  scheduledPaymentCount,
+} from './paymentProgress.js';
 import type { RecurringTemplate } from './types.js';
 
 const monthly = (
@@ -180,3 +186,33 @@ describe('scheduledPaymentCount', () => {
     expect(paymentProgress({ ...template, endDate }, endDate)).toEqual({ total: 4, paid: 4 });
   });
 });
+
+describe('installmentPerPayment / installmentFinalPayment', () => {
+  it('splits an evenly-divisible price into identical payments', () => {
+    expect(installmentPerPayment(-1200, 12)).toBe(-100);
+    expect(installmentFinalPayment(-1200, 12)).toBe(-100);
+  });
+
+  it('rounds each payment to cents and absorbs the remainder on the last', () => {
+    // 7663.10 / 12 = 638.591666… → rounds to 638.59 per payment.
+    const per = installmentPerPayment(-7663.1, 12);
+    const last = installmentFinalPayment(-7663.1, 12);
+    expect(per).toBe(-638.59);
+    expect(last).toBe(-638.61); // absorbs the 0.02 remainder
+    expect(roundCents(per * 11 + last)).toBe(-7663.1);
+  });
+
+  it('handles a single payment', () => {
+    expect(installmentPerPayment(-999, 1)).toBe(-999);
+    expect(installmentFinalPayment(-999, 1)).toBe(-999);
+  });
+
+  it('throws when count is below 1', () => {
+    expect(() => installmentPerPayment(-100, 0)).toThrow();
+    expect(() => installmentPerPayment(-100, 1.5)).toThrow();
+  });
+});
+
+function roundCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}

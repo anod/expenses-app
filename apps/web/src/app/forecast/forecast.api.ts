@@ -26,6 +26,8 @@ export interface RecurringWriteBody {
   channel: RecurringTemplate['channel'];
   startDate: string;
   endDate?: string;
+  /** Installment full (signed) price, split across the scheduled payments. */
+  fullPrice?: number;
   cadence?: RecurringTemplate['cadence'];
   /** Legacy flat field — only used when `cadence` is omitted. */
   day?: number;

@@ -181,35 +181,30 @@ describe('StateRepo', () => {
   it('migration 007 preserves recurring skips and recurring-linked ledger overrides', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'expenses-migrations-'));
     try {
-      for (const file of readdirSync(migrationsDir).filter((f) => /^\d+-.*\.sql$/.test(f) && !f.startsWith('007-'))) {
+      for (const file of readdirSync(migrationsDir).filter((f) => /^\d+-.*\.sql$/.test(f) && Number(f.slice(0, 3)) < 7)) {
         copyFileSync(join(migrationsDir, file), join(tempDir, file));
       }
       const db = openDb({ path: ':memory:', migrationsDir: tempDir });
-      const preRepo = new StateRepo(db);
-      preRepo.upsertRecurring({
-        id: 'therapy',
-        description: 'therapy',
-        amount: -205,
-        channel: 'bank',
-        cadence: { kind: 'weekly', dayOfWeek: 5 },
-        startDate: '2026-06-05',
-      });
-      preRepo.addSkip('therapy', '2026-06-12');
-      preRepo.upsertLedger({
-        id: 'ov',
-        description: 'therapy override',
-        amount: -250,
-        channel: 'bank',
-        date: '2026-06-12',
-        status: 'pending',
-        recurringId: 'therapy',
-        occurrenceKey: 'therapy@2026-06-12',
-      });
+      // Seed via raw SQL at the pre-007 schema (StateRepo writes columns added
+      // by later migrations such as full_price, which don't exist yet here).
+      db.prepare(
+        'INSERT INTO recurring_template(id, description, amount, channel, cadence, day, day_of_week, start_date, end_date, month_end_policy) ' +
+        "VALUES ('therapy', 'therapy', -205, 'bank', 'weekly', NULL, 5, '2026-06-05', NULL, 'clamp')",
+      ).run();
+      db.prepare(
+        "INSERT INTO recurring_skip(recurring_id, occurrence_date) VALUES ('therapy', '2026-06-12')",
+      ).run();
+      db.prepare(
+        'INSERT INTO ledger_entry(id, description, amount, channel, date, status, recurring_id, occurrence_key) ' +
+        "VALUES ('ov', 'therapy override', -250, 'bank', '2026-06-12', 'pending', 'therapy', 'therapy@2026-06-12')",
+      ).run();
 
-      copyFileSync(
-        join(migrationsDir, '007-monthly-prediction.sql'),
-        join(tempDir, '007-monthly-prediction.sql'),
-      );
+      // Apply the remaining migrations (007 onwards) in order: 007 rebuilds the
+      // recurring_template table and must preserve the seeded child rows; later
+      // migrations (e.g. 009 full_price) then layer onto the rebuilt table.
+      for (const file of readdirSync(migrationsDir).filter((f) => /^\d+-.*\.sql$/.test(f) && Number(f.slice(0, 3)) >= 7)) {
+        copyFileSync(join(migrationsDir, file), join(tempDir, file));
+      }
       applyMigrations(db, tempDir);
 
       const postRepo = new StateRepo(db);

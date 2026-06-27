@@ -210,6 +210,31 @@ describe('forecast routes', () => {
     expect(repo.listRecurring()).toEqual([]);
   });
 
+  it('POST /api/recurring persists installment fullPrice and round-trips it', async () => {
+    const r = await request(app)
+      .post('/api/recurring')
+      .send({
+        description: 'арнона', amount: -638.59, channel: 'bank',
+        cadence: { kind: 'monthly', day: 2, monthEndPolicy: 'clamp' },
+        startDate: '2026-06-02', endDate: '2027-05-02', fullPrice: -7663.1,
+      })
+      .expect(200);
+    expect(r.body.entity.fullPrice).toBe(-7663.1);
+    const stored = repo.listRecurring().find((t) => t.id === r.body.entity.id);
+    expect(stored?.fullPrice).toBe(-7663.1);
+
+    // PATCH to a plain recurring template (no fullPrice) clears the column.
+    await request(app)
+      .patch(`/api/recurring/${r.body.entity.id}`)
+      .send({
+        description: 'арнона', amount: -638.59, channel: 'bank',
+        cadence: { kind: 'monthly', day: 2, monthEndPolicy: 'clamp' },
+        startDate: '2026-06-02',
+      })
+      .expect(200);
+    expect(repo.listRecurring().find((t) => t.id === r.body.entity.id)?.fullPrice).toBeUndefined();
+  });
+
   it('PATCH /api/settings updates threshold', async () => {
     const r = await request(app)
       .patch('/api/settings')

@@ -177,9 +177,10 @@ export class StateRepo {
         start_date: string;
         end_date: string | null;
         month_end_policy: string;
+        full_price: number | null;
       }>(
         'SELECT id, description, amount, channel, cadence, day, day_of_week, ' +
-        'start_date, end_date, month_end_policy ' +
+        'start_date, end_date, month_end_policy, full_price ' +
         'FROM recurring_template',
       )
         .all()
@@ -203,6 +204,7 @@ export class StateRepo {
           startDate: r.start_date,
         };
         if (r.end_date != null) t.endDate = r.end_date;
+        if (r.full_price != null) t.fullPrice = r.full_price;
         const skips = skipsByTpl.get(r.id);
         if (skips && skips.length > 0) t.skips = skips;
         return t;
@@ -217,12 +219,13 @@ export class StateRepo {
       t.cadence.kind === 'monthly' ? t.cadence.monthEndPolicy : 'clamp';
     this.db
       .prepare(
-        'INSERT INTO recurring_template(id, description, amount, channel, cadence, day, day_of_week, start_date, end_date, month_end_policy) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+        'INSERT INTO recurring_template(id, description, amount, channel, cadence, day, day_of_week, start_date, end_date, month_end_policy, full_price) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET description=excluded.description, amount=excluded.amount, ' +
         'channel=excluded.channel, cadence=excluded.cadence, day=excluded.day, ' +
         'day_of_week=excluded.day_of_week, start_date=excluded.start_date, ' +
-        'end_date=excluded.end_date, month_end_policy=excluded.month_end_policy',
+        'end_date=excluded.end_date, month_end_policy=excluded.month_end_policy, ' +
+        'full_price=excluded.full_price',
       )
       .run(
         t.id,
@@ -235,6 +238,7 @@ export class StateRepo {
         t.startDate,
         t.endDate ?? null,
         monthEndPolicy,
+        t.fullPrice ?? null,
       );
     // Note: skips are intentionally NOT touched here. They are managed
     // via addSkip/removeSkip so importer re-upserts preserve them.
