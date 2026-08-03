@@ -113,7 +113,10 @@ function parseAssumptions(
   warnings: string[],
 ): EsopWorkbookParseResult['assumptions'] {
   const rateRowIndex = firstIndexOrDefault(findRowByLabel(values, '$/nis rate'), 11);
-  const priceRowIndex = 12;
+  // Current stock price sits directly below the rate. Keeping it relative to the
+  // rate row (instead of a hard-coded row) keeps reads symmetric with the writer
+  // in graphEsopReader, so a refresh always updates the cell we read back.
+  const priceRowIndex = rateRowIndex + 1;
   const usdNisRate = asNumber(values[rateRowIndex]?.[3]);
   const currentPriceUsd = cellNumber(values, priceRowIndex, 3);
   const lockDownDays = Math.abs(findValueByLabel(values, 'lock down period') ?? cellNumber(values, 13, 3) ?? 730);

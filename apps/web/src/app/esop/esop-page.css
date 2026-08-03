@@ -211,15 +211,6 @@ td.unlocked {
   box-shadow: var(--md-sys-elevation-level2);
 }
 
-.settings-note {
-  color: var(--md-sys-color-on-surface-variant);
-  font: var(--md-sys-typescale-body-small);
-}
-
-.settings-note a {
-  color: var(--md-sys-color-primary);
-}
-
 .compact {
   margin-top: 0.75rem;
 }
@@ -438,12 +429,6 @@ td {
 
   .price-panel .m3-btn .material-symbols-outlined {
     font-size: 1.25rem;
-  }
-
-  .settings-note {
-    display: block;
-    width: 100%;
-    line-height: 1.35;
   }
 
   .summary-card {

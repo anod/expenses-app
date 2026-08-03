@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { esopUnlockLabel, type EsopCalculationResult, type EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
@@ -9,7 +8,7 @@ import { InfoHintComponent } from '../core/info-hint';
 @Component({
   selector: 'app-esop-page',
   standalone: true,
-  imports: [RouterLink, InfoHintComponent],
+  imports: [InfoHintComponent],
   templateUrl: './esop-page.html',
   styleUrl: './esop-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -144,12 +143,19 @@ export class EsopPageComponent {
     return match.length === 0 ? null : match.reduce((sum, u) => sum + u.amount, 0);
   }
 
-  /** One-line explainer for the price panel's manual market values. */
+  /**
+   * One-line explainer for the price panel's market values, including when each
+   * was last refreshed. Surfaced through the single info tooltip so the panel
+   * stays uncluttered and mobile-friendly.
+   */
   protected marketValuesHint(): string {
+    const esop = this.result();
+    const rate = this.updatedAt(esop?.assumptions.usdNisRateUpdatedAt) ?? 'never refreshed';
+    const price = this.updatedAt(esop?.assumptions.currentPriceUsdUpdatedAt) ?? 'never refreshed';
     return (
-      `USD/NIS rate and ${this.stockSymbol()} price are manual workbook values used for this ` +
-      'calculation. The "updated" time shows when each was last refreshed — tap Update to fetch ' +
-      'the latest from the market source.'
+      `USD/NIS rate and ${this.stockSymbol()} price are workbook values used for this ` +
+      `calculation. Last refreshed — USD/NIS: ${rate}; ${this.stockSymbol()}: ${price}. ` +
+      'Tap Update to fetch the latest from the market source.'
     );
   }
 }

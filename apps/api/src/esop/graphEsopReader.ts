@@ -12,8 +12,7 @@ import { WorkbookResolver, type DriveItemRef } from '../graph/workbookResolver.j
 import { encodeWorksheetName } from '../graph/graphReader.js';
 
 const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,text,numberFormat';
-const MARKET_VALUES_RANGE = 'D12:D13';
-const MARKET_UPDATED_RANGE = 'E12:E13';
+const MARKET_RATE_FALLBACK_ROW = 12; // 1-based D12 when the "$/NIS Rate" label is missing
 const LOCK_DOWN_FALLBACK_ROW = 14;
 const INCOME_TAX_FALLBACK_ROW = 15;
 
@@ -75,13 +74,18 @@ export class GraphEsopReader {
     values: EsopMarketValues,
   ): Promise<EsopCalculationResult> {
     const ref = await this.opts.resolver.resolve(accessToken);
+    // Locate the "$/NIS Rate" row by label so we write to the same cells the
+    // reader reads back. Hard-coding D12:D13 silently missed after the sheet was
+    // restructured, which is why refreshes appeared to do nothing.
+    const usedRange = await this.fetchUsedRange(accessToken, ref);
+    const { rateRow, priceRow } = marketValueRows(usedRange.values);
     const ws = encodeWorksheetName(this.opts.worksheetName);
     const now = new Date().toISOString();
 
     // Write the values (preserving the user's existing number format)...
     await this.opts.client.request({
       method: 'PATCH',
-      path: rangePath(ref, ws, MARKET_VALUES_RANGE),
+      path: rangePath(ref, ws, `D${rateRow}:D${priceRow}`),
       accessToken,
       body: { values: [[values.usdNisRate], [values.currentPriceUsd]] },
     });
@@ -89,7 +93,7 @@ export class GraphEsopReader {
     // text so the ISO strings round-trip instead of being coerced to serials.
     await this.opts.client.request({
       method: 'PATCH',
-      path: rangePath(ref, ws, MARKET_UPDATED_RANGE),
+      path: rangePath(ref, ws, `E${rateRow}:E${priceRow}`),
       accessToken,
       body: {
         values: [
@@ -156,6 +160,17 @@ function workbookSettingTargets(values: RawCellValue[][]): EsopWorkbookSettingsR
     lockDownDays: settingCellAddress(values, 'lock down period', LOCK_DOWN_FALLBACK_ROW),
     incomeTaxRate: settingCellAddress(values, 'income tax', INCOME_TAX_FALLBACK_ROW),
   };
+}
+
+/**
+ * Locate the market-value rows by the "$/NIS Rate" label so writes land on the
+ * exact cells the parser reads. The current stock price sits on the next row.
+ * Falls back to the canonical D12/D13 layout when the label can't be found.
+ */
+function marketValueRows(values: RawCellValue[][]): { rateRow: number; priceRow: number } {
+  const rateIndex = values.findIndex((row) => normalizeHeader(row?.[0]) === '$/nis rate');
+  const rateRow = rateIndex >= 0 ? rateIndex + 1 : MARKET_RATE_FALLBACK_ROW;
+  return { rateRow, priceRow: rateRow + 1 };
 }
 
 interface EsopWorkbookSettingsRecord {

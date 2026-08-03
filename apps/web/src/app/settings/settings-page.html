@@ -133,10 +133,16 @@
             }
           </div>
         </form>
-        <form [formGroup]="esopMarketForm" (ngSubmit)="saveEsopMarketSettings()" class="form-grid settings-subform">
+        <form [formGroup]="esopMarketForm" (ngSubmit)="updateEsopMarketFromSource()" class="form-grid settings-subform">
           <div class="subsection-title">
-            <h3>ESOP market source</h3>
-            <p>Yahoo Finance symbols used when refreshing workbook price and FX values.</p>
+            <div class="subsection-heading">
+              <h3>ESOP market values</h3>
+              <app-info-hint
+                label="About ESOP market values"
+                text="Update & save fetches the latest stock price and USD/NIS rate from Yahoo Finance using the tickers below, then writes them into your workbook."
+              />
+            </div>
+            <p>Fetched from Yahoo Finance and written to the workbook.</p>
           </div>
           <label class="field">
             <span>Stock ticker</span>
@@ -146,86 +152,43 @@
             <span>FX ticker</span>
             <input type="text" formControlName="esopFxSymbol" autocomplete="off" spellcheck="false" />
           </label>
+          @if (esopResult(); as esop) {
+            <div class="market-current">
+              <div class="market-value">
+                <span>USD/NIS rate</span>
+                <strong>{{ esop.assumptions.usdNisRate }} ₪/$</strong>
+                @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
+                  <small>refreshed {{ when }}</small>
+                } @else {
+                  <small>never refreshed</small>
+                }
+              </div>
+              <div class="market-value">
+                <span>Stock price</span>
+                <strong>{{ usd(esop.assumptions.currentPriceUsd) }}</strong>
+                @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
+                  <small>refreshed {{ when }}</small>
+                } @else {
+                  <small>never refreshed</small>
+                }
+              </div>
+            </div>
+          }
           <div class="form-actions">
             <button
               type="submit"
               class="m3-btn primary"
-              [disabled]="esopMarketSaving() || esopMarketForm.invalid || esopMarketForm.pristine"
-            >
-              @if (esopMarketSaving()) {
-                <span class="material-symbols-outlined spin">progress_activity</span> Saving…
-              } @else {
-                <span class="material-symbols-outlined">save</span> Save market source
-              }
-            </button>
-            <button
-              type="button"
-              class="m3-btn"
-              (click)="updateEsopMarketFromSource()"
               [disabled]="esopMarketUpdating() || esopMarketForm.invalid"
             >
               @if (esopMarketUpdating()) {
                 <span class="material-symbols-outlined spin">progress_activity</span> Updating…
               } @else {
-                <span class="material-symbols-outlined">sync</span> Refresh workbook prices
+                <span class="material-symbols-outlined">sync</span> Update &amp; save
               }
             </button>
-            @if (esopMarketSaved()) {
-              <span class="inline-status success">
-                <span class="material-symbols-outlined">check_circle</span> Saved
-              </span>
-            }
             @if (esopMarketMessage(); as message) {
               <span class="inline-status success">
                 <span class="material-symbols-outlined">check_circle</span> {{ message }}
-              </span>
-            }
-          </div>
-        </form>
-        <form [formGroup]="esopPriceForm" (ngSubmit)="saveEsopPriceSettings()" class="form-grid settings-subform">
-          <div class="subsection-title">
-            <div class="subsection-heading">
-              <h3>ESOP market values</h3>
-              <app-info-hint
-                label="About ESOP market values"
-                text="These are manual workbook values used by the ESOP screen. 'Last refreshed' shows when each was last pulled from the market source — use Refresh workbook prices to update them."
-              />
-            </div>
-            <p>Manual workbook values used by the ESOP screen.</p>
-          </div>
-          <label class="field">
-            <span>USD/NIS rate</span>
-            <input type="number" min="0.0001" step="0.0001" formControlName="usdNisRate" />
-            @if (esopResult(); as esop) {
-              @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
-                <small class="field-hint">Last refreshed {{ when }}</small>
-              }
-            }
-          </label>
-          <label class="field">
-            <span>Current stock price</span>
-            <input type="number" min="0" step="0.01" formControlName="currentPriceUsd" />
-            @if (esopResult(); as esop) {
-              @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
-                <small class="field-hint">Last refreshed {{ when }}</small>
-              }
-            }
-          </label>
-          <div class="form-actions">
-            <button
-              type="submit"
-              class="m3-btn primary"
-              [disabled]="esopPriceSaving() || esopPriceForm.invalid || esopPriceForm.pristine"
-            >
-              @if (esopPriceSaving()) {
-                <span class="material-symbols-outlined spin">progress_activity</span> Updating…
-              } @else {
-                <span class="material-symbols-outlined">sync</span> Update & save
-              }
-            </button>
-            @if (esopPriceSaved()) {
-              <span class="inline-status success">
-                <span class="material-symbols-outlined">check_circle</span> Saved
               </span>
             }
           </div>

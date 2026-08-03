@@ -130,6 +130,37 @@
   gap: 0.4rem;
 }
 
+.market-current {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.market-value {
+  display: grid;
+  gap: 0.15rem;
+  flex: 1 1 12rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 10px;
+  background: var(--md-sys-color-surface-container);
+}
+
+.market-value span {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-large);
+}
+
+.market-value strong {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.market-value small {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
 .setting-preview {
   display: grid;
   align-content: center;

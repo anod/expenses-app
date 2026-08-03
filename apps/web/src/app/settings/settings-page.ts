@@ -52,18 +52,10 @@ export class SettingsPageComponent {
     esopStockSymbol: ['MSFT', [Validators.required, Validators.maxLength(64)]],
     esopFxSymbol: ['USDILS=X', [Validators.required, Validators.maxLength(64)]],
   });
-  protected readonly esopPriceForm = this.fb.nonNullable.group({
-    usdNisRate: [0, [Validators.required, Validators.min(0.0001)]],
-    currentPriceUsd: [0, [Validators.required, Validators.min(0)]],
-  });
   protected readonly esopSettingsLoading = signal(true);
   protected readonly esopSettingsSaving = signal(false);
   protected readonly esopSettingsSaved = signal(false);
   protected readonly esopSettingsError = signal<string | null>(null);
-  protected readonly esopPriceSaving = signal(false);
-  protected readonly esopPriceSaved = signal(false);
-  protected readonly esopMarketSaving = signal(false);
-  protected readonly esopMarketSaved = signal(false);
   protected readonly esopMarketUpdating = signal(false);
   protected readonly esopMarketMessage = signal<string | null>(null);
   protected readonly esopMarketError = signal<string | null>(null);
@@ -154,23 +146,6 @@ export class SettingsPageComponent {
     }
   }
 
-  protected async saveEsopMarketSettings(): Promise<void> {
-    if (this.esopMarketForm.invalid || this.esopMarketSaving()) return;
-    this.esopMarketSaving.set(true);
-    this.esopMarketError.set(null);
-    this.esopMarketSaved.set(false);
-    this.esopMarketMessage.set(null);
-    try {
-      await firstValueFrom(this.api.patchSettings(this.marketSettingsPayload()));
-      this.esopMarketSaved.set(true);
-      setTimeout(() => this.esopMarketSaved.set(false), 2500);
-    } catch (err) {
-      this.esopMarketError.set(this.errMsg(err));
-    } finally {
-      this.esopMarketSaving.set(false);
-    }
-  }
-
   protected async updateEsopMarketFromSource(): Promise<void> {
     if (this.esopMarketForm.invalid || this.esopMarketUpdating()) return;
     this.esopMarketUpdating.set(true);
@@ -187,7 +162,7 @@ export class SettingsPageComponent {
       );
       this.esopResult.set(updated.esop);
       this.esopMarketMessage.set(
-        `Updated workbook prices from ${updated.stock.symbol} and ${updated.fx.symbol}.`,
+        `Saved & updated from ${updated.stock.symbol} and ${updated.fx.symbol}.`,
       );
     } catch (err) {
       this.esopMarketError.set(this.errMsg(err));
@@ -205,10 +180,6 @@ export class SettingsPageComponent {
       this.esopSettingsForm.reset({
         lockDownDays: esop.assumptions.lockDownDays,
         incomeTaxRate: esop.assumptions.incomeTaxRate,
-      });
-      this.esopPriceForm.reset({
-        usdNisRate: esop.assumptions.usdNisRate,
-        currentPriceUsd: esop.assumptions.currentPriceUsd,
       });
     } catch (err) {
       this.esopSettingsError.set(this.errMsg(err));
@@ -236,28 +207,6 @@ export class SettingsPageComponent {
       this.esopSettingsError.set(this.errMsg(err));
     } finally {
       this.esopSettingsSaving.set(false);
-    }
-  }
-
-  protected async saveEsopPriceSettings(): Promise<void> {
-    if (this.esopPriceForm.invalid || this.esopPriceSaving()) return;
-    this.esopPriceSaving.set(true);
-    this.esopMarketError.set(null);
-    this.esopPriceSaved.set(false);
-    const body = this.esopPriceForm.getRawValue();
-    try {
-      const updated = await firstValueFrom(this.api.updateEsopMarketValues(body));
-      this.esopResult.set(updated.esop);
-      this.esopPriceForm.reset({
-        usdNisRate: updated.esop.assumptions.usdNisRate,
-        currentPriceUsd: updated.esop.assumptions.currentPriceUsd,
-      });
-      this.esopPriceSaved.set(true);
-      setTimeout(() => this.esopPriceSaved.set(false), 2500);
-    } catch (err) {
-      this.esopMarketError.set(this.errMsg(err));
-    } finally {
-      this.esopPriceSaving.set(false);
     }
   }
 
@@ -298,6 +247,15 @@ export class SettingsPageComponent {
     return new Intl.NumberFormat('en-US', {
       style: 'percent',
       maximumFractionDigits: 1,
+    }).format(value);
+  }
+
+  protected usd(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 2,
     }).format(value);
   }
 

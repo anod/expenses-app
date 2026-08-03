@@ -36,20 +36,14 @@
         <div class="price-summary">
           <span>USD/NIS</span>
           <strong>{{ esop.assumptions.usdNisRate }} ₪/$</strong>
-          @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
-            <small class="muted">updated {{ when }}</small>
-          }
         </div>
         <div class="price-summary">
           <span>{{ stockSymbol() }}</span>
           <strong>{{ usd(esop.assumptions.currentPriceUsd) }}</strong>
-          @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
-            <small class="muted">updated {{ when }}</small>
-          }
         </div>
         <app-info-hint
           class="price-info"
-          label="About these market values"
+          label="Market values &amp; last refresh"
           [text]="marketValuesHint()"
         />
       </div>
@@ -62,10 +56,6 @@
         <span class="material-symbols-outlined" [class.spin]="updating()">refresh</span>
         {{ updating() ? 'Updating…' : 'Update' }}
       </button>
-      <span class="settings-note">
-        Market values and tax settings are managed in
-        <a routerLink="/settings">Settings</a>.
-      </span>
     </div>
 
     @if (updateMessage(); as msg) {
