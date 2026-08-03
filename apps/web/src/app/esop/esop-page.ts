@@ -153,19 +153,15 @@ export class EsopPageComponent {
   }
 
   /**
-   * One-line explainer for the price panel's market values, including when each
-   * was last refreshed. Surfaced through the single info tooltip so the panel
-   * stays uncluttered and mobile-friendly.
+   * Compact "last refreshed" summary for the price panel, one line per market
+   * value. Surfaced through the single info tooltip so the panel stays
+   * uncluttered and mobile-friendly.
    */
   protected marketValuesHint(): string {
     const esop = this.result();
     const rate = this.updatedAt(esop?.assumptions.usdNisRateUpdatedAt) ?? 'never refreshed';
     const price = this.updatedAt(esop?.assumptions.currentPriceUsdUpdatedAt) ?? 'never refreshed';
-    return (
-      `USD/NIS rate and ${this.stockSymbol()} price are workbook values used for this ` +
-      `calculation. Last refreshed — USD/NIS: ${rate}; ${this.stockSymbol()}: ${price}. ` +
-      'Tap Update to fetch the latest from the market source.'
-    );
+    return `Last refreshed\nUSD/NIS: ${rate}\n${this.stockSymbol()}: ${price}`;
   }
 }
 

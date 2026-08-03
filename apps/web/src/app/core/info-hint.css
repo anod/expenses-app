@@ -29,19 +29,33 @@
   line-height: 1;
 }
 
-/* Popover API: rendered in the top layer. UA default centres it in the
-   viewport, which keeps it fully on-screen on small/mobile displays. */
+/* Popover API: rendered in the top layer. The base rules keep it fully
+   on-screen everywhere — the UA centres it in the viewport (margin: auto),
+   which is the graceful fallback when anchor positioning is unavailable. */
 .info-hint-pop {
-  max-width: min(22rem, calc(100vw - 2rem));
+  max-width: min(20rem, calc(100vw - 2rem));
   margin: auto;
-  padding: 0.7rem 0.85rem;
+  padding: 0.6rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 18%, transparent);
   border-radius: var(--md-sys-shape-corner-md);
   background: var(--md-sys-color-inverse-surface);
   color: var(--md-sys-color-inverse-on-surface);
   box-shadow: var(--md-sys-elevation-3, 0 6px 16px rgba(0, 0, 0, 0.35));
-  font: var(--md-sys-typescale-body-medium);
-  line-height: 1.35;
+  font: var(--md-sys-typescale-body-small);
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+/* Where supported, pin the bubble just under the info icon via CSS anchor
+   positioning, flipping above / to the other side when it would overflow. */
+@supports (position-area: bottom) {
+  .info-hint-pop {
+    inset: auto;
+    margin: 0.4rem 0 0 0;
+    position-area: bottom span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline;
+    position-visibility: anchors-visible;
+  }
 }
 
 .info-hint-pop::backdrop {
