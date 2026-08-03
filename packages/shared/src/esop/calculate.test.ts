@@ -402,3 +402,60 @@ describe('reshaped workbook: unlock folded into Amount, extra forecast columns',
     }
   });
 });
+
+describe('past-lockdown totals (summary red value)', () => {
+  // One grant already past the 730-day lock-down edge (2019) and one still
+  // inside it (2024). The red summary value sums only the former; the all-grants
+  // total includes both.
+  const GRANTS: EsopGrant[] = [
+    { id: 'past', grantDate: '2019-01-01', grantPriceUsd: 100, amount: 10 },
+    { id: 'locked', grantDate: '2024-11-15', grantPriceUsd: 300, amount: 8 },
+  ];
+  const ASSUMPTIONS = {
+    usdNisRate: 3.7,
+    currentPriceUsd: 430,
+    lockDownDays: 730,
+    incomeTaxRate: 0.55,
+    asOf: '2026-08-03',
+  };
+
+  it('sums only the grants that have passed the lock-down edge', () => {
+    const result = calculateEsop(GRANTS, ASSUMPTIONS);
+    const past = result.computed.find((r) => r.id === 'past')!;
+    const locked = result.computed.find((r) => r.id === 'locked')!;
+    expect(past.ageDays).toBeGreaterThanOrEqual(ASSUMPTIONS.lockDownDays);
+    expect(locked.ageDays).toBeLessThan(ASSUMPTIONS.lockDownDays);
+
+    // Independently re-derived: only the past-edge grant, valued from first
+    // principles, so this catches a divergence rather than echoing the engine.
+    const expectedNet = grantNet(GRANTS[0], 10, ASSUMPTIONS, ASSUMPTIONS.asOf);
+    const expectedGross = 10 * ASSUMPTIONS.usdNisRate * ASSUMPTIONS.currentPriceUsd;
+    expect(result.pastLockdownTotals.grossNis).toBeCloseTo(expectedGross, 6);
+    expect(result.pastLockdownTotals.netNis).toBeCloseTo(expectedNet, 6);
+
+    // Excludes the still-locked grant, so it is strictly below the all-grants total.
+    expect(result.pastLockdownTotals.netNis).toBeLessThan(result.totals.netNis);
+    expect(result.pastLockdownTotals.netNis).toBeGreaterThan(0);
+  });
+
+  it('equals the all-grants totals once every grant has passed the edge', () => {
+    const result = calculateEsop(GRANTS, { ...ASSUMPTIONS, asOf: '2027-01-01' });
+    expect(result.computed.every((r) => r.ageDays >= ASSUMPTIONS.lockDownDays)).toBe(true);
+    expect(result.pastLockdownTotals.grossNis).toBeCloseTo(result.totals.grossNis, 6);
+    expect(result.pastLockdownTotals.incomeTaxNis).toBeCloseTo(result.totals.incomeTaxNis, 6);
+    expect(result.pastLockdownTotals.stockTaxNis).toBeCloseTo(result.totals.stockTaxNis, 6);
+    expect(result.pastLockdownTotals.netNis).toBeCloseTo(result.totals.netNis, 6);
+  });
+
+  it('is empty (zero, null rate) when no grant has passed the edge', () => {
+    const young: EsopGrant[] = [
+      { id: 'a', grantDate: '2025-06-01', grantPriceUsd: 100, amount: 5 },
+      { id: 'b', grantDate: '2025-09-01', grantPriceUsd: 120, amount: 5 },
+    ];
+    const result = calculateEsop(young, { ...ASSUMPTIONS, asOf: '2026-08-03' });
+    expect(result.computed.every((r) => r.ageDays < ASSUMPTIONS.lockDownDays)).toBe(true);
+    expect(result.pastLockdownTotals.grossNis).toBe(0);
+    expect(result.pastLockdownTotals.netNis).toBe(0);
+    expect(result.pastLockdownTotals.effectiveTaxRate).toBeNull();
+  });
+});

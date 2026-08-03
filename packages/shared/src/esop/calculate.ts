@@ -51,6 +51,13 @@ export function calculateEsop(
   );
   const totals = computeTotals(computed);
 
+  // Totals over only the grants that have passed the lock-down edge (their
+  // stock gain is taxed at the capital-gains rate), so the UI can show net
+  // *excluding* still-locked grants (in red) next to the all-grants total.
+  const pastLockdownTotals = computeTotals(
+    computed.filter((row) => row.ageDays >= normalizedAssumptions.lockDownDays),
+  );
+
   const pastUnlocks: EsopPastUnlock[] = passed.map((m) => ({
     date: m.date,
     label: m.label,
@@ -70,6 +77,7 @@ export function calculateEsop(
     grants,
     computed,
     totals,
+    pastLockdownTotals,
     unblockForecasts,
     pastUnlocks,
     warnings,

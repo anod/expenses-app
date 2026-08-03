@@ -79,6 +79,14 @@ export interface EsopCalculationResult {
   grants: EsopGrant[];
   computed: EsopComputedGrant[];
   totals: EsopTotals;
+  /**
+   * Totals over only the grants that have passed the lock-down edge
+   * (`ageDays >= lockDownDays`), whose stock gain is taxed at the favorable
+   * capital-gains rate. Excludes grants still inside the lock-down period.
+   * The UI shows this (in red) beside the all-grants {@link totals} so you can
+   * compare net *excluding* vs *including* grants that are still locked.
+   */
+  pastLockdownTotals: EsopTotals;
   unblockForecasts: EsopUnblockForecast[];
   /** Unlock milestones already passed (folded into current holdings). */
   pastUnlocks: EsopPastUnlock[];

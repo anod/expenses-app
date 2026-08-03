@@ -125,6 +125,15 @@ export class EsopPageComponent {
     return row.heldAmount - row.amount;
   }
 
+  /**
+   * True when at least one grant is still inside the lock-down period, so the
+   * "excluding still-locked grants" total differs from the all-grants total and
+   * is worth showing as a second figure.
+   */
+  protected hasLockedGrants(esop: EsopCalculationResult): boolean {
+    return esop.computed.some((row) => row.ageDays < esop.assumptions.lockDownDays);
+  }
+
   /** Distinct unlock dates (passed + forecast) as sortable, labelled columns. */
   protected unlockColumns(
     esop: EsopCalculationResult,
