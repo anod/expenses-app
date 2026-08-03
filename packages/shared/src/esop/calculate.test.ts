@@ -210,3 +210,195 @@ describe('calculateEsop', () => {
     expect(result.unblockForecasts).toEqual([]);
   });
 });
+
+/**
+ * First-principles NIS net for a grant at a given held amount, deliberately
+ * re-derived here (not by calling calculate.ts) so these tests catch a real
+ * divergence in the engine's per-grant math rather than tautologically
+ * agreeing with it. Mirrors the workbook formula: gross − income tax − stock
+ * tax, with the stock-tax rate switching to capital gains once the grant is
+ * older than the lock-down period on the valuation date.
+ */
+function grantNet(
+  grant: EsopGrant,
+  held: number,
+  assumptions: { usdNisRate: number; currentPriceUsd: number; lockDownDays: number; incomeTaxRate: number },
+  valuationIso: string,
+): number {
+  const CAPITAL_GAINS = 0.25;
+  const MS_PER_DAY = 86_400_000;
+  const ageDays = Math.floor(
+    (Date.parse(`${valuationIso}T00:00:00.000Z`) - Date.parse(`${grant.grantDate}T00:00:00.000Z`)) / MS_PER_DAY,
+  );
+  const gross = held * assumptions.usdNisRate * assumptions.currentPriceUsd;
+  const incomeTax = held * grant.grantPriceUsd * assumptions.usdNisRate * assumptions.incomeTaxRate;
+  const stockRate = ageDays >= assumptions.lockDownDays ? CAPITAL_GAINS : assumptions.incomeTaxRate;
+  const stockTax = Math.max(0, held * (assumptions.currentPriceUsd - grant.grantPriceUsd) * assumptions.usdNisRate * stockRate);
+  return gross - incomeTax - stockTax;
+}
+
+/** Shares held on `asOf`: the base amount plus every unlock already vested. */
+function heldOn(grant: EsopGrant, asOf: string): number {
+  return grant.amount + (grant.unlocks ?? []).filter((u) => u.date <= asOf).reduce((s, u) => s + u.amount, 0);
+}
+
+/** Shares that unlock strictly after `asOf` and on or before `through`. */
+function unlockedBetween(grant: EsopGrant, asOf: string, through: string): number {
+  return (grant.unlocks ?? [])
+    .filter((u) => u.date > asOf && u.date <= through)
+    .reduce((s, u) => s + u.amount, 0);
+}
+
+describe('grants total and forecast pill consistency', () => {
+  // Mixed grant prices and ages on purpose: a grant that is already past the
+  // lock-down window (2019) and one that only crosses it partway through the
+  // forecast horizon (2024). This guarantees the pill cannot be reproduced by a
+  // naive "total shares × one net-per-share" scaling — it must be a true
+  // per-grant sum — so the test has teeth.
+  const GRANTS: EsopGrant[] = [
+    {
+      id: 'old',
+      grantDate: '2019-01-01',
+      grantPriceUsd: 100,
+      amount: 10,
+      unlocks: [
+        { date: '2026-08-31', amount: 3 },
+        { date: '2026-11-30', amount: 3 },
+        { date: '2027-02-28', amount: 3 },
+      ],
+    },
+    {
+      id: 'mid',
+      grantDate: '2024-11-15',
+      grantPriceUsd: 300,
+      amount: 8,
+      unlocks: [
+        { date: '2026-08-31', amount: 2 },
+        { date: '2026-11-30', amount: 2 },
+        { date: '2027-02-28', amount: 2 },
+      ],
+    },
+  ];
+  const ASSUMPTIONS = {
+    usdNisRate: 3.7,
+    currentPriceUsd: 430,
+    lockDownDays: 730,
+    incomeTaxRate: 0.55,
+    asOf: '2026-08-03',
+  };
+
+  it('current totals equal the sum of the per-grant rows', () => {
+    const result = calculateEsop(GRANTS, ASSUMPTIONS);
+    const sum = (pick: (r: (typeof result.computed)[number]) => number) =>
+      result.computed.reduce((acc, row) => acc + pick(row), 0);
+
+    expect(result.totals.grossNis).toBeCloseTo(sum((r) => r.grossNis), 6);
+    expect(result.totals.incomeTaxNis).toBeCloseTo(sum((r) => r.incomeTaxNis), 6);
+    expect(result.totals.stockTaxNis).toBeCloseTo(sum((r) => r.stockTaxNis), 6);
+    expect(result.totals.netNis).toBeCloseTo(sum((r) => r.netNis), 6);
+  });
+
+  it('each forecast pill equals the grants revalued and summed at that unlock date', () => {
+    const result = calculateEsop(GRANTS, ASSUMPTIONS);
+    expect(result.unblockForecasts.length).toBe(3);
+
+    for (const forecast of result.unblockForecasts) {
+      let shares = 0;
+      let gross = 0;
+      let net = 0;
+      for (const grant of GRANTS) {
+        const held = heldOn(grant, ASSUMPTIONS.asOf) + unlockedBetween(grant, ASSUMPTIONS.asOf, forecast.date);
+        shares += held;
+        gross += held * ASSUMPTIONS.usdNisRate * ASSUMPTIONS.currentPriceUsd;
+        net += grantNet(grant, held, ASSUMPTIONS, forecast.date);
+      }
+      expect(forecast.totalAmount).toBe(shares);
+      expect(forecast.sumNis).toBeCloseTo(gross, 6);
+      expect(forecast.netNis).toBeCloseTo(net, 6);
+    }
+  });
+
+  it('forecast net is a true per-grant sum, not a flat per-share scaling', () => {
+    const result = calculateEsop(GRANTS, ASSUMPTIONS);
+    const currentShares = result.computed.reduce((s, r) => s + r.heldAmount, 0);
+    const netPerShareNow = result.totals.netNis / currentShares;
+
+    // A naive forecast (total shares × current net-per-share) diverges from the
+    // real per-grant revaluation; assert the engine does NOT take that shortcut.
+    const last = result.unblockForecasts.at(-1)!;
+    const naive = last.totalAmount * netPerShareNow;
+    expect(Math.abs(last.netNis - naive)).toBeGreaterThan(1);
+  });
+});
+
+describe('reshaped workbook: unlock folded into Amount, extra forecast columns', () => {
+  // Mirrors the user's edit: the earliest (already-vested) tranche is merged
+  // into the Amount column and no longer has its own column, while two more
+  // dated forecast columns (Nov, Feb) are added alongside the existing Aug one.
+  const reshaped: RawUsedRange = {
+    address: 'ESOP!A1:L15',
+    rowCount: 15,
+    columnCount: 12,
+    values: [
+      ['Grant Price', 'Grant Date', '', 'Amount', 'Sum', 'Income Tax', 'Stock Tax', 'Net', 'Overall % Tax', serial('2026-08-31'), serial('2026-11-30'), serial('2027-02-28')],
+      [211.02, 44074, -2089.35, 16, '', '', '', '', '', 5, 5, 5],
+      [239.06, 44423, -1740.35, 25, '', '', '', '', '', 5, 5, 5],
+      [277.19, 44804, -1359.35, 34, '', '', '', '', '', 8, 7, 7],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['Sum', '', '', 75, '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+      ['$/NIS Rate', '', '', 2.99, '', '', '', '', '', '', '', ''],
+      ['#VALUE!', '', '', 420.26, '', '', '', '', '', '', '', ''],
+      ['Lock down period', '', '', -730, '', '', '', '', '', '', '', ''],
+      ['Income Tax', '', '', 0.55, '', '', '', '', '', '', '', ''],
+    ],
+  };
+
+  it('parses the merged Amount and all three dated forecast columns', () => {
+    const parsed = parseEsopUsedRange(reshaped);
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.grants).toHaveLength(3);
+    expect(parsed.grants[0]).toEqual({
+      id: 'excel:2',
+      grantPriceUsd: 211.02,
+      grantDate: '2020-08-31',
+      amount: 16,
+      unlocks: [
+        { date: '2026-08-31', amount: 5 },
+        { date: '2026-11-30', amount: 5 },
+        { date: '2027-02-28', amount: 5 },
+      ],
+    });
+  });
+
+  it('forecasts Aug/Nov/Feb with consistent, per-grant-summed net before any unlock', () => {
+    const parsed = parseEsopUsedRange(reshaped);
+    const assumptions = { ...parsed.assumptions, asOf: '2026-08-03' };
+    const result = calculateEsop(parsed.grants, assumptions);
+
+    // Nothing has vested yet at asOf, so Amount is held as-is and there are no
+    // folded past unlocks (the May tranche now lives inside Amount).
+    expect(result.pastUnlocks).toEqual([]);
+    expect(result.computed[0]?.heldAmount).toBe(16);
+
+    expect(result.unblockForecasts.map((f) => f.label)).toEqual([
+      'After Aug 31, 2026',
+      'After Nov 30, 2026',
+      'After Feb 28, 2027',
+    ]);
+    // Cumulative shares unlocked across the three dates: 18, then 35, then 52.
+    expect(result.unblockForecasts.map((f) => f.unlockedAmount)).toEqual([18, 35, 52]);
+
+    for (const forecast of result.unblockForecasts) {
+      const net = parsed.grants.reduce(
+        (sum, grant) => sum + grantNet(grant, heldOn(grant, assumptions.asOf) + unlockedBetween(grant, assumptions.asOf, forecast.date), assumptions, forecast.date),
+        0,
+      );
+      expect(forecast.netNis).toBeCloseTo(net, 6);
+    }
+  });
+});
