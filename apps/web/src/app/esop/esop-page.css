@@ -256,28 +256,17 @@ input {
   color: var(--md-sys-color-on-primary-container);
 }
 
-/* Net excluding grants still within the lock-down period, called out in red. */
-.summary-card strong.past-lock-amount,
-.summary-card.primary strong.past-lock-amount {
-  color: var(--md-sys-color-error);
+/* Primary figure = total excluding grants still within the lock-down period,
+   shown in the card's default (light) colour. */
+.summary-card strong.past-lock-amount {
+  color: inherit;
 }
 
-/* All-grants value (including still-locked grants): smaller, muted, underneath. */
+/* Secondary figure = all-grants total (including still-locked grants), called
+   out in red beneath the primary value. */
 .incl-lock-amount {
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--md-sys-color-error);
   font: var(--md-sys-typescale-body-small);
-}
-
-.lock-tag {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.85em;
-  opacity: 0.8;
-}
-
-.summary-card.primary .incl-lock-amount {
-  color: var(--md-sys-color-on-primary-container);
-  opacity: 0.8;
 }
 
 .forecast-card {
