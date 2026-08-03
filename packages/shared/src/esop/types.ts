@@ -1,12 +1,18 @@
 import type { RawUsedRange } from '../parsers/usedRange.js';
 
+export interface EsopUnlock {
+  /** ISO date (yyyy-mm-dd) the tranche vests on — read from the workbook column header. */
+  date: string;
+  amount: number;
+}
+
 export interface EsopGrant {
   id: string;
   grantDate: string;
   grantPriceUsd: number;
   amount: number;
-  unblockMay31Amount?: number;
-  unblockAug31Amount?: number;
+  /** Dated unlock tranches, one per workbook unlock column that has shares for this grant. */
+  unlocks?: EsopUnlock[];
 }
 
 export interface EsopAssumptions {
@@ -15,8 +21,6 @@ export interface EsopAssumptions {
   lockDownDays: number;
   incomeTaxRate: number;
   asOf: string;
-  unblockMay31Date?: string;
-  unblockAug31Date?: string;
   /** ISO datetime the USD/NIS rate was last refreshed, or null if unknown. */
   usdNisRateUpdatedAt?: string | null;
   /** ISO datetime the stock price was last refreshed, or null if unknown. */
@@ -48,9 +52,9 @@ export interface EsopTotals {
 }
 
 export interface EsopUnblockForecast {
-  id: 'may31' | 'aug31';
+  /** Unlock date this forecast values the holdings at (yyyy-mm-dd). */
+  date: string;
   label: string;
-  asOf: string;
   unlockedAmount: number;
   totalAmount: number;
   sumNis: number;
@@ -65,9 +69,8 @@ export interface EsopUnblockForecast {
  * (e.g. "May 31 · +47 shares included") instead of showing it as a forecast.
  */
 export interface EsopPastUnlock {
-  id: 'may31' | 'aug31';
-  label: string;
   date: string;
+  label: string;
   amount: number;
 }
 

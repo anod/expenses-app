@@ -81,7 +81,7 @@
         <div>
           <strong>Already unlocked — folded into current holdings</strong>
           <div class="past-chips">
-            @for (u of esop.pastUnlocks; track u.id) {
+            @for (u of esop.pastUnlocks; track u.date) {
               <span class="past-chip">{{ u.label }} · +{{ u.amount }} shares</span>
             }
           </div>
@@ -121,7 +121,7 @@
           </div>
         </div>
         <div class="forecast-grid">
-          @for (forecast of esop.unblockForecasts; track forecast.id) {
+          @for (forecast of esop.unblockForecasts; track forecast.date) {
             <div class="forecast-item">
               <div class="forecast-main">
                 <span>{{ forecast.label }}</span>
@@ -163,8 +163,9 @@
               <th>Age</th>
               <th>Grant price</th>
               <th>Amount</th>
-              <th>May 31</th>
-              <th>Aug 31</th>
+              @for (col of unlockColumns(esop); track col.date) {
+                <th>{{ col.label }}</th>
+              }
               <th>Gross</th>
               <th>Income tax</th>
               <th>Stock tax</th>
@@ -184,26 +185,18 @@
                     <span class="muted">(+{{ heldExtra(row) }})</span>
                   }
                 </td>
-                <td data-label="May 31" [class.unlocked]="unlockPassed(esop, 'may31')">
-                  @if (row.unblockMay31Amount != null) {
-                    {{ row.unblockMay31Amount }}@if (unlockPassed(esop, 'may31')) {<span
-                        class="tick"
-                        title="Unlocked — in current holdings"
-                      > ✓</span>}
-                  } @else {
-                    —
-                  }
-                </td>
-                <td data-label="Aug 31" [class.unlocked]="unlockPassed(esop, 'aug31')">
-                  @if (row.unblockAug31Amount != null) {
-                    {{ row.unblockAug31Amount }}@if (unlockPassed(esop, 'aug31')) {<span
-                        class="tick"
-                        title="Unlocked — in current holdings"
-                      > ✓</span>}
-                  } @else {
-                    —
-                  }
-                </td>
+                @for (col of unlockColumns(esop); track col.date) {
+                  <td [attr.data-label]="col.label" [class.unlocked]="col.passed">
+                    @if (grantUnlockAmount(row, col.date); as amt) {
+                      {{ amt }}@if (col.passed) {<span
+                          class="tick"
+                          title="Unlocked — in current holdings"
+                        > ✓</span>}
+                    } @else {
+                      —
+                    }
+                  </td>
+                }
                 <td data-label="Gross">{{ nis(row.grossNis) }}</td>
                 <td data-label="Income tax">{{ nis(row.incomeTaxNis) }}</td>
                 <td data-label="Stock tax" [class.lock-rule]="isLockedGrant(row, esop)">

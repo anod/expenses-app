@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { calculateEsop } from './calculate.js';
 import { parseEsopUsedRange } from './parseWorkbook.js';
+import type { EsopGrant } from './types.js';
 import type { RawUsedRange } from '../parsers/usedRange.js';
+
+/** Excel date serial for an ISO date (mirrors excelSerialToIsoDate's epoch). */
+function serial(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000) + 25_569;
+}
 
 const dumpedUsedRange: RawUsedRange = {
   address: 'ESOP!A1:K15',
   rowCount: 15,
   columnCount: 11,
   values: [
-    ['Grant Price', 'Grant Date', '', 'Amount', 'Sum', 'Income Tax', 'Stock Tax', 'Net', 'Overall % Tax', 'Amount May31', 46265],
+    ['Grant Price', 'Grant Date', '', 'Amount', 'Sum', 'Income Tax', 'Stock Tax', 'Net', 'Overall % Tax', serial('2026-05-31'), serial('2026-08-31')],
     [211.02, 44074, -2089.35300034722, 11, 13822.3514, 3817.24629, 1720.4759, 8284.62921, 0.400635320991767, 5, 5],
     [239.06, 44423, -1740.35300034722, 20, 25131.548, 7862.6834, 2708.94, 14559.9246, 0.420651501451482, 5, 5],
     [277.19, 44804, -1359.35300034722, 29, 36440.7446, 13219.329695, 3101.399925, 20120.01498, 0.447870365963927, 8, 7],
@@ -37,8 +44,6 @@ describe('parseEsopUsedRange', () => {
       incomeTaxRate: 0.55,
       usdNisRateUpdatedAt: null,
       currentPriceUsdUpdatedAt: null,
-      unblockMay31Date: '2026-05-31',
-      unblockAug31Date: '2026-08-31',
     });
     expect(parsed.grants).toHaveLength(6);
     expect(parsed.grants[0]).toEqual({
@@ -46,8 +51,10 @@ describe('parseEsopUsedRange', () => {
       grantPriceUsd: 211.02,
       grantDate: '2020-08-31',
       amount: 11,
-      unblockMay31Amount: 5,
-      unblockAug31Amount: 5,
+      unlocks: [
+        { date: '2026-05-31', amount: 5 },
+        { date: '2026-08-31', amount: 5 },
+      ],
     });
   });
 
@@ -87,16 +94,14 @@ describe('calculateEsop', () => {
     expect(result.pastUnlocks).toEqual([]);
     expect(result.unblockForecasts).toHaveLength(2);
     expect(result.unblockForecasts[0]).toMatchObject({
-      id: 'may31',
-      label: 'After May 31',
-      asOf: '2026-05-31',
+      date: '2026-05-31',
+      label: 'After May 31, 2026',
       unlockedAmount: 47,
       totalAmount: 197,
     });
     expect(result.unblockForecasts[1]).toMatchObject({
-      id: 'aug31',
-      label: 'After Aug 31',
-      asOf: '2026-08-31',
+      date: '2026-08-31',
+      label: 'After Aug 31, 2026',
       unlockedAmount: 92,
       totalAmount: 242,
     });
@@ -117,14 +122,13 @@ describe('calculateEsop', () => {
     expect(result.computed[0]?.grossNis).toBeCloseTo(16 * 2.99 * 420.26, 6);
 
     expect(result.pastUnlocks).toEqual([
-      { id: 'may31', label: 'May 31', date: '2026-05-31', amount: 47 },
+      { date: '2026-05-31', label: 'May 31, 2026', amount: 47 },
     ]);
 
     expect(result.unblockForecasts).toHaveLength(1);
     expect(result.unblockForecasts[0]).toMatchObject({
-      id: 'aug31',
-      label: 'After Aug 31',
-      asOf: '2026-08-31',
+      date: '2026-08-31',
+      label: 'After Aug 31, 2026',
       unlockedAmount: 45,
       totalAmount: 242,
     });
@@ -142,10 +146,51 @@ describe('calculateEsop', () => {
 
     expect(result.computed[0]?.heldAmount).toBe(21); // 11 + 5 + 5
     expect(result.pastUnlocks).toEqual([
-      { id: 'may31', label: 'May 31', date: '2026-05-31', amount: 47 },
-      { id: 'aug31', label: 'Aug 31', date: '2026-08-31', amount: 45 },
+      { date: '2026-05-31', label: 'May 31, 2026', amount: 47 },
+      { date: '2026-08-31', label: 'Aug 31, 2026', amount: 45 },
     ]);
     expect(result.unblockForecasts).toEqual([]);
+  });
+
+  it('forecasts unlock dates across multiple years from the column dates', () => {
+    const grants: EsopGrant[] = [
+      {
+        id: 'g1',
+        grantDate: '2020-01-01',
+        grantPriceUsd: 100,
+        amount: 0,
+        unlocks: [
+          { date: '2026-05-31', amount: 10 },
+          { date: '2026-08-31', amount: 10 },
+          { date: '2027-05-31', amount: 10 },
+          { date: '2027-08-31', amount: 10 },
+        ],
+      },
+    ];
+    const result = calculateEsop(grants, {
+      usdNisRate: 4,
+      currentPriceUsd: 200,
+      lockDownDays: 730,
+      incomeTaxRate: 0.5,
+      asOf: '2026-01-01',
+    });
+
+    expect(result.pastUnlocks).toEqual([]);
+    expect(result.unblockForecasts.map((f) => f.date)).toEqual([
+      '2026-05-31',
+      '2026-08-31',
+      '2027-05-31',
+      '2027-08-31',
+    ]);
+    expect(result.unblockForecasts.map((f) => f.label)).toEqual([
+      'After May 31, 2026',
+      'After Aug 31, 2026',
+      'After May 31, 2027',
+      'After Aug 31, 2027',
+    ]);
+    // Cumulative unlocked amounts across both years.
+    expect(result.unblockForecasts.map((f) => f.unlockedAmount)).toEqual([10, 20, 30, 40]);
+    expect(result.unblockForecasts.map((f) => f.totalAmount)).toEqual([10, 20, 30, 40]);
   });
 
   it('returns null effective tax rates when gross proceeds are zero', () => {

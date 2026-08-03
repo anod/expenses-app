@@ -1,6 +1,6 @@
 import type { RawCellValue } from '../contracts/types.js';
 import type { RawUsedRange } from '../parsers/usedRange.js';
-import type { EsopGrant, EsopWorkbookParseResult } from './types.js';
+import type { EsopGrant, EsopUnlock, EsopWorkbookParseResult } from './types.js';
 
 const REQUIRED_HEADERS = ['grant price', 'grant date', 'amount'];
 const EXCEL_EPOCH_OFFSET = 25_569;
@@ -10,10 +10,8 @@ interface HeaderMap {
   grantPrice: number;
   grantDate: number;
   amount: number;
-  unblockMay31?: number;
-  unblockAug31?: number;
-  unblockMay31Date?: string;
-  unblockAug31Date?: string;
+  /** Every column whose header is a date serial/ISO date — one unlock tranche each. */
+  unlocks: { index: number; date: string }[];
 }
 
 export function parseEsopUsedRange(usedRange: RawUsedRange): EsopWorkbookParseResult {
@@ -38,10 +36,7 @@ export function parseEsopUsedRange(usedRange: RawUsedRange): EsopWorkbookParseRe
   }
 
   const grants = parseGrants(values, header.rowIndex, header.columns, warnings);
-  const assumptions = {
-    ...parseAssumptions(values, warnings),
-    ...unblockDates(header.columns),
-  };
+  const assumptions = parseAssumptions(values, warnings);
   return { assumptions, grants, warnings };
 }
 
@@ -54,24 +49,15 @@ function findHeader(
     const hasRequired = REQUIRED_HEADERS.every((h) => normalized.includes(h));
     if (!hasRequired) continue;
     const rawHeader = values[r] ?? [];
-    const columns: HeaderMap = {
+    const base = {
       grantPrice: normalized.indexOf('grant price'),
       grantDate: normalized.indexOf('grant date'),
       amount: normalized.indexOf('amount'),
     };
-    const unblockMay31 = findMay31Column(normalized, rawHeader);
-    const unblockAug31 = findAug31Column(normalized, rawHeader);
-    if (unblockMay31) {
-      columns.unblockMay31 = unblockMay31.index;
-      if (unblockMay31.date) columns.unblockMay31Date = unblockMay31.date;
-    }
-    if (unblockAug31) {
-      columns.unblockAug31 = unblockAug31.index;
-      if (unblockAug31.date) columns.unblockAug31Date = unblockAug31.date;
-    }
-    if (!columns.unblockMay31Date && columns.unblockAug31Date) {
-      columns.unblockMay31Date = `${columns.unblockAug31Date.slice(0, 4)}-05-31`;
-    }
+    const columns: HeaderMap = {
+      ...base,
+      unlocks: detectUnlockColumns(rawHeader, text?.[r], base),
+    };
     return {
       rowIndex: r,
       columns,
@@ -92,8 +78,7 @@ function parseGrants(
     const grantPrice = asNumber(row[columns.grantPrice]);
     const grantDateSerial = asNumber(row[columns.grantDate]);
     const amount = asNumber(row[columns.amount]);
-    const unblockMay31Amount = optionalAmount(row[columns.unblockMay31 ?? -1]);
-    const unblockAug31Amount = optionalAmount(row[columns.unblockAug31 ?? -1]);
+    const unlocks = readGrantUnlocks(row, columns.unlocks);
     const hasAnyGrantCell = [row[columns.grantPrice], row[columns.grantDate], row[columns.amount]]
       .some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '');
 
@@ -116,8 +101,7 @@ function parseGrants(
       grantPriceUsd: grantPrice,
       grantDate,
       amount,
-      ...(unblockMay31Amount !== undefined ? { unblockMay31Amount } : {}),
-      ...(unblockAug31Amount !== undefined ? { unblockAug31Amount } : {}),
+      ...(unlocks.length > 0 ? { unlocks } : {}),
     });
   }
   if (grants.length === 0) warnings.push('No ESOP grant rows detected');
@@ -210,53 +194,57 @@ function optionalAmount(value: RawCellValue | undefined): number | undefined {
   return amount === null ? undefined : amount;
 }
 
-function findMay31Column(
-  normalized: string[],
+const MIN_UNLOCK_SERIAL = 40_000; // ~2009-07
+const MAX_UNLOCK_SERIAL = 80_000; // ~2119
+
+/**
+ * An unlock column is any header (other than the grant price/date/amount
+ * columns) that holds a date: an Excel date serial, or an explicit ISO date
+ * string. The header's date is the tranche's vest date.
+ */
+function detectUnlockColumns(
   rawHeader: RawCellValue[],
-): { index: number; date?: string } | null {
-  const textIndex = normalized.findIndex((header) => {
-    const compact = header.replace(/\s/g, '');
-    return compact.includes('may31') || compact.includes('31-may') || compact.includes('31may');
-  });
-  if (textIndex >= 0) return { index: textIndex };
-  return findDateSerialColumn(rawHeader, '05-31');
+  textHeader: RawCellValue[] | undefined,
+  known: { grantPrice: number; grantDate: number; amount: number },
+): { index: number; date: string }[] {
+  const skip = new Set([known.grantPrice, known.grantDate, known.amount]);
+  const unlocks: { index: number; date: string }[] = [];
+  for (let c = 0; c < rawHeader.length; c++) {
+    if (skip.has(c)) continue;
+    const date = headerUnlockDate(rawHeader[c], textHeader?.[c]);
+    if (date) unlocks.push({ index: c, date });
+  }
+  return unlocks;
 }
 
-function findAug31Column(
-  normalized: string[],
-  rawHeader: RawCellValue[],
-): { index: number; date?: string } | null {
-  const textIndex = normalized.findIndex((header) => {
-    const compact = header.replace(/\s/g, '');
-    return compact.includes('aug31') || compact.includes('31-aug') || compact.includes('31aug');
-  });
-  if (textIndex >= 0) return { index: textIndex };
-  return findDateSerialColumn(rawHeader, '08-31');
+function headerUnlockDate(
+  rawValue: RawCellValue | undefined,
+  textValue: RawCellValue | undefined,
+): string | null {
+  const serial = asNumber(rawValue);
+  if (serial !== null && serial >= MIN_UNLOCK_SERIAL && serial <= MAX_UNLOCK_SERIAL) {
+    const iso = excelSerialToIsoDate(serial);
+    if (iso) return iso;
+  }
+  for (const candidate of [rawValue, textValue]) {
+    if (typeof candidate === 'string') {
+      const match = /(\d{4})-(\d{2})-(\d{2})/.exec(candidate.trim());
+      if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+  }
+  return null;
 }
 
-function findDateSerialColumn(
-  rawHeader: RawCellValue[],
-  monthDay: '05-31' | '08-31',
-): { index: number; date?: string } | null {
-  const serialIndex = rawHeader.findIndex((header) => {
-    const serial = asNumber(header);
-    if (serial === null) return false;
-    const date = excelSerialToIsoDate(serial);
-    return date?.slice(5) === monthDay;
-  });
-  if (serialIndex < 0) return null;
-  const date = excelSerialToIsoDate(asNumber(rawHeader[serialIndex]) ?? 0);
-  return date ? { index: serialIndex, date } : { index: serialIndex };
-}
-
-function unblockDates(columns: HeaderMap): {
-  unblockMay31Date?: string;
-  unblockAug31Date?: string;
-} {
-  const dates: { unblockMay31Date?: string; unblockAug31Date?: string } = {};
-  if (columns.unblockMay31Date) dates.unblockMay31Date = columns.unblockMay31Date;
-  if (columns.unblockAug31Date) dates.unblockAug31Date = columns.unblockAug31Date;
-  return dates;
+function readGrantUnlocks(
+  row: RawCellValue[],
+  columns: { index: number; date: string }[],
+): EsopUnlock[] {
+  const unlocks: EsopUnlock[] = [];
+  for (const column of columns) {
+    const amount = optionalAmount(row[column.index]);
+    if (amount !== undefined && amount > 0) unlocks.push({ date: column.date, amount });
+  }
+  return unlocks.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 export function excelSerialToIsoDate(serial: number): string | null {

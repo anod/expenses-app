@@ -12,24 +12,30 @@ const DEMO_GRANTS: EsopGrant[] = [
     grantDate: '2021-09-01',
     grantPriceUsd: 210,
     amount: 12,
-    unblockMay31Amount: 4,
-    unblockAug31Amount: 4,
+    unlocks: [
+      { date: '2026-05-31', amount: 4 },
+      { date: '2026-08-31', amount: 4 },
+    ],
   },
   {
     id: 'demo:esop:2022',
     grantDate: '2022-09-01',
     grantPriceUsd: 245,
     amount: 18,
-    unblockMay31Amount: 6,
-    unblockAug31Amount: 6,
+    unlocks: [
+      { date: '2026-08-31', amount: 6 },
+      { date: '2027-05-31', amount: 6 },
+    ],
   },
   {
     id: 'demo:esop:2024',
     grantDate: '2024-09-01',
     grantPriceUsd: 375,
     amount: 24,
-    unblockMay31Amount: 8,
-    unblockAug31Amount: 8,
+    unlocks: [
+      { date: '2027-05-31', amount: 8 },
+      { date: '2027-08-31', amount: 8 },
+    ],
   },
 ];
 

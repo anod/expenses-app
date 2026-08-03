@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
+import { esopUnlockLabel, type EsopCalculationResult, type EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 import { errorMessage as formatApiError } from '../core/api-error';
 import { InfoHintComponent } from '../core/info-hint';
@@ -126,8 +126,22 @@ export class EsopPageComponent {
     return row.heldAmount - row.amount;
   }
 
-  protected unlockPassed(esop: EsopCalculationResult, id: 'may31' | 'aug31'): boolean {
-    return esop.pastUnlocks.some((u) => u.id === id);
+  /** Distinct unlock dates (passed + forecast) as sortable, labelled columns. */
+  protected unlockColumns(
+    esop: EsopCalculationResult,
+  ): { date: string; label: string; passed: boolean }[] {
+    return [
+      ...esop.pastUnlocks.map((u) => ({ date: u.date, passed: true })),
+      ...esop.unblockForecasts.map((f) => ({ date: f.date, passed: false })),
+    ]
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      .map((c) => ({ ...c, label: esopUnlockLabel(c.date) }));
+  }
+
+  /** Shares a grant unlocks on a given date, or null when it has none then. */
+  protected grantUnlockAmount(row: EsopComputedGrant, date: string): number | null {
+    const match = (row.unlocks ?? []).filter((u) => u.date === date);
+    return match.length === 0 ? null : match.reduce((sum, u) => sum + u.amount, 0);
   }
 
   /** One-line explainer for the price panel's manual market values. */
