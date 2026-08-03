@@ -99,8 +99,13 @@
 .price-values {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem 1.5rem;
   flex: 1 1 auto;
+}
+
+.price-info {
+  align-self: center;
 }
 
 .price-summary small {

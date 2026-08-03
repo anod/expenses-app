@@ -129,6 +129,15 @@ export class EsopPageComponent {
   protected unlockPassed(esop: EsopCalculationResult, id: 'may31' | 'aug31'): boolean {
     return esop.pastUnlocks.some((u) => u.id === id);
   }
+
+  /** One-line explainer for the price panel's manual market values. */
+  protected marketValuesHint(): string {
+    return (
+      `USD/NIS rate and ${this.stockSymbol()} price are manual workbook values used for this ` +
+      'calculation. The "updated" time shows when each was last refreshed — tap Update to fetch ' +
+      'the latest from the market source.'
+    );
+  }
 }
 
 function errorMessage(err: unknown): string {

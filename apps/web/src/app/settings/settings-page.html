@@ -184,7 +184,13 @@
         </form>
         <form [formGroup]="esopPriceForm" (ngSubmit)="saveEsopPriceSettings()" class="form-grid settings-subform">
           <div class="subsection-title">
-            <h3>ESOP market values</h3>
+            <div class="subsection-heading">
+              <h3>ESOP market values</h3>
+              <app-info-hint
+                label="About ESOP market values"
+                text="These are manual workbook values used by the ESOP screen. 'Last refreshed' shows when each was last pulled from the market source — use Refresh workbook prices to update them."
+              />
+            </div>
             <p>Manual workbook values used by the ESOP screen.</p>
           </div>
           <label class="field">
@@ -193,11 +199,6 @@
             @if (esopResult(); as esop) {
               @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
                 <small class="field-hint">Last refreshed {{ when }}</small>
-              } @else {
-                <app-info-hint
-                  label="USD/NIS refresh status"
-                  text="This value has not been refreshed from its market source yet. Use the Refresh workbook prices button to fetch the latest USD/NIS rate."
-                />
               }
             }
           </label>
@@ -207,11 +208,6 @@
             @if (esopResult(); as esop) {
               @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
                 <small class="field-hint">Last refreshed {{ when }}</small>
-              } @else {
-                <app-info-hint
-                  label="Price refresh status"
-                  text="This value has not been refreshed from its market source yet. Use the Refresh workbook prices button to fetch the latest stock price."
-                />
               }
             }
           </label>

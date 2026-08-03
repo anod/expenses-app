@@ -124,6 +124,12 @@
   font: var(--md-sys-typescale-body-medium);
 }
 
+.subsection-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .setting-preview {
   display: grid;
   align-content: center;
