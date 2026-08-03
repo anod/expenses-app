@@ -300,6 +300,14 @@ export class SettingsPageComponent {
     }).format(value);
   }
 
+  /** Human-readable "last updated" label for a stored ISO timestamp. */
+  protected updatedAt(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  }
+
   private errMsg(err: unknown): string {
     return errorMessage(err);
   }

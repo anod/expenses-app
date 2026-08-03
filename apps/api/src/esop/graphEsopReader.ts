@@ -13,6 +13,7 @@ import { encodeWorksheetName } from '../graph/graphReader.js';
 
 const USED_RANGE_SELECT = 'address,rowCount,columnCount,values,text,numberFormat';
 const MARKET_VALUES_RANGE = 'D12:D13';
+const MARKET_UPDATED_RANGE = 'E12:E13';
 const LOCK_DOWN_FALLBACK_ROW = 14;
 const INCOME_TAX_FALLBACK_ROW = 15;
 
@@ -34,6 +35,10 @@ export interface EsopReaderOptions {
 export interface EsopMarketValues {
   usdNisRate: number;
   currentPriceUsd: number;
+  /** ISO datetime the rate was fetched. Defaults to now when omitted. */
+  usdNisRateUpdatedAt?: string;
+  /** ISO datetime the price was fetched. Defaults to now when omitted. */
+  currentPriceUsdUpdatedAt?: string;
 }
 
 export interface EsopWorkbookSettings {
@@ -71,14 +76,28 @@ export class GraphEsopReader {
   ): Promise<EsopCalculationResult> {
     const ref = await this.opts.resolver.resolve(accessToken);
     const ws = encodeWorksheetName(this.opts.worksheetName);
-    const path =
-      `/drives/${ref.driveId}/items/${ref.itemId}/workbook/worksheets('${ws}')` +
-      `/range(address='${MARKET_VALUES_RANGE}')`;
+    const now = new Date().toISOString();
+
+    // Write the values (preserving the user's existing number format)...
     await this.opts.client.request({
       method: 'PATCH',
-      path,
+      path: rangePath(ref, ws, MARKET_VALUES_RANGE),
       accessToken,
       body: { values: [[values.usdNisRate], [values.currentPriceUsd]] },
+    });
+    // ...then stamp when each was last refreshed in the adjacent column, as
+    // text so the ISO strings round-trip instead of being coerced to serials.
+    await this.opts.client.request({
+      method: 'PATCH',
+      path: rangePath(ref, ws, MARKET_UPDATED_RANGE),
+      accessToken,
+      body: {
+        values: [
+          [values.usdNisRateUpdatedAt ?? now],
+          [values.currentPriceUsdUpdatedAt ?? now],
+        ],
+        numberFormat: [['@'], ['@']],
+      },
     });
     return this.read(accessToken);
   }

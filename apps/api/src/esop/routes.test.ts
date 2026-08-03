@@ -128,6 +128,28 @@ describe('ESOP routes', () => {
     expect(res.body.esop.assumptions.lockDownDays).toBe(365);
   });
 
+  it('passes fetched market prices through to Graph', async () => {
+    const esop = calculateDemoEsop({ usdNisRate: 3.6, currentPriceUsd: 440 });
+    const reader = {
+      updateMarketValues: vi.fn(async () => esop),
+    } as unknown as GraphEsopReader;
+
+    const res = await request(mkApp(() => false, reader))
+      .post('/api/esop/market/update')
+      .set('X-MS-Graph-Token', 'token')
+      .send({ stockSymbol: 'MSFT', fxSymbol: 'USDILS=X' })
+      .expect(200);
+
+    expect(reader.updateMarketValues).toHaveBeenCalledWith('token', {
+      usdNisRate: 3.6,
+      currentPriceUsd: 440,
+      usdNisRateUpdatedAt: '2026-05-22T00:00:00.000Z',
+      currentPriceUsdUpdatedAt: '2026-05-22T00:00:00.000Z',
+    });
+    expect(res.body.stock).toMatchObject({ symbol: 'MSFT', price: 440 });
+    expect(res.body.fx).toMatchObject({ symbol: 'USDILS=X', price: 3.6 });
+  });
+
   it('still requires Graph configuration when demo mode is off', async () => {
     const res = await request(mkApp(() => false)).get('/api/esop').expect(501);
 

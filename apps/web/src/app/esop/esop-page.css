@@ -96,6 +96,67 @@
   font: var(--md-sys-typescale-title-medium);
 }
 
+.price-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+  flex: 1 1 auto;
+}
+
+.price-summary small {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.update-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font: var(--md-sys-typescale-label-large);
+}
+
+.past-unlocks {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.past-unlocks > .material-symbols-outlined {
+  color: var(--md-sys-color-primary);
+}
+
+.past-unlocks strong {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.past-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.past-chip {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font: var(--md-sys-typescale-label-large);
+}
+
+td.unlocked {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.tick {
+  color: var(--md-sys-color-primary);
+  font-weight: 700;
+}
+
 .section-copy {
   margin: 0;
   color: var(--md-sys-color-on-surface-variant);

@@ -35,6 +35,8 @@ describe('parseEsopUsedRange', () => {
       currentPriceUsd: 420.26,
       lockDownDays: 730,
       incomeTaxRate: 0.55,
+      usdNisRateUpdatedAt: null,
+      currentPriceUsdUpdatedAt: null,
       unblockMay31Date: '2026-05-31',
       unblockAug31Date: '2026-08-31',
     });
@@ -48,18 +50,33 @@ describe('parseEsopUsedRange', () => {
       unblockAug31Amount: 5,
     });
   });
+
+  it('reads refresh timestamps stored next to the market values', () => {
+    const withTimestamps: RawUsedRange = {
+      ...dumpedUsedRange,
+      values: dumpedUsedRange.values.map((row, r) => {
+        if (r === 11) return ['$/NIS Rate', '', '', 2.99, '2026-08-03T06:30:00.000Z', '', '', '', '', '', ''];
+        if (r === 12) return ['#VALUE!', '', '', 420.26, '2026-08-03T06:31:00.000Z', '', '', '', '', '', ''];
+        return row;
+      }),
+    };
+    const parsed = parseEsopUsedRange(withTimestamps);
+    expect(parsed.assumptions.usdNisRateUpdatedAt).toBe('2026-08-03T06:30:00.000Z');
+    expect(parsed.assumptions.currentPriceUsdUpdatedAt).toBe('2026-08-03T06:31:00.000Z');
+  });
 });
 
 describe('calculateEsop', () => {
-  it('reproduces the workbook row calculations with positive ageDays', () => {
+  it('reproduces the workbook row calculations before any unlock date', () => {
     const parsed = parseEsopUsedRange(dumpedUsedRange);
     const result = calculateEsop(parsed.grants, {
       ...parsed.assumptions,
-      asOf: '2026-06-20',
+      asOf: '2026-05-01',
     });
 
     expect(result.computed[0]?.ageDays).toBeGreaterThan(730);
     expect(result.computed[0]?.stockTaxRate).toBe(0.25);
+    expect(result.computed[0]?.heldAmount).toBe(11);
     expect(result.computed[4]?.ageDays).toBeLessThan(730);
     expect(result.computed[4]?.stockTaxRate).toBe(0.55);
     expect(result.computed[0]?.grossNis).toBeCloseTo(13822.3514, 6);
@@ -67,6 +84,7 @@ describe('calculateEsop', () => {
     expect(result.computed[0]?.stockTaxNis).toBeCloseTo(1720.4759, 6);
     expect(result.computed[0]?.netNis).toBeCloseTo(8284.62921, 6);
     expect(result.computed[0]?.effectiveTaxRate).toBeCloseTo(0.400635320991767, 12);
+    expect(result.pastUnlocks).toEqual([]);
     expect(result.unblockForecasts).toHaveLength(2);
     expect(result.unblockForecasts[0]).toMatchObject({
       id: 'may31',
@@ -86,6 +104,50 @@ describe('calculateEsop', () => {
     expect(result.unblockForecasts[1]?.sumDeltaNis).toBeCloseTo(115605.1208, 6);
   });
 
+  it('folds a passed unlock date into current holdings and forecasts only the future one', () => {
+    const parsed = parseEsopUsedRange(dumpedUsedRange);
+    // 2026-06-20 is after the May 31 unlock but before the Aug 31 unlock.
+    const result = calculateEsop(parsed.grants, {
+      ...parsed.assumptions,
+      asOf: '2026-06-20',
+    });
+
+    // May 31 shares are now held: grant 0 is 11 + 5 = 16.
+    expect(result.computed[0]?.heldAmount).toBe(16);
+    expect(result.computed[0]?.grossNis).toBeCloseTo(16 * 2.99 * 420.26, 6);
+
+    expect(result.pastUnlocks).toEqual([
+      { id: 'may31', label: 'May 31', date: '2026-05-31', amount: 47 },
+    ]);
+
+    expect(result.unblockForecasts).toHaveLength(1);
+    expect(result.unblockForecasts[0]).toMatchObject({
+      id: 'aug31',
+      label: 'After Aug 31',
+      asOf: '2026-08-31',
+      unlockedAmount: 45,
+      totalAmount: 242,
+    });
+    // Delta is measured against current holdings (which already include May 31).
+    expect(result.unblockForecasts[0]?.sumDeltaNis).toBeCloseTo(45 * 2.99 * 420.26, 6);
+    expect(result.unblockForecasts[0]?.netDeltaNis).toBeGreaterThan(0);
+  });
+
+  it('folds every passed unlock date and emits no forecast when all have vested', () => {
+    const parsed = parseEsopUsedRange(dumpedUsedRange);
+    const result = calculateEsop(parsed.grants, {
+      ...parsed.assumptions,
+      asOf: '2026-09-15',
+    });
+
+    expect(result.computed[0]?.heldAmount).toBe(21); // 11 + 5 + 5
+    expect(result.pastUnlocks).toEqual([
+      { id: 'may31', label: 'May 31', date: '2026-05-31', amount: 47 },
+      { id: 'aug31', label: 'Aug 31', date: '2026-08-31', amount: 45 },
+    ]);
+    expect(result.unblockForecasts).toEqual([]);
+  });
+
   it('returns null effective tax rates when gross proceeds are zero', () => {
     const result = calculateEsop(
       [{ id: 'g1', grantDate: '2024-01-01', grantPriceUsd: 10, amount: 0 }],
@@ -99,6 +161,7 @@ describe('calculateEsop', () => {
     );
     expect(result.computed[0]?.effectiveTaxRate).toBeNull();
     expect(result.totals.effectiveTaxRate).toBeNull();
+    expect(result.pastUnlocks).toEqual([]);
     expect(result.unblockForecasts).toEqual([]);
   });
 });

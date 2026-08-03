@@ -128,22 +128,58 @@ function parseAssumptions(
   values: RawCellValue[][],
   warnings: string[],
 ): EsopWorkbookParseResult['assumptions'] {
-  const usdNisRate = findValueByLabel(values, '$/nis rate') ?? cellNumber(values, 11, 3);
-  const currentPriceUsd = cellNumber(values, 12, 3);
+  const rateRowIndex = firstIndexOrDefault(findRowByLabel(values, '$/nis rate'), 11);
+  const priceRowIndex = 12;
+  const usdNisRate = asNumber(values[rateRowIndex]?.[3]);
+  const currentPriceUsd = cellNumber(values, priceRowIndex, 3);
   const lockDownDays = Math.abs(findValueByLabel(values, 'lock down period') ?? cellNumber(values, 13, 3) ?? 730);
   const incomeTaxRate = findValueByLabel(values, 'income tax') ?? cellNumber(values, 14, 3);
+
+  // Refresh timestamps live in the column immediately to the right of each value.
+  const usdNisRateUpdatedAt = parseUpdatedAt(values[rateRowIndex]?.[4]);
+  const currentPriceUsdUpdatedAt = parseUpdatedAt(values[priceRowIndex]?.[4]);
 
   const assumptions = {
     usdNisRate: usdNisRate ?? 0,
     currentPriceUsd: currentPriceUsd ?? 0,
     lockDownDays,
     incomeTaxRate: incomeTaxRate ?? 0,
+    usdNisRateUpdatedAt,
+    currentPriceUsdUpdatedAt,
   };
 
   if (usdNisRate === null) warnings.push('USD/NIS rate could not be parsed from ESOP sheet');
   if (currentPriceUsd === null) warnings.push('Current stock price could not be parsed from ESOP sheet');
   if (incomeTaxRate === null) warnings.push('Income tax rate could not be parsed from ESOP sheet');
   return assumptions;
+}
+
+function findRowByLabel(values: RawCellValue[][], label: string): number {
+  for (let r = 0; r < values.length; r++) {
+    if (normalizeHeader(values[r]?.[0]) === label) return r;
+  }
+  return -1;
+}
+
+function firstIndexOrDefault(index: number, fallback: number): number {
+  return index >= 0 ? index : fallback;
+}
+
+/**
+ * Read a "last updated" timestamp stored next to a market value. The API writes
+ * it as an ISO string (text-formatted cell); older/foreign sheets may hold an
+ * Excel datetime serial, so handle both.
+ */
+function parseUpdatedAt(value: RawCellValue | undefined): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return excelSerialToIsoDateTime(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    return Number.isNaN(Date.parse(trimmed)) ? null : trimmed;
+  }
+  return null;
 }
 
 function findValueByLabel(values: RawCellValue[][], label: string): number | null {
@@ -231,6 +267,13 @@ export function excelSerialToIsoDate(serial: number): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+export function excelSerialToIsoDateTime(serial: number): string | null {
+  if (!Number.isFinite(serial)) return null;
+  const millis = Math.round((serial - EXCEL_EPOCH_OFFSET) * MS_PER_DAY);
+  const date = new Date(millis);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function normalizeHeader(value: RawCellValue | undefined): string {
   return value == null ? '' : String(value).trim().toLowerCase();
 }
@@ -241,5 +284,7 @@ function emptyAssumptions(): EsopWorkbookParseResult['assumptions'] {
     currentPriceUsd: 0,
     lockDownDays: 730,
     incomeTaxRate: 0,
+    usdNisRateUpdatedAt: null,
+    currentPriceUsdUpdatedAt: null,
   };
 }

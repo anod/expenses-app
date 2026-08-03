@@ -32,22 +32,61 @@
 
   @if (result(); as esop) {
     <div class="card price-panel">
-      <div class="price-summary">
-        <span>Price</span>
-        <strong>
-          {{ esop.assumptions.usdNisRate }} ₪/$ ·
-          {{ usd(esop.assumptions.currentPriceUsd) }}
-        </strong>
+      <div class="price-values">
+        <div class="price-summary">
+          <span>USD/NIS</span>
+          <strong>{{ esop.assumptions.usdNisRate }} ₪/$</strong>
+          @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
+            <small class="muted">updated {{ when }}</small>
+          } @else {
+            <small class="muted">never refreshed</small>
+          }
+        </div>
+        <div class="price-summary">
+          <span>{{ stockSymbol() }}</span>
+          <strong>{{ usd(esop.assumptions.currentPriceUsd) }}</strong>
+          @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
+            <small class="muted">updated {{ when }}</small>
+          } @else {
+            <small class="muted">never refreshed</small>
+          }
+        </div>
       </div>
-      <button type="button" class="m3-btn m3-btn--tonal" (click)="resetWorkbookDefaults()" [disabled]="loading()">
-        <span class="material-symbols-outlined" [class.spin]="loading()">refresh</span>
-        Update
+      <button
+        type="button"
+        class="m3-btn m3-btn--tonal"
+        (click)="refresh()"
+        [disabled]="updating() || loading()"
+      >
+        <span class="material-symbols-outlined" [class.spin]="updating()">refresh</span>
+        {{ updating() ? 'Updating…' : 'Update' }}
       </button>
       <span class="settings-note">
         Market values and tax settings are managed in
         <a routerLink="/settings">Settings</a>.
       </span>
     </div>
+
+    @if (updateMessage(); as msg) {
+      <div class="update-message" role="status">
+        <span class="material-symbols-outlined">check_circle</span>
+        {{ msg }}
+      </div>
+    }
+
+    @if (esop.pastUnlocks.length > 0) {
+      <div class="card past-unlocks">
+        <span class="material-symbols-outlined">lock_open</span>
+        <div>
+          <strong>Already unlocked — folded into current holdings</strong>
+          <div class="past-chips">
+            @for (u of esop.pastUnlocks; track u.id) {
+              <span class="past-chip">{{ u.label }} · +{{ u.amount }} shares</span>
+            }
+          </div>
+        </div>
+      </div>
+    }
 
     <div class="summary-grid">
       <div class="summary-card">
@@ -138,9 +177,32 @@
                 <td data-label="Grant date">{{ row.grantDate }}</td>
                 <td data-label="Age">{{ row.ageDays }}d</td>
                 <td data-label="Grant price">{{ usd(row.grantPriceUsd) }}</td>
-                <td data-label="Amount">{{ row.amount }}</td>
-                <td data-label="May 31">{{ row.unblockMay31Amount ?? '—' }}</td>
-                <td data-label="Aug 31">{{ row.unblockAug31Amount ?? '—' }}</td>
+                <td data-label="Amount">
+                  {{ row.heldAmount }}
+                  @if (heldExtra(row) > 0) {
+                    <span class="muted">(+{{ heldExtra(row) }})</span>
+                  }
+                </td>
+                <td data-label="May 31" [class.unlocked]="unlockPassed(esop, 'may31')">
+                  @if (row.unblockMay31Amount != null) {
+                    {{ row.unblockMay31Amount }}@if (unlockPassed(esop, 'may31')) {<span
+                        class="tick"
+                        title="Unlocked — in current holdings"
+                      > ✓</span>}
+                  } @else {
+                    —
+                  }
+                </td>
+                <td data-label="Aug 31" [class.unlocked]="unlockPassed(esop, 'aug31')">
+                  @if (row.unblockAug31Amount != null) {
+                    {{ row.unblockAug31Amount }}@if (unlockPassed(esop, 'aug31')) {<span
+                        class="tick"
+                        title="Unlocked — in current holdings"
+                      > ✓</span>}
+                  } @else {
+                    —
+                  }
+                </td>
                 <td data-label="Gross">{{ nis(row.grossNis) }}</td>
                 <td data-label="Income tax">{{ nis(row.incomeTaxNis) }}</td>
                 <td data-label="Stock tax" [class.lock-rule]="isLockedGrant(row, esop)">

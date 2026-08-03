@@ -71,6 +71,8 @@ export const buildEsopRoutes = (
           usdNisRate: fx.price,
           currentPriceUsd: stock.price,
         });
+        esop.assumptions.usdNisRateUpdatedAt = fx.fetchedAt;
+        esop.assumptions.currentPriceUsdUpdatedAt = stock.fetchedAt;
         res.json({
           stock,
           fx,
@@ -100,6 +102,8 @@ export const buildEsopRoutes = (
       const esop = await reader.updateMarketValues(graphToken, {
         usdNisRate: fx.price,
         currentPriceUsd: stock.price,
+        usdNisRateUpdatedAt: fx.fetchedAt,
+        currentPriceUsdUpdatedAt: stock.fetchedAt,
       });
       res.json({
         stock,

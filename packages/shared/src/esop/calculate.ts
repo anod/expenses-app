@@ -3,12 +3,25 @@ import type {
   EsopCalculationResult,
   EsopComputedGrant,
   EsopGrant,
+  EsopPastUnlock,
   EsopTotals,
   EsopUnblockForecast,
 } from './types.js';
 
 const CAPITAL_GAINS_TAX_RATE = 0.25;
 const MS_PER_DAY = 86_400_000;
+
+/**
+ * A share-unlock milestone (May 31 / Aug 31). `date` is the resolved ISO date
+ * the shares vest on; `amountOf` returns the shares a given grant unlocks then.
+ */
+interface Milestone {
+  id: 'may31' | 'aug31';
+  forecastLabel: string;
+  shortLabel: string;
+  date: string;
+  amountOf: (grant: EsopGrant) => number;
+}
 
 export function calculateEsop(
   grants: EsopGrant[],
@@ -25,23 +38,54 @@ export function calculateEsop(
     lockDownDays: Math.abs(assumptions.lockDownDays),
   };
 
+  const milestones = buildMilestones(grants, normalizedAssumptions);
+  // A milestone whose date is on or before `asOf` has already vested, so its
+  // shares are folded into current holdings instead of shown as a forecast.
+  const passed = milestones.filter((m) => m.date <= normalizedAssumptions.asOf);
+  const future = milestones.filter((m) => m.date > normalizedAssumptions.asOf);
+
+  const heldAmountOf = (grant: EsopGrant): number =>
+    grant.amount + passed.reduce((sum, m) => sum + m.amountOf(grant), 0);
+
   const computed = grants.map((grant) =>
-    calculateGrant(grant, normalizedAssumptions, asOf, warnings),
+    valueGrant(grant, heldAmountOf(grant), normalizedAssumptions, asOf, warnings),
   );
   const totals = computeTotals(computed);
-  const unblockForecasts = computeUnblockForecasts(grants, normalizedAssumptions, totals);
+
+  const pastUnlocks: EsopPastUnlock[] = passed.map((m) => ({
+    id: m.id,
+    label: m.shortLabel,
+    date: m.date,
+    amount: sumMilestone(grants, m),
+  }));
+
+  const unblockForecasts = computeUnblockForecasts(
+    grants,
+    normalizedAssumptions,
+    heldAmountOf,
+    future,
+    totals,
+  );
+
   return {
     assumptions: normalizedAssumptions,
     grants,
     computed,
     totals,
     unblockForecasts,
+    pastUnlocks,
     warnings,
   };
 }
 
-function calculateGrant(
+/**
+ * Value a grant at a specific `heldAmount` (current holdings or a forecast
+ * amount). Gross/tax scale with `heldAmount`; `grant.amount` is preserved as
+ * the original granted quantity.
+ */
+function valueGrant(
   grant: EsopGrant,
+  heldAmount: number,
   assumptions: EsopAssumptions,
   asOf: Date,
   warnings: string[],
@@ -55,12 +99,13 @@ function calculateGrant(
     warnings.push(`Grant ${grant.id} is dated after asOf (${grant.grantDate} > ${assumptions.asOf})`);
   }
 
-  const grossNis = grant.amount * assumptions.usdNisRate * assumptions.currentPriceUsd;
-  const incomeTaxNis = grant.amount * grant.grantPriceUsd * assumptions.usdNisRate * assumptions.incomeTaxRate;
+  const grossNis = heldAmount * assumptions.usdNisRate * assumptions.currentPriceUsd;
+  const incomeTaxNis =
+    heldAmount * grant.grantPriceUsd * assumptions.usdNisRate * assumptions.incomeTaxRate;
   const stockTaxRate =
     ageDays >= assumptions.lockDownDays ? CAPITAL_GAINS_TAX_RATE : assumptions.incomeTaxRate;
   const stockTaxBase =
-    grant.amount *
+    heldAmount *
     (assumptions.currentPriceUsd - grant.grantPriceUsd) *
     assumptions.usdNisRate *
     stockTaxRate;
@@ -71,6 +116,7 @@ function calculateGrant(
   return {
     ...grant,
     ageDays,
+    heldAmount,
     grossNis,
     incomeTaxNis,
     stockTaxNis,
@@ -96,79 +142,78 @@ function computeTotals(rows: EsopComputedGrant[]): EsopTotals {
   };
 }
 
+function buildMilestones(grants: EsopGrant[], assumptions: EsopAssumptions): Milestone[] {
+  const may31Total = sumUnblockAmounts(grants, 'unblockMay31Amount');
+  const aug31Total = sumUnblockAmounts(grants, 'unblockAug31Amount');
+  const milestones: Milestone[] = [];
+  if (may31Total > 0) {
+    milestones.push({
+      id: 'may31',
+      forecastLabel: 'After May 31',
+      shortLabel: 'May 31',
+      date: assumptions.unblockMay31Date ?? nextMilestoneDate(assumptions.asOf, 5, 31),
+      amountOf: (grant) => grant.unblockMay31Amount ?? 0,
+    });
+  }
+  if (aug31Total > 0) {
+    milestones.push({
+      id: 'aug31',
+      forecastLabel: 'After Aug 31',
+      shortLabel: 'Aug 31',
+      date: assumptions.unblockAug31Date ?? nextMilestoneDate(assumptions.asOf, 8, 31),
+      amountOf: (grant) => grant.unblockAug31Amount ?? 0,
+    });
+  }
+  return milestones.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/**
+ * One forecast per still-future milestone, applied cumulatively on top of
+ * current holdings (which already include any passed milestones). Deltas are
+ * measured against the current totals.
+ */
 function computeUnblockForecasts(
   grants: EsopGrant[],
   assumptions: EsopAssumptions,
+  heldAmountOf: (grant: EsopGrant) => number,
+  future: Milestone[],
   currentTotals: EsopTotals,
 ): EsopUnblockForecast[] {
-  const may31Amount = sumUnblockAmounts(grants, 'unblockMay31Amount');
-  const aug31Amount = sumUnblockAmounts(grants, 'unblockAug31Amount');
-  if (may31Amount === 0 && aug31Amount === 0) return [];
+  if (future.length === 0) return [];
 
-  const may31Date = assumptions.unblockMay31Date ?? nextMilestoneDate(assumptions.asOf, 5, 31);
-  const aug31Date = assumptions.unblockAug31Date ?? nextMilestoneDate(assumptions.asOf, 8, 31);
-  const may31 = calculateForecastMilestone(
-    grants,
-    assumptions,
-    may31Date,
-    may31Amount,
-    (grant) => grant.amount + (grant.unblockMay31Amount ?? 0),
-  );
-  const aug31 = calculateForecastMilestone(
-    grants,
-    assumptions,
-    aug31Date,
-    may31Amount + aug31Amount,
-    (grant) => grant.amount + (grant.unblockMay31Amount ?? 0) + (grant.unblockAug31Amount ?? 0),
-  );
+  const forecasts: EsopUnblockForecast[] = [];
+  const applied: Milestone[] = [];
+  for (const milestone of future) {
+    applied.push(milestone);
+    const cumulativeOf = (grant: EsopGrant): number =>
+      applied.reduce((sum, m) => sum + m.amountOf(grant), 0);
+    const forecastAmountOf = (grant: EsopGrant): number => heldAmountOf(grant) + cumulativeOf(grant);
 
-  return [
-    {
-      id: 'may31',
-      label: 'After May 31',
-      asOf: may31Date,
-      unlockedAmount: may31Amount,
-      totalAmount: may31.totalAmount,
-      sumNis: may31.totals.grossNis,
-      netNis: may31.totals.netNis,
-      sumDeltaNis: may31.totals.grossNis - currentTotals.grossNis,
-      netDeltaNis: may31.totals.netNis - currentTotals.netNis,
-    },
-    {
-      id: 'aug31',
-      label: 'After Aug 31',
-      asOf: aug31Date,
-      unlockedAmount: may31Amount + aug31Amount,
-      totalAmount: aug31.totalAmount,
-      sumNis: aug31.totals.grossNis,
-      netNis: aug31.totals.netNis,
-      sumDeltaNis: aug31.totals.grossNis - currentTotals.grossNis,
-      netDeltaNis: aug31.totals.netNis - currentTotals.netNis,
-    },
-  ];
-}
+    const date = parseIsoDate(milestone.date);
+    if (!date) {
+      throw new Error(`Invalid ESOP forecast date: ${milestone.date}`);
+    }
+    const forecastWarnings: string[] = [];
+    const computed = grants.map((grant) =>
+      valueGrant(grant, forecastAmountOf(grant), { ...assumptions, asOf: milestone.date }, date, forecastWarnings),
+    );
+    const totals = computeTotals(computed);
+    const unlockedAmount = grants.reduce((sum, grant) => sum + cumulativeOf(grant), 0);
+    const totalAmount = grants.reduce((sum, grant) => sum + forecastAmountOf(grant), 0);
 
-function calculateForecastMilestone(
-  grants: EsopGrant[],
-  assumptions: EsopAssumptions,
-  asOf: string,
-  unlockedAmount: number,
-  amountForGrant: (grant: EsopGrant) => number,
-): { totals: EsopTotals; totalAmount: number } {
-  const forecastGrants = unlockedAmount === 0 ? grants : grants.map((grant) => ({
-    ...grant,
-    amount: amountForGrant(grant),
-  }));
-  const date = parseIsoDate(asOf);
-  if (!date) {
-    throw new Error(`Invalid ESOP forecast date: ${asOf}`);
+    forecasts.push({
+      id: milestone.id,
+      label: milestone.forecastLabel,
+      asOf: milestone.date,
+      unlockedAmount,
+      totalAmount,
+      sumNis: totals.grossNis,
+      netNis: totals.netNis,
+      sumDeltaNis: totals.grossNis - currentTotals.grossNis,
+      netDeltaNis: totals.netNis - currentTotals.netNis,
+    });
   }
-  const warnings: string[] = [];
-  const computed = forecastGrants.map((grant) =>
-    calculateGrant(grant, { ...assumptions, asOf }, date, warnings),
-  );
-  const totals = computeTotals(computed);
-  return { totals, totalAmount: sumAmounts(forecastGrants) };
+  return forecasts;
 }
 
 function sumUnblockAmounts(
@@ -178,8 +223,8 @@ function sumUnblockAmounts(
   return grants.reduce((sum, grant) => sum + (grant[key] ?? 0), 0);
 }
 
-function sumAmounts(grants: EsopGrant[]): number {
-  return grants.reduce((sum, grant) => sum + grant.amount, 0);
+function sumMilestone(grants: EsopGrant[], milestone: Milestone): number {
+  return grants.reduce((sum, grant) => sum + milestone.amountOf(grant), 0);
 }
 
 function nextMilestoneDate(asOf: string, month: number, day: number): string {
