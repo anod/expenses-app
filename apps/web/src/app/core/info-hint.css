@@ -1,0 +1,49 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+}
+
+.info-hint-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.info-hint-trigger:hover,
+.info-hint-trigger:focus-visible {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  outline: none;
+}
+
+.info-hint-trigger .material-symbols-outlined {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* Popover API: rendered in the top layer. UA default centres it in the
+   viewport, which keeps it fully on-screen on small/mobile displays. */
+.info-hint-pop {
+  max-width: min(22rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 18%, transparent);
+  border-radius: var(--md-sys-shape-corner-md);
+  background: var(--md-sys-color-inverse-surface);
+  color: var(--md-sys-color-inverse-on-surface);
+  box-shadow: var(--md-sys-elevation-3, 0 6px 16px rgba(0, 0, 0, 0.35));
+  font: var(--md-sys-typescale-body-medium);
+  line-height: 1.35;
+}
+
+.info-hint-pop::backdrop {
+  background: transparent;
+}

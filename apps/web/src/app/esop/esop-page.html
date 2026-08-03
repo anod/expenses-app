@@ -39,7 +39,10 @@
           @if (updatedAt(esop.assumptions.usdNisRateUpdatedAt); as when) {
             <small class="muted">updated {{ when }}</small>
           } @else {
-            <small class="muted">never refreshed</small>
+            <app-info-hint
+              label="USD/NIS refresh status"
+              text="This value has not been refreshed from its market source yet. Use Update to fetch the latest USD/NIS rate."
+            />
           }
         </div>
         <div class="price-summary">
@@ -48,7 +51,14 @@
           @if (updatedAt(esop.assumptions.currentPriceUsdUpdatedAt); as when) {
             <small class="muted">updated {{ when }}</small>
           } @else {
-            <small class="muted">never refreshed</small>
+            <app-info-hint
+              label="Price refresh status"
+              [text]="
+                'This value has not been refreshed from its market source yet. Use Update to fetch the latest ' +
+                stockSymbol() +
+                ' price.'
+              "
+            />
           }
         </div>
       </div>

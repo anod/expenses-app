@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult, Settings } from '@expenses/shared';
 import { AuthService } from '../auth/auth.service';
 import { errorMessage } from '../core/api-error';
+import { InfoHintComponent } from '../core/info-hint';
 import { ForecastApi } from '../forecast/forecast.api';
 
 interface BackupResultView {
@@ -17,7 +18,7 @@ interface BackupResultView {
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [DatePipe, ReactiveFormsModule],
+  imports: [DatePipe, ReactiveFormsModule, InfoHintComponent],
   templateUrl: './settings-page.html',
   styleUrl: './settings-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

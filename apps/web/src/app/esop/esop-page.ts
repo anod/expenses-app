@@ -4,11 +4,12 @@ import { firstValueFrom } from 'rxjs';
 import type { EsopCalculationResult, EsopComputedGrant } from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 import { errorMessage as formatApiError } from '../core/api-error';
+import { InfoHintComponent } from '../core/info-hint';
 
 @Component({
   selector: 'app-esop-page',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, InfoHintComponent],
   templateUrl: './esop-page.html',
   styleUrl: './esop-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
