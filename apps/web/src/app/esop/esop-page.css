@@ -1,7 +1,11 @@
+/* Padding/max-width come from the shared `.page` rule so this tab lines up with
+   the others. `minmax(0, 1fr)` stops the wide grants table from forcing the
+   grid track past the container — without it the automatic minimum size of the
+   card wins and the whole page scrolls sideways instead of just the table. */
 .page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
-  padding: 1rem;
 }
 
 .page-head {
@@ -310,6 +314,7 @@ input {
 }
 
 .table-wrap {
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -362,7 +367,6 @@ td {
 @media (max-width: 720px) {
   .page {
     gap: 0.65rem;
-    padding: 0.5rem;
   }
 
   .page-head {
