@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { EsopCalculationResult, Settings } from '@expenses/shared';
+import type { EsopCalculationResult, SavingsPot, Settings } from '@expenses/shared';
 import { AuthService } from '../auth/auth.service';
 import { errorMessage } from '../core/api-error';
 import { InfoHintComponent } from '../core/info-hint';
@@ -61,6 +61,18 @@ export class SettingsPageComponent {
   protected readonly esopMarketError = signal<string | null>(null);
   protected readonly esopResult = signal<EsopCalculationResult | null>(null);
 
+  // --- Savings pots --------------------------------------------------------
+  protected readonly pots = signal<SavingsPot[]>([]);
+  protected readonly potsBusy = signal(false);
+  protected readonly potsError = signal<string | null>(null);
+  /** `null` = the editor is closed; `''` = creating; otherwise the pot id. */
+  protected readonly potEditing = signal<string | null>(null);
+  protected readonly potForm = this.fb.nonNullable.group({
+    name: ['', [Validators.required, Validators.maxLength(64)]],
+    balance: [0, [Validators.required, Validators.min(0)]],
+    asOf: ['', [Validators.required]],
+  });
+
   // --- Demo mode -----------------------------------------------------------
   protected readonly demoEnabled = signal(false);
   protected readonly demoBusy = signal(false);
@@ -79,6 +91,7 @@ export class SettingsPageComponent {
     void this.load();
     void this.loadDemo();
     void this.loadEsopSettings();
+    void this.loadPots();
   }
 
   private async load(): Promise<void> {
@@ -231,6 +244,76 @@ export class SettingsPageComponent {
     }
   }
 
+  // --- Savings pots --------------------------------------------------------
+
+  protected async loadPots(): Promise<void> {
+    try {
+      this.pots.set(await firstValueFrom(this.api.listPots()));
+    } catch (err) {
+      this.potsError.set(this.errMsg(err));
+    }
+  }
+
+  protected startNewPot(): void {
+    this.potsError.set(null);
+    this.potForm.reset({ name: '', balance: 0, asOf: this.todayIso() });
+    this.potEditing.set('');
+  }
+
+  protected startEditPot(pot: SavingsPot): void {
+    this.potsError.set(null);
+    this.potForm.reset({ name: pot.name, balance: pot.balance, asOf: pot.asOf });
+    this.potEditing.set(pot.id);
+  }
+
+  protected cancelPot(): void {
+    this.potEditing.set(null);
+    this.potsError.set(null);
+  }
+
+  protected async savePot(): Promise<void> {
+    const editing = this.potEditing();
+    if (editing === null || this.potForm.invalid || this.potsBusy()) return;
+    this.potsBusy.set(true);
+    this.potsError.set(null);
+    const v = this.potForm.getRawValue();
+    const body = { name: v.name.trim(), balance: v.balance, asOf: v.asOf };
+    try {
+      if (editing === '') await firstValueFrom(this.api.createPot(body));
+      else await firstValueFrom(this.api.updatePot(editing, body));
+      await this.loadPots();
+      this.potEditing.set(null);
+    } catch (err) {
+      this.potsError.set(this.errMsg(err));
+    } finally {
+      this.potsBusy.set(false);
+    }
+  }
+
+  protected async deletePot(pot: SavingsPot): Promise<void> {
+    if (this.potsBusy()) return;
+    const ok = window.confirm(
+      `Delete “${pot.name}”? Its contributions and any recurring transfers into it will be removed from the forecast.`,
+    );
+    if (!ok) return;
+    this.potsBusy.set(true);
+    this.potsError.set(null);
+    try {
+      await firstValueFrom(this.api.deletePot(pot.id));
+      await this.loadPots();
+      if (this.potEditing() === pot.id) this.potEditing.set(null);
+    } catch (err) {
+      this.potsError.set(this.errMsg(err));
+    } finally {
+      this.potsBusy.set(false);
+    }
+  }
+
+  /** Local-time `YYYY-MM-DD` for prefilling date inputs. */
+  private todayIso(): string {
+    return new Date().toLocaleDateString('en-CA');
+  }
+
   protected workbookLink(): string | null {
     const value = this.prefsForm.controls.workbookUrl.value.trim();
     if (!value) return null;
@@ -256,6 +339,14 @@ export class SettingsPageComponent {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  protected ils(value: number): string {
+    return new Intl.NumberFormat('he-IL', {
+      style: 'currency',
+      currency: 'ILS',
+      maximumFractionDigits: 0,
     }).format(value);
   }
 

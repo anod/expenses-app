@@ -404,4 +404,112 @@ describe('forecast routes', () => {
         .expect(200);
     });
   });
+
+  describe('savings pots', () => {
+    const mkPot = async (over: Record<string, unknown> = {}) =>
+      request(app)
+        .post('/api/pots')
+        .send({ name: 'Rainy day fund', balance: 1000, asOf: TODAY, ...over })
+        .expect(200);
+
+    it('POST/PATCH/DELETE /api/pots lifecycle', async () => {
+      const created = await mkPot();
+      const id = created.body.entity.id;
+      expect(id).toBeTruthy();
+      expect(created.body.entity.balance).toBe(1000);
+      expect(created.body.forecast.pots).toHaveLength(1);
+
+      const patched = await request(app)
+        .patch(`/api/pots/${id}`)
+        .send({ name: 'Rainy day fund', balance: 2500, asOf: TODAY })
+        .expect(200);
+      expect(patched.body.entity.balance).toBe(2500);
+
+      const listed = await request(app).get('/api/pots').expect(200);
+      expect(listed.body).toHaveLength(1);
+
+      const deleted = await request(app).delete(`/api/pots/${id}`).expect(200);
+      expect(deleted.body.forecast.pots).toEqual([]);
+    });
+
+    it('POST /api/pots rejects a future asOf and a negative balance', async () => {
+      await request(app)
+        .post('/api/pots')
+        .send({ name: 'Pot', balance: 1000, asOf: '2099-01-01' })
+        .expect(400);
+      await request(app)
+        .post('/api/pots')
+        .send({ name: 'Pot', balance: -1, asOf: TODAY })
+        .expect(400);
+    });
+
+    it('a monthly contribution drains the bank and fills the pot', async () => {
+      const id = (await mkPot()).body.entity.id;
+      await request(app)
+        .patch('/api/account')
+        .send({ bankBalance: 20_000, asOf: TODAY })
+        .expect(200);
+
+      const r = await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'Monthly savings',
+          amount: -1500,
+          channel: `savings:${id}`,
+          cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' },
+          startDate: TODAY,
+        })
+        .expect(200);
+
+      const pot = r.body.forecast.pots[0];
+      expect(pot.potId).toBe(id);
+      expect(pot.contributedInWindow).toBe(9000);
+      expect(pot.closingBalance).toBe(10_000);
+      // The same money genuinely left the bank.
+      const last = r.body.forecast.days[r.body.forecast.days.length - 1];
+      expect(last.balance).toBe(11_000);
+    });
+
+    it('rejects a savings channel that points at no pot', async () => {
+      await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'Monthly savings', amount: -1500, channel: 'savings:ghost',
+          cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' }, startDate: TODAY,
+        })
+        .expect(400);
+      await request(app)
+        .post('/api/ledger')
+        .send({
+          description: 'Top-up', amount: -500, channel: 'savings:ghost',
+          date: '2026-06-10', status: 'pending',
+        })
+        .expect(400);
+    });
+
+    it('deleting a pot removes the templates and entries on its channel', async () => {
+      const id = (await mkPot()).body.entity.id;
+      await request(app)
+        .post('/api/recurring')
+        .send({
+          description: 'Monthly savings', amount: -1500, channel: `savings:${id}`,
+          cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' }, startDate: TODAY,
+        })
+        .expect(200);
+      await request(app)
+        .post('/api/ledger')
+        .send({
+          description: 'One-off top-up', amount: -300, channel: `savings:${id}`,
+          date: '2026-06-15', status: 'pending',
+        })
+        .expect(200);
+
+      await request(app).delete(`/api/pots/${id}`).expect(200);
+
+      expect((await request(app).get('/api/recurring')).body).toEqual([]);
+      expect((await request(app).get('/api/ledger')).body).toEqual([]);
+      // The forecast must still compute — no dangling savings channel.
+      await request(app).get('/api/forecast').expect(200);
+    });
+  });
 });

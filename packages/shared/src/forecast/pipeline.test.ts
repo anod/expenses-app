@@ -9,6 +9,7 @@ import {
   type LedgerEntry,
   type ProjectionCharge,
   type RecurringTemplate,
+  type SavingsPot,
   type Settings,
   occurrenceKeyOf,
 } from './index.js';
@@ -565,5 +566,211 @@ describe('forecast pipeline', () => {
     };
     const out = generateVirtualOccurrences([tmpl], '2026-05-01', '2026-07-31');
     expect(out.map((e) => e.date)).toEqual(['2026-05-10', '2026-07-10']);
+  });
+});
+
+describe('savings pots', () => {
+  const rainy: SavingsPot = {
+    id: 'rainy',
+    name: 'Rainy day fund',
+    balance: 1000,
+    asOf: TODAY,
+  };
+
+  const saveMonthly: RecurringTemplate = {
+    id: 'r:save',
+    description: 'Monthly savings',
+    amount: -1500,
+    channel: 'savings:rainy',
+    cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' },
+    startDate: '2026-01-10',
+  };
+
+  it('no pots configured → empty pots array', () => {
+    const r = project([], acct(5000), [], baseSettings, TODAY);
+    expect(r.pots).toEqual([]);
+  });
+
+  it('a contribution leaves the bank on its own date and lands in the pot', () => {
+    const entry: LedgerEntry = {
+      id: 's1', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: '2026-06-10', status: 'pending',
+    };
+    const r = project([entry], acct(10_000), [], baseSettings, TODAY, new Set(), [rainy]);
+
+    const bankDay = r.days.find((d) => d.date === '2026-06-10')!;
+    expect(bankDay.delta).toBe(-1500);
+    expect(bankDay.balance).toBe(8500);
+    expect(bankDay.charges[0].source).toMatchObject({
+      kind: 'ledger', entryId: 's1', potId: 'rainy',
+    });
+
+    const pot = r.pots[0]!;
+    expect(pot.potId).toBe('rainy');
+    expect(pot.snapshotBalance).toBe(1000);
+    expect(pot.openingBalance).toBe(1000);
+    const potDay = pot.days.find((d) => d.date === '2026-06-10')!;
+    expect(potDay.delta).toBe(1500);
+    expect(potDay.balance).toBe(2500);
+    expect(pot.closingBalance).toBe(2500);
+    expect(pot.contributedInWindow).toBe(1500);
+  });
+
+  it('a withdrawal returns money to the bank and lowers the pot', () => {
+    const entry: LedgerEntry = {
+      id: 's2', description: 'Emergency boiler', amount: 800,
+      channel: 'savings:rainy', date: '2026-06-10', status: 'pending',
+    };
+    const r = project([entry], acct(10_000), [], baseSettings, TODAY, new Set(), [rainy]);
+
+    expect(r.days.find((d) => d.date === '2026-06-10')!.balance).toBe(10_800);
+    const pot = r.pots[0]!;
+    expect(pot.days.find((d) => d.date === '2026-06-10')!.delta).toBe(-800);
+    expect(pot.closingBalance).toBe(200);
+    expect(pot.contributedInWindow).toBe(-800);
+  });
+
+  it('recurring contributions accumulate in the pot and drain the bank', () => {
+    const r = forecast({
+      templates: [saveMonthly], persisted: [], account: acct(20_000),
+      cards: [], pots: [rainy], settings: baseSettings, today: TODAY,
+    });
+
+    const pot = r.pots[0]!;
+    expect(pot.days.filter((d) => d.delta !== 0).map((d) => d.date)).toEqual([
+      '2026-06-10', '2026-07-10', '2026-08-10', '2026-09-10', '2026-10-10', '2026-11-10',
+    ]);
+    // 6 contributions of 1500 on top of the 1000 snapshot.
+    expect(pot.closingBalance).toBe(10_000);
+    expect(pot.contributedInWindow).toBe(9000);
+    // The same 9000 has genuinely left the bank.
+    expect(r.days[r.days.length - 1]!.balance).toBe(11_000);
+  });
+
+  it('contributions count against the threshold like any other outflow', () => {
+    const entry: LedgerEntry = {
+      id: 's3', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: '2026-06-10', status: 'pending',
+    };
+    const r = project([entry], acct(3000), [], baseSettings, TODAY, new Set(), [rainy]);
+    expect(r.minBalance).toBe(1500);
+    expect(r.minBalanceDate).toBe('2026-06-10');
+    expect(r.status).toBe('breach');
+  });
+
+  it('skipping an occurrence suppresses both the bank and the pot leg', () => {
+    const r = forecast({
+      templates: [{ ...saveMonthly, skips: ['2026-07-10'] }], persisted: [],
+      account: acct(20_000), cards: [], pots: [rainy],
+      settings: baseSettings, today: TODAY,
+    });
+
+    const pot = r.pots[0]!;
+    expect(pot.days.find((d) => d.date === '2026-07-10')!.delta).toBe(0);
+    expect(r.days.find((d) => d.date === '2026-07-10')!.delta).toBe(0);
+    expect(pot.closingBalance).toBe(8500);
+  });
+
+  it('movements between the pot snapshot and the bank snapshot hit the pot only', () => {
+    // Pot was last reconciled on the 1st, the bank on the 16th: the transfer
+    // on the 10th is already reflected in the bank balance the user typed in,
+    // but not yet in the pot balance.
+    const earlierPot: SavingsPot = { ...rainy, asOf: '2026-05-01' };
+    const entry: LedgerEntry = {
+      id: 's4', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: '2026-05-10', status: 'pending',
+    };
+    const r = project([entry], acct(10_000), [], baseSettings, TODAY, new Set(), [earlierPot]);
+
+    expect(r.days.every((d) => d.delta === 0)).toBe(true);
+    expect(r.days[0]!.balance).toBe(10_000);
+    expect(r.pots[0]!.openingBalance).toBe(2500);
+    expect(r.pots[0]!.closingBalance).toBe(2500);
+  });
+
+  it('movements on or before the pot snapshot are already inside the balance', () => {
+    const entry: LedgerEntry = {
+      id: 's5', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: TODAY, status: 'pending',
+    };
+    const r = project([entry], acct(10_000), [], baseSettings, TODAY, new Set(), [rainy]);
+    expect(r.pots[0]!.closingBalance).toBe(1000);
+  });
+
+  it('an unknown pot is rejected rather than silently dropped', () => {
+    const entry: LedgerEntry = {
+      id: 's6', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:ghost', date: '2026-06-10', status: 'pending',
+    };
+    expect(() =>
+      forecast({
+        templates: [], persisted: [entry], account: acct(10_000),
+        cards: [], pots: [rainy], settings: baseSettings, today: TODAY,
+      }),
+    ).toThrow(/unknown savings pot ghost/);
+  });
+
+  it('a pot snapshot in the future is rejected', () => {
+    expect(() =>
+      project([], acct(10_000), [], baseSettings, TODAY, new Set(), [
+        { ...rainy, asOf: '2026-05-20' },
+      ]),
+    ).toThrow(/savings pot rainy asOf must not be in the future/);
+  });
+
+  it('a contribution landing on the first visible day is part of the opening balance', () => {
+    // `openingBalance` is the balance *after* the first emitted day's movement
+    // (mirroring `openingDebit` on cards), so a contribution dated today is
+    // already reflected there and must not be double-counted as "contributed".
+    const entry: LedgerEntry = {
+      id: 's8', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: TODAY, status: 'pending',
+    };
+    const r = project(
+      [entry], acct(10_000, '2026-05-15'), [], baseSettings, TODAY, new Set(),
+      [{ ...rainy, asOf: '2026-05-15' }],
+    );
+
+    const pot = r.pots[0]!;
+    expect(pot.days[0]!.date).toBe(TODAY);
+    expect(pot.days[0]!.delta).toBe(1500);
+    expect(pot.openingBalance).toBe(2500);
+    expect(pot.closingBalance).toBe(2500);
+    expect(pot.contributedInWindow).toBe(0);
+  });
+
+  it('contributedInWindow always equals closing − opening', () => {
+    const r = forecast({
+      templates: [saveMonthly], persisted: [], account: acct(20_000),
+      cards: [], pots: [rainy], settings: baseSettings, today: TODAY,
+    });
+    const pot = r.pots[0]!;
+    expect(pot.contributedInWindow).toBe(pot.closingBalance - pot.openingBalance);
+  });
+
+  it('project() rejects an unknown pot rather than dropping the pot leg', () => {
+    const entry: LedgerEntry = {
+      id: 's9', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:ghost', date: '2026-06-10', status: 'pending',
+    };
+    expect(() =>
+      project([entry], acct(10_000), [], baseSettings, TODAY, new Set(), [rainy]),
+    ).toThrow(/unknown savings pot ghost/);
+  });
+
+  it('savings transfers never accrue onto a credit card', () => {
+    const card = { ...visa, asOf: '2026-05-01' };
+    const entry: LedgerEntry = {
+      id: 's7', description: 'Monthly savings', amount: -1500,
+      channel: 'savings:rainy', date: '2026-06-10', status: 'pending',
+    };
+    const r = project(
+      [entry], acct(10_000, '2026-05-01'), [card], baseSettings, TODAY, new Set(), [rainy],
+    );
+    expect(r.cards[0]!.days.every((d) => d.outstanding === 0)).toBe(true);
+    // ...and it is not aggregated into a card bill either.
+    expect(
+      r.days.flatMap((d) => d.charges).every((c) => c.source.kind === 'ledger'),
+    ).toBe(true);
   });
 });

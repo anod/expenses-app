@@ -15,12 +15,14 @@ import type {
   CreditCard,
   LedgerEntry,
   RecurringTemplate,
+  SavingsPot,
   Settings,
 } from '@expenses/shared';
 
 export interface DemoState {
   account: Account;
   cards: CreditCard[];
+  pots: SavingsPot[];
   recurring: RecurringTemplate[];
   ledger: LedgerEntry[];
   settings: Settings;
@@ -61,6 +63,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
 
   const travelCardId = `${PREFIX}card:travel`;
   const householdCardId = `${PREFIX}card:household`;
+  const rainyDayPotId = `${PREFIX}pot:rainy-day`;
 
   const account: Account = {
     bankBalance: 18_432.5,
@@ -81,6 +84,15 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
       currentDebit: 1_842.1,
       asOf: todayIso,
       billingDayOfMonth: 15,
+    },
+  ];
+
+  const pots: SavingsPot[] = [
+    {
+      id: rainyDayPotId,
+      name: 'Rainy day fund',
+      balance: 24_600,
+      asOf: todayIso,
     },
   ];
 
@@ -171,6 +183,15 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
       amount: -1600,
       channel: 'bank',
       cadence: { kind: 'monthly_prediction' },
+      startDate: recurringStart,
+    },
+    {
+      id: `${PREFIX}r:savings`,
+      description: 'Monthly savings',
+      amount: -1_500,
+      channel: `savings:${rainyDayPotId}`,
+      // Anchor day: pay yourself first, right after the salary lands.
+      cadence: { kind: 'monthly', day: 10, monthEndPolicy: 'clamp' },
       startDate: recurringStart,
     },
   ];
@@ -266,7 +287,7 @@ export function buildDemoState(opts: BuildDemoOptions = {}): DemoState {
     },
   ];
 
-  return { account, cards, recurring, ledger, settings };
+  return { account, cards, pots, recurring, ledger, settings };
 }
 
 export const DEMO_PREFIX = PREFIX;

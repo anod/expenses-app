@@ -32,6 +32,20 @@ interface CardSummary {
   billingDay: number;
 }
 
+interface PotSummary {
+  potId: string;
+  name: string;
+  /** Pot balance as of today (start of the visible window). */
+  balanceToday: number;
+  /** Projected pot balance at the end of the forecast horizon. */
+  projectedBalance: number;
+  /** Net movement across the visible window (contributions − withdrawals). */
+  contributedInWindow: number;
+  /** Date of the next contribution inside the window, if any. */
+  nextContributionDate: string | null;
+  nextContributionAmount: number;
+}
+
 @Component({
   selector: 'app-forecast-home',
   standalone: true,
@@ -81,6 +95,11 @@ export class ForecastHomeComponent {
     currentDebit: [0, [Validators.required, Validators.min(0)]],
     asOf: ['', [Validators.required]],
     mode: ['credit' as 'credit' | 'debit', [Validators.required]],
+  });
+
+  protected readonly potForm = this.fb.nonNullable.group({
+    balance: [0, [Validators.required, Validators.min(0)]],
+    asOf: ['', [Validators.required]],
   });
 
   /** Snackbar for clear/undo. Holds the cleared entry so we can restore it. */
@@ -150,6 +169,25 @@ export class ForecastHomeComponent {
           billingDay: card.billingDayOfMonth,
         };
       });
+  });
+
+  /** Per-pot summary shown beside the card summaries: where the pot stands
+   * today and where it lands at the end of the forecast horizon. */
+  protected readonly potSummaries = computed<PotSummary[]>(() => {
+    const f = this.forecast();
+    if (!f) return [];
+    return f.pots.map((pot) => {
+      const next = pot.days.find((d, idx) => idx > 0 && d.delta > 0);
+      return {
+        potId: pot.potId,
+        name: pot.name,
+        balanceToday: pot.openingBalance,
+        projectedBalance: pot.closingBalance,
+        contributedInWindow: pot.contributedInWindow,
+        nextContributionDate: next?.date ?? null,
+        nextContributionAmount: next?.delta ?? 0,
+      };
+    });
   });
 
   /** Charges + anchors interleaved chronologically. */
@@ -238,7 +276,8 @@ export class ForecastHomeComponent {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
   }
 
-  protected iconFor(channel: 'bank' | 'cc'): string {
+  protected iconFor(channel: 'bank' | 'cc', potId?: string): string {
+    if (potId) return 'savings';
     return channel === 'bank' ? 'account_balance' : 'credit_card';
   }
 
@@ -264,6 +303,7 @@ export class ForecastHomeComponent {
 
   protected isEditingBank(): boolean { return this.editing() === 'bank'; }
   protected isEditingCard(cardId: string): boolean { return this.editing() === cardId; }
+  protected isEditingPot(potId: string): boolean { return this.editing() === `pot:${potId}`; }
   protected isAnyEdit(): boolean { return this.editing() !== null; }
 
   protected startEditBank(): void {
@@ -284,6 +324,13 @@ export class ForecastHomeComponent {
       mode: full?.mode === 'debit' ? 'debit' : 'credit',
     });
     this.editing.set(cardId);
+  }
+
+  protected startEditPot(potId: string): void {
+    const pot = this.forecast()?.pots.find((p) => p.potId === potId);
+    if (!pot) return;
+    this.potForm.reset({ balance: pot.snapshotBalance, asOf: this.todayIso() });
+    this.editing.set(`pot:${potId}`);
   }
 
   /** Local-time `YYYY-MM-DD` for prefilling date inputs. */
@@ -338,6 +385,28 @@ export class ForecastHomeComponent {
       } catch {
         // best-effort refresh; the forecast itself is authoritative
       }
+      this.editing.set(null);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async savePot(potId: string): Promise<void> {
+    if (this.potForm.invalid) { this.potForm.markAllAsTouched(); return; }
+    const pot = this.forecast()?.pots.find((p) => p.potId === potId);
+    if (!pot) return;
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const v = this.potForm.getRawValue();
+      const res = await firstValueFrom(this.api.updatePot(potId, {
+        name: pot.name,
+        balance: v.balance,
+        asOf: v.asOf,
+      }));
+      this.forecast.set(res.forecast);
       this.editing.set(null);
     } catch (err) {
       this.error.set(errorMessage(err));

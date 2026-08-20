@@ -83,6 +83,85 @@
       </form>
     </div>
 
+    <!-- Savings pots -->
+    <div class="m3-card section-card">
+      <header class="section-head">
+        <span class="material-symbols-outlined section-icon">savings</span>
+        <div>
+          <h2>Savings pots</h2>
+          <p>
+            Money set aside each month. Contributions leave the bank account and lower the
+            projected balance, and each pot is projected forward alongside it.
+          </p>
+        </div>
+      </header>
+
+      @if (pots().length === 0 && potEditing() === null) {
+        <p class="empty-hint">No pots yet. Create one, then add a recurring transfer to it.</p>
+      }
+
+      @if (pots().length > 0) {
+        <ul class="pot-list">
+          @for (pot of pots(); track pot.id) {
+            <li class="pot-row">
+              <div class="pot-row-main">
+                <span class="pot-name">{{ pot.name }}</span>
+                <span class="pot-meta">{{ ils(pot.balance) }} · as of {{ pot.asOf }}</span>
+              </div>
+              <div class="pot-row-actions">
+                <button type="button" class="m3-btn" (click)="startEditPot(pot)" [disabled]="potsBusy()">
+                  <span class="material-symbols-outlined">edit</span> Edit
+                </button>
+                <button type="button" class="m3-btn danger" (click)="deletePot(pot)" [disabled]="potsBusy()">
+                  <span class="material-symbols-outlined">delete</span> Delete
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (potEditing() !== null) {
+        <form [formGroup]="potForm" (ngSubmit)="savePot()" class="form-grid">
+          <label class="field">
+            <span>Name</span>
+            <input type="text" formControlName="name" placeholder="Rainy day fund" />
+          </label>
+          <label class="field">
+            <span>Amount already saved</span>
+            <input type="number" min="0" step="50" formControlName="balance" />
+          </label>
+          <label class="field">
+            <span>As of</span>
+            <input type="date" formControlName="asOf" />
+            <small>Movements after this date are added on top of the amount above.</small>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="m3-btn primary" [disabled]="potsBusy() || potForm.invalid">
+              @if (potsBusy()) {
+                <span class="material-symbols-outlined spin">progress_activity</span> Saving…
+              } @else {
+                <span class="material-symbols-outlined">save</span> Save
+              }
+            </button>
+            <button type="button" class="m3-btn" (click)="cancelPot()" [disabled]="potsBusy()">Cancel</button>
+          </div>
+        </form>
+      } @else {
+        <div class="form-actions">
+          <button type="button" class="m3-btn primary" (click)="startNewPot()" [disabled]="potsBusy()">
+            <span class="material-symbols-outlined">add</span> New pot
+          </button>
+        </div>
+      }
+
+      @if (potsError(); as e) {
+        <span class="inline-status error">
+          <span class="material-symbols-outlined">error</span> {{ e }}
+        </span>
+      }
+    </div>
+
     <!-- ESOP workbook settings -->
     <div class="m3-card section-card">
       <header class="section-head">

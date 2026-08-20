@@ -102,6 +102,7 @@
           [attr.aria-hidden]="chartView() !== 'projected'"
           [days]="f.days"
           [templates]="templates()"
+          [pots]="f.pots"
         />
       </article>
     </section>
@@ -221,6 +222,68 @@
             }
           </article>
         }
+        @for (pot of potSummaries(); track pot.potId) {
+          <article class="m3-card card-summary pot-summary">
+            @if (!isEditingPot(pot.potId)) {
+              <header class="card-header">
+                <h3>
+                  <span class="material-symbols-outlined">savings</span>
+                  {{ pot.name }}
+                </h3>
+                <div class="card-header-actions">
+                  @if (pot.nextContributionDate) {
+                    <span class="card-meta">
+                      +{{ fmt(pot.nextContributionAmount) }} on {{ fmtDate(pot.nextContributionDate) }}
+                    </span>
+                  }
+                  <button type="button" class="m3-btn m3-btn--icon" title="Edit"
+                          (click)="startEditPot(pot.potId)" [disabled]="isAnyEdit()">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                </div>
+              </header>
+              <div class="card-grid">
+                <div>
+                  <div class="kpi-label">Saved today</div>
+                  <div class="kpi-value-sm">{{ fmt(pot.balanceToday) }}</div>
+                </div>
+                <div>
+                  <div class="kpi-label">
+                    Projected
+                    @if (pot.contributedInWindow !== 0) {
+                      <span class="kpi-delta">{{ pot.contributedInWindow > 0 ? '+' : '' }}{{ fmt(pot.contributedInWindow) }}</span>
+                    }
+                  </div>
+                  <div class="kpi-value-sm">{{ fmt(pot.projectedBalance) }}</div>
+                </div>
+              </div>
+            } @else {
+              <form class="snapshot-form" [formGroup]="potForm" (ngSubmit)="savePot(pot.potId)">
+                <h3 class="form-title">
+                  <span class="material-symbols-outlined">savings</span>
+                  Update {{ pot.name }} snapshot
+                </h3>
+                <label class="field">
+                  <span class="field-label">Amount saved</span>
+                  <input type="number" formControlName="balance" min="0" step="1" />
+                </label>
+                <label class="field">
+                  <span class="field-label">As of</span>
+                  <input type="date" formControlName="asOf" />
+                </label>
+                <div class="form-actions">
+                  <button type="button" class="m3-btn" (click)="cancelEdit()" [disabled]="saving()">Cancel</button>
+                  <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || potForm.invalid">
+                    <span class="material-symbols-outlined" [class.spin]="saving()">
+                      {{ saving() ? 'progress_activity' : 'save' }}
+                    </span>
+                    Save
+                  </button>
+                </div>
+              </form>
+            }
+          </article>
+        }
       </section>
     }
 
@@ -280,8 +343,9 @@
                 [class.is-cleared]="item.cleared"
                 [class.is-bill]="item.billedEntries">
               <span class="row-icon"
-                    [class.row-icon--cc]="item.channel === 'cc'">
-                <span class="material-symbols-outlined">{{ iconFor(item.channel) }}</span>
+                    [class.row-icon--cc]="item.channel === 'cc'"
+                    [class.row-icon--savings]="!!item.potId">
+                <span class="material-symbols-outlined">{{ iconFor(item.channel, item.potId) }}</span>
               </span>
               <div class="charge-main">
                 <span class="charge-date">{{ fmtDate(item.date) }}</span>

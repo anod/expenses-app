@@ -5,10 +5,12 @@ import {
   generateVirtualOccurrences,
   monthlyPredictionDate,
   occurrenceKeyOf,
+  potIdOfChannel,
   todayInZone,
   type CreditCard,
   type LedgerEntry,
   type RecurringTemplate,
+  type SavingsPot,
 } from '@expenses/shared';
 import type { StateRepo } from '../db/stateRepo.js';
 import { computeForecast } from './computeForecast.js';
@@ -17,6 +19,7 @@ import {
   CreditCardInput,
   LedgerEntryInput,
   RecurringInput,
+  SavingsPotInput,
   SettingsInput,
 } from './schemas.js';
 
@@ -46,6 +49,20 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   const router = Router();
 
   const today = (): string => todayInZone(getRepo().getSettings().timezone);
+
+  /**
+   * Reject a `savings:` channel that points at a pot that doesn't exist —
+   * the forecast engine throws on an unresolvable pot, so catching it here
+   * turns a would-be 500 into a 400.
+   */
+  const validateChannel = (channel: string): void => {
+    const potId = potIdOfChannel(channel as import('@expenses/shared').Channel);
+    if (potId == null) return;
+    if (getRepo().listPots().some((p) => p.id === potId)) return;
+    const err = new Error(`unknown savings pot ${potId}`);
+    (err as Error & { status?: number }).status = 400;
+    throw err;
+  };
 
   const withForecast = <T>(res: import('express').Response, payload: T): void => {
     res.json({ entity: payload, forecast: computeForecast(getRepo()) });
@@ -107,11 +124,42 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
     res.json({ forecast: computeForecast(getRepo()) });
   });
 
+  // --- savings pots
+  router.get('/pots', (_req, res) => res.json(getRepo().listPots()));
+  router.post('/pots', (req, res) => {
+    try {
+      const input = SavingsPotInput.parse(req.body);
+      validateNoFutureAsOf(input.asOf, today(), 'savings pot');
+      const pot: SavingsPot = { ...input, id: input.id ?? randomUUID() };
+      getRepo().upsertPot(pot);
+      withForecast(res, pot);
+    } catch (err) {
+      if (!handleZod(err, res)) throw err;
+    }
+  });
+  router.patch('/pots/:id', (req, res) => {
+    try {
+      const input = SavingsPotInput.parse({ ...req.body, id: req.params.id });
+      validateNoFutureAsOf(input.asOf, today(), 'savings pot');
+      getRepo().upsertPot({ ...input, id: req.params.id });
+      withForecast(res, getRepo().listPots().find((p) => p.id === req.params.id) ?? null);
+    } catch (err) {
+      if (!handleZod(err, res)) throw err;
+    }
+  });
+  // Deleting a pot also drops the recurring templates and ledger entries on
+  // its channel — see StateRepo.deletePot.
+  router.delete('/pots/:id', (req, res) => {
+    getRepo().deletePot(req.params.id);
+    res.json({ forecast: computeForecast(getRepo()) });
+  });
+
   // --- ledger
   router.get('/ledger', (_req, res) => res.json(getRepo().listLedger()));
   router.post('/ledger', (req, res) => {
     try {
       const input = LedgerEntryInput.parse(req.body);
+      validateChannel(input.channel);
       const entry: LedgerEntry = {
         id: input.id ?? randomUUID(),
         description: input.description,
@@ -131,6 +179,7 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.patch('/ledger/:id', (req, res) => {
     try {
       const input = LedgerEntryInput.parse({ ...req.body, id: req.params.id });
+      validateChannel(input.channel);
       const entry: LedgerEntry = {
         id: req.params.id,
         description: input.description,
@@ -229,6 +278,7 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.post('/recurring', (req, res) => {
     try {
       const input = RecurringInput.parse(req.body);
+      validateChannel(input.channel);
       const tmpl: RecurringTemplate = {
         id: input.id ?? randomUUID(),
         description: input.description,
@@ -248,6 +298,7 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
   router.patch('/recurring/:id', (req, res) => {
     try {
       const input = RecurringInput.parse({ ...req.body, id: req.params.id });
+      validateChannel(input.channel);
       const tmpl: RecurringTemplate = {
         id: req.params.id,
         description: input.description,

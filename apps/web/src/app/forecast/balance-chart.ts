@@ -11,7 +11,8 @@ import {
   input,
   viewChild,
 } from '@angular/core';
-import type { DailyProjection, RecurringTemplate } from '@expenses/shared';
+import type { DailyProjection, PotForecast, RecurringTemplate } from '@expenses/shared';
+import { cardIdOfChannel } from '@expenses/shared';
 import type { TopLevelSpec } from 'vega-lite';
 import type { View as VegaView } from 'vega';
 
@@ -21,7 +22,10 @@ interface AnchorDatum {
   anchorBalance: number;
   expectedSpending: number;
   creditCardPayments: number;
+  savingsBalance: number;
 }
+
+type MetricField = 'expectedSpending' | 'creditCardPayments' | 'savingsBalance';
 
 const CHART_WIDTH = 680;
 const CHART_HEIGHT = 320;
@@ -33,9 +37,11 @@ const ANCHOR_BALANCE_COLOR = '#7d6d9c';
 const ANCHOR_BALANCE_STROKE = '#a895c7';
 const EXPECTED_SPENDING_COLOR = '#f6c177';
 const SPLIT_CC_COLOR = '#8bd5ff';
+const SAVINGS_COLOR = '#8fd694';
 const ANCHOR_BALANCE_LABEL = 'Anchor balance';
 const EXPECTED_SPENDING_LABEL = 'Expected spending';
 const SPLIT_CC_LABEL = 'Split CC @ anchor';
+const SAVINGS_LABEL = 'Savings';
 
 @Component({
   selector: 'app-balance-chart',
@@ -108,8 +114,11 @@ export class BalanceChartComponent {
 
   readonly days = input.required<readonly DailyProjection[]>();
   readonly templates = input<readonly RecurringTemplate[]>([]);
+  readonly pots = input<readonly PotForecast[]>([]);
   protected readonly anchors = computed(() => this.anchorData());
-  private readonly spec = computed<TopLevelSpec>(() => buildBalanceChartSpec(this.anchors()));
+  private readonly spec = computed<TopLevelSpec>(() =>
+    buildBalanceChartSpec(this.anchors(), this.pots().length > 0),
+  );
 
   constructor() {
     afterNextRender(() => {
@@ -172,6 +181,13 @@ export class BalanceChartComponent {
 
   private anchorData(): AnchorDatum[] {
     const templateById = new Map(this.templates().map((t) => [t.id, t]));
+    // Total pot balance per date, so each anchor can read its savings level.
+    const savingsByDate = new Map<string, number>();
+    for (const pot of this.pots()) {
+      for (const day of pot.days) {
+        savingsByDate.set(day.date, (savingsByDate.get(day.date) ?? 0) + day.balance);
+      }
+    }
     const anchors: AnchorDatum[] = [];
     let spendInPeriod = 0;
     let splitCcInPeriod = 0;
@@ -194,7 +210,7 @@ export class BalanceChartComponent {
             if (seen.has(entry.id)) continue;
             seen.add(entry.id);
             const template = entry.recurringId ? templateById.get(entry.recurringId) : undefined;
-            if (template && template.channel !== 'bank' && template.endDate) {
+            if (template && cardIdOfChannel(template.channel) != null && template.endDate) {
               splitCcInPeriod += Math.abs(entry.amount);
             }
           }
@@ -202,7 +218,7 @@ export class BalanceChartComponent {
           const template = charge.source.recurringId
             ? templateById.get(charge.source.recurringId)
             : undefined;
-          if (template && template.channel !== 'bank' && template.endDate) {
+          if (template && cardIdOfChannel(template.channel) != null && template.endDate) {
             splitCcInPeriod += Math.abs(charge.amount);
           }
         }
@@ -215,6 +231,7 @@ export class BalanceChartComponent {
           anchorBalance: day.balance,
           expectedSpending: spendInPeriod,
           creditCardPayments: splitCcInPeriod,
+          savingsBalance: savingsByDate.get(day.date) ?? 0,
         });
         spendInPeriod = 0;
         splitCcInPeriod = 0;
@@ -230,7 +247,10 @@ export class BalanceChartComponent {
   }
 }
 
-function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
+function buildBalanceChartSpec(
+  values: readonly AnchorDatum[],
+  showSavings: boolean,
+): TopLevelSpec {
   const x = {
     field: 'date',
     type: 'ordinal' as const,
@@ -247,8 +267,18 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
   const color = {
     type: 'nominal' as const,
     scale: {
-      domain: [ANCHOR_BALANCE_LABEL, EXPECTED_SPENDING_LABEL, SPLIT_CC_LABEL],
-      range: [ANCHOR_BALANCE_COLOR, EXPECTED_SPENDING_COLOR, SPLIT_CC_COLOR],
+      domain: [
+        ANCHOR_BALANCE_LABEL,
+        EXPECTED_SPENDING_LABEL,
+        SPLIT_CC_LABEL,
+        ...(showSavings ? [SAVINGS_LABEL] : []),
+      ],
+      range: [
+        ANCHOR_BALANCE_COLOR,
+        EXPECTED_SPENDING_COLOR,
+        SPLIT_CC_COLOR,
+        ...(showSavings ? [SAVINGS_COLOR] : []),
+      ],
     },
     legend: {
       orient: 'top' as const,
@@ -305,8 +335,10 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
       },
       lineLayer(EXPECTED_SPENDING_LABEL, 'expectedSpending'),
       lineLayer(SPLIT_CC_LABEL, 'creditCardPayments'),
+      ...(showSavings ? [lineLayer(SAVINGS_LABEL, 'savingsBalance', [6, 4])] : []),
       pointLayer(EXPECTED_SPENDING_LABEL, 'expectedSpending'),
       pointLayer(SPLIT_CC_LABEL, 'creditCardPayments'),
+      ...(showSavings ? [pointLayer(SAVINGS_LABEL, 'savingsBalance')] : []),
     ],
     config: {
       background: CHART_BG,
@@ -326,7 +358,7 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
     },
   };
 
-  function lineLayer(label: string, field: 'expectedSpending' | 'creditCardPayments') {
+  function lineLayer(label: string, field: MetricField, strokeDash?: number[]) {
     return {
       transform: [
         { calculate: `'${label}'`, as: 'metric' },
@@ -337,6 +369,7 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
         strokeWidth: 3,
         interpolate: 'monotone' as const,
         point: false,
+        ...(strokeDash ? { strokeDash } : {}),
       },
       encoding: {
         x,
@@ -353,7 +386,7 @@ function buildBalanceChartSpec(values: readonly AnchorDatum[]): TopLevelSpec {
     };
   }
 
-  function pointLayer(label: string, field: 'expectedSpending' | 'creditCardPayments') {
+  function pointLayer(label: string, field: MetricField) {
     return {
       transform: [
         { calculate: `'${label}'`, as: 'metric' },

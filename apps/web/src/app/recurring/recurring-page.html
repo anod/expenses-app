@@ -279,10 +279,10 @@
                 }
               </td>
               <td>
-                <span class="m3-chip channel-chip" [class.is-cc]="t.channel !== 'bank'">
-                  <span class="material-symbols-outlined">
-                    {{ t.channel === 'bank' ? 'account_balance' : 'credit_card' }}
-                  </span>
+                <span class="m3-chip channel-chip"
+                      [class.is-cc]="isCardChannel(t.channel)"
+                      [class.is-savings]="isPotChannel(t.channel)">
+                  <span class="material-symbols-outlined">{{ channelIcon(t.channel) }}</span>
                   {{ channelLabel(t.channel) }}
                 </span>
               </td>
@@ -332,10 +332,10 @@
       @for (t of sortedTemplates(); track t.id) {
         <li class="m3-card template-row" [class.is-editing]="isEditing(t.id)">
           <div class="template-row-main">
-            <div class="template-row-icon" [class.is-cc]="t.channel !== 'bank'">
-              <span class="material-symbols-outlined">
-                {{ t.channel === 'bank' ? 'account_balance' : 'credit_card' }}
-              </span>
+            <div class="template-row-icon"
+                 [class.is-cc]="isCardChannel(t.channel)"
+                 [class.is-savings]="isPotChannel(t.channel)">
+              <span class="material-symbols-outlined">{{ channelIcon(t.channel) }}</span>
             </div>
             <div class="template-row-body">
               <div class="template-row-head">
@@ -489,10 +489,10 @@
               <td>{{ e.date }}</td>
               <td>{{ displayDesc(e.description) }}</td>
               <td>
-                <span class="m3-chip channel-chip" [class.is-cc]="e.channel !== 'bank'">
-                  <span class="material-symbols-outlined">
-                    {{ e.channel === 'bank' ? 'account_balance' : 'credit_card' }}
-                  </span>
+                <span class="m3-chip channel-chip"
+                      [class.is-cc]="isCardChannel(e.channel)"
+                      [class.is-savings]="isPotChannel(e.channel)">
+                  <span class="material-symbols-outlined">{{ channelIcon(e.channel) }}</span>
                   {{ channelLabel(e.channel) }}
                 </span>
               </td>
@@ -519,10 +519,10 @@
       @for (e of oneOffLedger(); track e.id) {
         <li class="m3-card template-row" [class.is-editing]="isLedgerEditing(e.id)">
           <div class="template-row-main">
-            <div class="template-row-icon" [class.is-cc]="e.channel !== 'bank'">
-              <span class="material-symbols-outlined">
-                {{ e.channel === 'bank' ? 'account_balance' : 'credit_card' }}
-              </span>
+            <div class="template-row-icon"
+                 [class.is-cc]="isCardChannel(e.channel)"
+                 [class.is-savings]="isPotChannel(e.channel)">
+              <span class="material-symbols-outlined">{{ channelIcon(e.channel) }}</span>
             </div>
             <div class="template-row-body">
               <div class="template-row-title">{{ displayDesc(e.description) }}</div>

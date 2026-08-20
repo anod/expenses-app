@@ -44,6 +44,7 @@ export const buildBackupRoutes = (
       const state = {
         account: repo.getAccount(),
         cards: repo.listCards(),
+        pots: repo.listPots(),
         recurring: repo.listRecurring(),
         ledger: repo.listLedger(),
         settings: repo.getSettings(),

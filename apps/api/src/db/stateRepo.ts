@@ -4,6 +4,7 @@ import type {
   CreditCard,
   LedgerEntry,
   RecurringTemplate,
+  SavingsPot,
   Settings,
 } from '@expenses/shared';
 
@@ -92,6 +93,44 @@ export class StateRepo {
 
   deleteCard(id: string): void {
     this.db.prepare('DELETE FROM credit_card WHERE id = ?').run(id);
+  }
+
+  listPots(): SavingsPot[] {
+    return this.db
+      .prepare<[], { id: string; name: string; balance: number; as_of: string }>(
+        'SELECT id, name, balance, as_of FROM savings_pot ORDER BY name',
+      )
+      .all()
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        balance: r.balance,
+        asOf: r.as_of,
+      }));
+  }
+
+  upsertPot(p: SavingsPot): void {
+    this.db
+      .prepare(
+        'INSERT INTO savings_pot(id, name, balance, as_of) VALUES (?, ?, ?, ?) ' +
+        'ON CONFLICT(id) DO UPDATE SET ' +
+        'name=excluded.name, balance=excluded.balance, as_of=excluded.as_of',
+      )
+      .run(p.id, p.name, p.balance, p.asOf);
+  }
+
+  /**
+   * Delete a pot. Any recurring templates and ledger entries still on the
+   * pot's channel are removed with it — leaving them behind would make the
+   * forecast throw on an unresolvable `savings:` channel.
+   */
+  deletePot(id: string): void {
+    const channel = `savings:${id}`;
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM ledger_entry WHERE channel = ?').run(channel);
+      this.db.prepare('DELETE FROM recurring_template WHERE channel = ?').run(channel);
+      this.db.prepare('DELETE FROM savings_pot WHERE id = ?').run(id);
+    })();
   }
 
   listLedger(): LedgerEntry[] {
