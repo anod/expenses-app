@@ -18,9 +18,14 @@ const noopLog = {
   debug: () => {},
 };
 
-/** Attaches the `req.log` that `pino-http` provides in the real server. */
+/**
+ * Attaches the `req.log` that `pino-http` provides in the real server.
+ *
+ * `Request.log` is declared as a full pino `Logger`, so the stub is widened
+ * through `unknown` rather than implementing every member of that interface.
+ */
 const withLog = (req: Request, _res: Response, next: NextFunction) => {
-  (req as Request & { log: unknown }).log = noopLog;
+  (req as unknown as { log: typeof noopLog }).log = noopLog;
   next();
 };
 
