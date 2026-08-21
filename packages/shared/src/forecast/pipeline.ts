@@ -14,22 +14,31 @@ import {
   type Account,
   type CardForecast,
   type CardDailyBalance,
+  type ChargeSource,
   type CreditCard,
   type DailyProjection,
   type ForecastResult,
   type ForecastStatus,
   type IsoDate,
   type LedgerEntry,
+  type PotDailyBalance,
+  type PotForecast,
   type ProjectionCharge,
   type RecurringTemplate,
+  type SavingsPot,
   type Settings,
+  cardIdOfChannel,
   occurrenceKeyOf,
+  potIdOfChannel,
 } from './types.js';
 import {
   installmentFinalPayment,
   installmentPerPayment,
   scheduledPaymentCount,
 } from './paymentProgress.js';
+
+/** The `kind: 'ledger'` arm of `ChargeSource`. */
+type ChargeSourceLedger = Extract<ChargeSource, { kind: 'ledger' }>;
 
 const validateNotFuture = (date: IsoDate, today: IsoDate, what: string): void => {
   if (compareIso(date, today) > 0) {
@@ -54,6 +63,10 @@ const firstWeekdayOnOrAfter = (from: IsoDate, dayOfWeek: number): IsoDate => {
  * on or before `today`. Matches the pipeline's `isAnchor = d === 10` rule.
  */
 const ANCHOR_DAY_OF_MONTH = 10;
+
+/** Guards the derived pot delta against float drift from summed movements. */
+const roundCents = (value: number): number => Math.round(value * 100) / 100;
+
 const currentPeriodAnchorStart = (today: IsoDate): IsoDate => {
   const { y, m, d } = parseIso(today);
   if (d >= ANCHOR_DAY_OF_MONTH) return formatIso(y, m, ANCHOR_DAY_OF_MONTH);
@@ -183,6 +196,7 @@ export const mergeWithOverrides = (
   account: Account,
   cards: ReadonlyArray<CreditCard>,
   templates: ReadonlyArray<RecurringTemplate> = [],
+  pots: ReadonlyArray<SavingsPot> = [],
 ): LedgerEntry[] => {
   // Invariant guard: recurringId IS NULL ⇔ occurrenceKey IS NULL
   for (const e of persisted) {
@@ -213,10 +227,28 @@ export const mergeWithOverrides = (
   const cardById = new Map<string, CreditCard>();
   for (const c of cards) cardById.set(c.id, c);
 
+  const potById = new Map<string, SavingsPot>();
+  for (const p of pots) potById.set(p.id, p);
+
   const keep = (e: LedgerEntry): boolean => {
     if (e.status !== 'pending') return false;
     if (e.channel === 'bank') return compareIso(e.date, account.asOf) > 0;
-    const cardId = e.channel.slice(3);
+
+    const potId = potIdOfChannel(e.channel);
+    if (potId != null) {
+      const pot = potById.get(potId);
+      if (!pot) {
+        throw new Error(`ledger entry ${e.id}: unknown savings pot ${potId}`);
+      }
+      // A savings transfer has two legs with independent snapshot dates: the
+      // bank leg is gated by `account.asOf`, the pot leg by `pot.asOf`. Keep
+      // the entry while EITHER leg is still ahead of its snapshot so neither
+      // is silently dropped; `project` then gates each leg on its own.
+      const earliest = compareIso(pot.asOf, account.asOf) < 0 ? pot.asOf : account.asOf;
+      return compareIso(e.date, earliest) > 0;
+    }
+
+    const cardId = cardIdOfChannel(e.channel) as string;
     const card = cardById.get(cardId);
     if (!card) {
       throw new Error(`ledger entry ${e.id}: unknown card ${cardId}`);
@@ -248,6 +280,8 @@ export const mergeWithOverrides = (
  * - Each card's `currentDebit` becomes a bank debit on
  *   `firstBillingDayStrictlyAfter(card.asOf, billingDay)` (the snapshot's
  *   outstanding is settled on the next bill strictly after `asOf`).
+ * - savings entries hit the bank on their own date (like a debit card) and
+ *   move the pot the opposite way, projected per pot in `pots`.
  */
 export const project = (
   effective: ReadonlyArray<LedgerEntry>,
@@ -256,11 +290,15 @@ export const project = (
   settings: Settings,
   today: IsoDate,
   installmentIds: ReadonlySet<string> = new Set(),
+  pots: ReadonlyArray<SavingsPot> = [],
 ): ForecastResult => {
   validateNotFuture(account.asOf, today, 'account');
   for (const c of cards) {
     validateNotFuture(c.asOf, today, `card ${c.id}`);
     assertBillingDay(c.billingDayOfMonth, `card ${c.id}`);
+  }
+  for (const p of pots) {
+    validateNotFuture(p.asOf, today, `savings pot ${p.id}`);
   }
 
   const visibleStart = compareIso(account.asOf, today) > 0 ? account.asOf : today;
@@ -297,45 +335,62 @@ export const project = (
   const cardById = new Map<string, CreditCard>();
   for (const c of cards) cardById.set(c.id, c);
 
+  const potById = new Map<string, SavingsPot>();
+  for (const p of pots) potById.set(p.id, p);
+
   for (const e of effective) {
     if (e.status !== 'pending') continue;
     if (compareIso(e.date, endDate) > 0) continue;
+
+    const ledgerSource = (): ChargeSourceLedger => ({
+      kind: 'ledger',
+      entryId: e.id,
+      ...(e.recurringId ? { recurringId: e.recurringId } : {}),
+      ...(e.occurrenceKey ? { occurrenceKey: e.occurrenceKey } : {}),
+    });
+
     if (e.channel === 'bank') {
       if (compareIso(e.date, walkStart) <= 0) continue;
       pushBank(e.date, {
         description: e.description,
         amount: e.amount,
-        source: {
-          kind: 'ledger',
-          entryId: e.id,
-          ...(e.recurringId ? { recurringId: e.recurringId } : {}),
-          ...(e.occurrenceKey ? { occurrenceKey: e.occurrenceKey } : {}),
-        },
+        source: ledgerSource(),
       });
-    } else {
-      const cardId = e.channel.slice(3);
-      const card = cardById.get(cardId);
-      if (!card) throw new Error(`unknown card ${cardId} on entry ${e.id}`);
-      if (card.mode === 'debit') {
-        // Debit card: charge hits the bank on its own date, no aggregation.
-        if (compareIso(e.date, walkStart) <= 0) continue;
-        pushBank(e.date, {
-          description: e.description,
-          amount: e.amount,
-          source: {
-            kind: 'ledger',
-            entryId: e.id,
-            ...(e.recurringId ? { recurringId: e.recurringId } : {}),
-            ...(e.occurrenceKey ? { occurrenceKey: e.occurrenceKey } : {}),
-          },
-        });
-        continue;
-      }
-      const billDate = firstBillingDayOnOrAfter(e.date, card.billingDayOfMonth);
-      if (compareIso(billDate, walkStart) < 0) continue;
-      if (compareIso(billDate, endDate) > 0) continue;
-      pushCc(cardId, billDate, e);
+      continue;
     }
+
+    const potId = potIdOfChannel(e.channel);
+    if (potId != null) {
+      // Savings transfer: the bank leg behaves exactly like a debit card —
+      // it hits the balance on its own date, with no aggregation. The pot
+      // leg is projected separately below.
+      if (!potById.has(potId)) throw new Error(`unknown savings pot ${potId} on entry ${e.id}`);
+      if (compareIso(e.date, walkStart) <= 0) continue;
+      pushBank(e.date, {
+        description: e.description,
+        amount: e.amount,
+        source: { ...ledgerSource(), potId },
+      });
+      continue;
+    }
+
+    const cardId = cardIdOfChannel(e.channel) as string;
+    const card = cardById.get(cardId);
+    if (!card) throw new Error(`unknown card ${cardId} on entry ${e.id}`);
+    if (card.mode === 'debit') {
+      // Debit card: charge hits the bank on its own date, no aggregation.
+      if (compareIso(e.date, walkStart) <= 0) continue;
+      pushBank(e.date, {
+        description: e.description,
+        amount: e.amount,
+        source: ledgerSource(),
+      });
+      continue;
+    }
+    const billDate = firstBillingDayOnOrAfter(e.date, card.billingDayOfMonth);
+    if (compareIso(billDate, walkStart) < 0) continue;
+    if (compareIso(billDate, endDate) > 0) continue;
+    pushCc(cardId, billDate, e);
   }
 
   // For each card, emit a single bank row per billing date that combines
@@ -506,7 +561,9 @@ export const project = (
   for (const e of effective) {
     if (e.status !== 'pending') continue;
     if (e.channel === 'bank') continue;
-    const cardId = e.channel.slice(3);
+    const cardId = cardIdOfChannel(e.channel);
+    // Savings transfers never touch a card.
+    if (cardId == null) continue;
     const card = cardById.get(cardId);
     // Debit cards don't accumulate outstanding — each charge already hit the bank.
     if (card?.mode === 'debit') continue;
@@ -560,9 +617,62 @@ export const project = (
     };
   });
 
+  // Per-pot balance tracking. A pot moves the mirror image of the bank: a
+  // contribution (negative, bank down) raises the pot, a withdrawal
+  // (positive, bank up) lowers it.
+  const potMovesByDate = new Map<string, Map<IsoDate, number>>();
+  for (const e of effective) {
+    if (e.status !== 'pending') continue;
+    const potId = potIdOfChannel(e.channel);
+    if (potId == null) continue;
+    if (compareIso(e.date, endDate) > 0) continue;
+    let m = potMovesByDate.get(potId);
+    if (!m) {
+      m = new Map();
+      potMovesByDate.set(potId, m);
+    }
+    m.set(e.date, (m.get(e.date) ?? 0) - e.amount);
+  }
+
+  const potForecasts: PotForecast[] = pots.map((pot) => {
+    const dayList: PotDailyBalance[] = [];
+    const perDate = potMovesByDate.get(pot.id);
+    let balance = pot.balance;
+    let openingBalance = pot.balance;
+    // Walk from the earlier of the bank snapshot and the pot snapshot so
+    // movements between the two are not lost.
+    let cur = compareIso(pot.asOf, walkStart) < 0 ? pot.asOf : walkStart;
+    while (compareIso(cur, endDate) <= 0) {
+      // Movements on or before `pot.asOf` are already inside the snapshot.
+      const delta = compareIso(cur, pot.asOf) > 0 ? (perDate?.get(cur) ?? 0) : 0;
+      balance += delta;
+      if (compareIso(cur, visibleStart) >= 0) {
+        // `openingBalance` is the balance *after* the first emitted day's
+        // movement, mirroring `openingDebit` on cards. A movement landing on
+        // that day is therefore already part of the opening figure, so
+        // `contributedInWindow` (closing − opening) must not count it again.
+        if (dayList.length === 0) openingBalance = balance;
+        dayList.push({ date: cur, balance, delta });
+      }
+      cur = addDays(cur, 1);
+    }
+
+    return {
+      potId: pot.id,
+      name: pot.name,
+      asOf: pot.asOf,
+      snapshotBalance: pot.balance,
+      openingBalance,
+      closingBalance: balance,
+      contributedInWindow: roundCents(balance - openingBalance),
+      days: dayList,
+    };
+  });
+
   return {
     startDate: visibleStart, endDate, days, priorDays, status, minBalance, minBalanceDate,
     cards: cardForecasts,
+    pots: potForecasts,
     account: { asOf: account.asOf, bankBalance: account.bankBalance },
   };
 };
@@ -575,24 +685,36 @@ export const forecast = (input: {
   cards: ReadonlyArray<CreditCard>;
   settings: Settings;
   today: IsoDate;
+  pots?: ReadonlyArray<SavingsPot>;
 }): ForecastResult => {
+  const pots = input.pots ?? [];
   // Walk from asOf (so charges between asOf and today affect today's balance)
   // but compute horizon endDate from the visible window start.
   const visibleStart = compareIso(input.account.asOf, input.today) > 0
     ? input.account.asOf
     : input.today;
   const endDate = addMonths(visibleStart, input.settings.horizonMonths);
-  const virtualStart = input.cards.reduce(
+  const cardVirtualStart = input.cards.reduce(
     (start, card) =>
       card.mode !== 'debit' && compareIso(card.asOf, start) < 0 ? card.asOf : start,
     input.account.asOf,
   );
+  // Pots snapshot independently of the bank, so a pot whose `asOf` predates
+  // the account snapshot still needs its occurrences generated.
+  const virtualStart = pots.reduce(
+    (start, pot) => (compareIso(pot.asOf, start) < 0 ? pot.asOf : start),
+    cardVirtualStart,
+  );
   const virtuals = generateVirtualOccurrences(input.templates, virtualStart, endDate);
-  const effective = mergeWithOverrides(virtuals, input.persisted, input.account, input.cards, input.templates);
+  const effective = mergeWithOverrides(
+    virtuals, input.persisted, input.account, input.cards, input.templates, pots,
+  );
   // Fixed-term installments (templates with an end date) are the charges whose
   // occurrences may already be folded into a card's opening currentDebit.
   const installmentIds = new Set(
     input.templates.filter((t) => t.endDate != null).map((t) => t.id),
   );
-  return project(effective, input.account, input.cards, input.settings, input.today, installmentIds);
+  return project(
+    effective, input.account, input.cards, input.settings, input.today, installmentIds, pots,
+  );
 };

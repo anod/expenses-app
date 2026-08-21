@@ -6,7 +6,10 @@ const isoDate = z
 
 const channel = z
   .string()
-  .regex(/^(bank|cc:.+)$/, 'channel must be "bank" or "cc:<cardId>"');
+  .regex(
+    /^(bank|cc:.+|savings:.+)$/,
+    'channel must be "bank", "cc:<cardId>" or "savings:<potId>"',
+  );
 
 export const AccountInput = z.object({
   bankBalance: z.number().finite(),
@@ -20,6 +23,13 @@ export const CreditCardInput = z.object({
   asOf: isoDate,
   billingDayOfMonth: z.number().int().min(1).max(31),
   mode: z.enum(['credit', 'debit']).optional(),
+});
+
+export const SavingsPotInput = z.object({
+  id: z.string().min(1).max(64).optional(),
+  name: z.string().min(1).max(64),
+  balance: z.number().nonnegative().finite(),
+  asOf: isoDate,
 });
 
 const cadenceInput = z.discriminatedUnion('kind', [
@@ -86,6 +96,7 @@ export const SettingsInput = z.object({
 
 export type AccountInputT = z.infer<typeof AccountInput>;
 export type CreditCardInputT = z.infer<typeof CreditCardInput>;
+export type SavingsPotInputT = z.infer<typeof SavingsPotInput>;
 export type RecurringInputT = z.infer<typeof RecurringInput>;
 export type LedgerEntryInputT = z.infer<typeof LedgerEntryInput>;
 export type SettingsInputT = z.infer<typeof SettingsInput>;

@@ -10,10 +10,12 @@ import type {
 import {
   addDays,
   addMonths,
+  cardIdOfChannel,
   firstBillingDayOnOrAfter,
   firstBillingDayStrictlyAfter,
   generateVirtualOccurrences,
   paymentProgress,
+  potIdOfChannel,
   scheduledPaymentCount,
 } from '@expenses/shared';
 
@@ -60,6 +62,10 @@ export interface ChargeItem {
   /** Set when this charge was generated from a recurring template, so
    * the UI can offer a Skip button on future occurrences. */
   recurringId?: string;
+  /** Set when this charge is a transfer to/from a savings pot. The row still
+   * counts as a bank movement — this only lets the UI mark it as money moved
+   * rather than money spent. */
+  potId?: string;
 }
 
 export interface AnchorItem {
@@ -203,6 +209,7 @@ export const buildForecastTimeline = ({
     }
 
     const { entryId, recurringId } = charge.source;
+    const potId = charge.source.kind === 'ledger' ? charge.source.potId : undefined;
     const recurringIdResolved =
       recurringId ?? ledger.find((entry) => entry.id === entryId)?.recurringId;
     return {
@@ -217,18 +224,19 @@ export const buildForecastTimeline = ({
         : null,
       fullPrice: recurringIdResolved ? fullPriceForEntry({ recurringId: recurringIdResolved }) : null,
       ...(recurringIdResolved ? { recurringId: recurringIdResolved } : {}),
+      ...(potId ? { potId } : {}),
     };
   };
 
   const toPastChargeItem = (entry: LedgerEntry): ChargeItem => {
-    const isCc = entry.channel.startsWith('cc:');
-    const cardId = isCc ? entry.channel.slice(3) : undefined;
+    const cardId = cardIdOfChannel(entry.channel);
+    const potId = potIdOfChannel(entry.channel);
     const item: ChargeItem = {
       kind: 'charge',
       date: entry.date,
       description: entry.description,
       amount: entry.amount,
-      channel: isCc ? 'cc' : 'bank',
+      channel: cardId != null ? 'cc' : 'bank',
       entryId: entry.id,
       past: true,
       cleared: entry.status === 'cleared',
@@ -236,13 +244,15 @@ export const buildForecastTimeline = ({
       fullPrice: entry.recurringId ? fullPriceForEntry(entry) : null,
     };
     if (cardId) item.cardId = cardId;
+    if (potId) item.potId = potId;
     if (entry.recurringId) item.recurringId = entry.recurringId;
     return item;
   };
 
   const rollsIntoCreditCardBill = (entry: LedgerEntry): boolean => {
-    if (!entry.channel.startsWith('cc:')) return false;
-    const card = cardsById.get(entry.channel.slice(3));
+    const cardId = cardIdOfChannel(entry.channel);
+    if (cardId == null) return false;
+    const card = cardsById.get(cardId);
     return card != null && card.mode !== 'debit';
   };
 
@@ -301,8 +311,8 @@ export const buildForecastTimeline = ({
     }
 
     for (const entry of [...virtuals, ...persisted]) {
-      if (!entry.channel.startsWith('cc:')) continue;
-      const cardId = entry.channel.slice(3);
+      const cardId = cardIdOfChannel(entry.channel);
+      if (cardId == null) continue;
       const card = cardsById.get(cardId);
       if (!card || card.mode === 'debit') continue;
       const billDate = firstBillingDayOnOrAfter(entry.date, card.billingDayOfMonth);

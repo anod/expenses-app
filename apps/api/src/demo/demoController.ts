@@ -67,6 +67,7 @@ export class DemoController {
     repo.upsertAccount(demo.account);
     repo.upsertSettings(demo.settings);
     for (const c of demo.cards) repo.upsertCard(c);
+    for (const p of demo.pots) repo.upsertPot(p);
     for (const r of demo.recurring) repo.upsertRecurring(r);
     for (const e of demo.ledger) repo.upsertLedger(e);
     this.demoRepo = repo;

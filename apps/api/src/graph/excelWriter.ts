@@ -4,6 +4,7 @@ import type {
   CreditCard,
   LedgerEntry,
   RecurringTemplate,
+  SavingsPot,
   Settings,
 } from '@expenses/shared';
 import { parseDescription, generateVirtualOccurrences as expandRecurring } from '@expenses/shared';
@@ -21,6 +22,7 @@ export type SyncMode = 'overwrite' | 'new';
 export interface SyncState {
   account: Account;
   cards: CreditCard[];
+  pots?: SavingsPot[];
   recurring: RecurringTemplate[];
   ledger: LedgerEntry[];
   settings: Settings;
@@ -250,6 +252,7 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
   const widths = [
     2, // account
     6, // card
+    4, // savings pot
     8, // recurring
     8, // ledger
     4, // settings
@@ -265,6 +268,13 @@ export const renderStateRawSheet = (state: SyncState): SheetGrid => {
   out.push(pad(['id', 'name', 'currentDebit', 'asOf', 'billingDayOfMonth', 'mode'], maxW));
   for (const c of state.cards) {
     out.push(pad([c.id, c.name, c.currentDebit, c.asOf, c.billingDayOfMonth, c.mode ?? 'credit'], maxW));
+  }
+  out.push(pad([], maxW));
+
+  out.push(pad(['# pots'], maxW));
+  out.push(pad(['id', 'name', 'balance', 'asOf'], maxW));
+  for (const p of state.pots ?? []) {
+    out.push(pad([p.id, p.name, p.balance, p.asOf], maxW));
   }
   out.push(pad([], maxW));
 

@@ -62,6 +62,10 @@
   background: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
 }
+.channel-chip.is-savings {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
 
 .m3-table .amount {
   text-align: right;
@@ -255,6 +259,10 @@ tr.is-editing td {
 .template-row-icon.is-cc {
   background: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
+}
+.template-row-icon.is-savings {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
 }
 
 .template-row-body {

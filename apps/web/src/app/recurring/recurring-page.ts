@@ -3,13 +3,22 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, i
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import type { Channel, CreditCard, LedgerEntry, RecurringTemplate } from '@expenses/shared';
+import type {
+  Channel,
+  CreditCard,
+  LedgerEntry,
+  RecurringTemplate,
+  SavingsPot,
+} from '@expenses/shared';
 import {
+  cardIdOfChannel,
   descriptionLabel,
   endDateForPaymentCount,
   installmentFinalPayment,
   installmentPerPayment,
   paymentProgress,
+  potIdOfChannel,
+  savingsChannelOf,
   scheduledPaymentCount,
   type PaymentProgress,
 } from '@expenses/shared';
@@ -46,6 +55,7 @@ export class RecurringPageComponent {
 
   protected readonly templates = signal<RecurringTemplate[]>([]);
   protected readonly cards = signal<CreditCard[]>([]);
+  protected readonly pots = signal<SavingsPot[]>([]);
   /** All persisted one-off ledger entries (not generated from a template). */
   protected readonly ledger = signal<LedgerEntry[]>([]);
   protected readonly loading = signal(true);
@@ -119,10 +129,14 @@ export class RecurringPageComponent {
     }
   }
 
-  /** Channel options for the form select: bank + every card. */
+  /** Channel options for the form select: bank + every card + every savings pot. */
   protected readonly channelOptions = computed<Array<{ value: Channel; label: string }>>(() => [
     { value: 'bank', label: 'Bank' },
     ...this.cards().map((c) => ({ value: `cc:${c.id}` as Channel, label: c.name })),
+    ...this.pots().map((p) => ({
+      value: savingsChannelOf(p.id),
+      label: `${p.name} (savings)`,
+    })),
   ]);
 
   protected readonly form = this.fb.group({
@@ -242,13 +256,15 @@ export class RecurringPageComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [tpls, cards, ledger] = await Promise.all([
+      const [tpls, cards, pots, ledger] = await Promise.all([
         firstValueFrom(this.api.listRecurring()),
         firstValueFrom(this.api.listCards()),
+        firstValueFrom(this.api.listPots()),
         firstValueFrom(this.api.listLedger()),
       ]);
       this.templates.set(tpls);
       this.cards.set(cards);
+      this.pots.set(pots);
       this.ledger.set(ledger);
     } catch (err) {
       this.error.set(errorMessage(err, 'Unable to load recurring templates.'));
@@ -440,9 +456,9 @@ export class RecurringPageComponent {
    */
   protected selectedCardBillingDay(): number | null {
     const channel = this.form.controls.channel.value;
-    if (!channel.startsWith('cc:')) return null;
-    const card = this.cards().find((c) => `cc:${c.id}` === channel);
-    return card?.billingDayOfMonth ?? null;
+    const cardId = cardIdOfChannel(channel);
+    if (cardId == null) return null;
+    return this.cards().find((c) => c.id === cardId)?.billingDayOfMonth ?? null;
   }
 
   /** Fill the day-of-month with the selected card's billing day. */
@@ -501,9 +517,28 @@ export class RecurringPageComponent {
     };
   }
 
+  /** Material icon for a channel: bank, credit card, or savings pot. */
+  protected channelIcon(channel: Channel): string {
+    if (channel === 'bank') return 'account_balance';
+    return potIdOfChannel(channel) != null ? 'savings' : 'credit_card';
+  }
+
+  protected isCardChannel(channel: Channel): boolean {
+    return cardIdOfChannel(channel) != null;
+  }
+
+  protected isPotChannel(channel: Channel): boolean {
+    return potIdOfChannel(channel) != null;
+  }
+
   protected channelLabel(channel: Channel): string {
     if (channel === 'bank') return 'Bank';
-    const id = channel.slice(3);
+    const potId = potIdOfChannel(channel);
+    if (potId != null) {
+      const pot = this.pots().find((p) => p.id === potId);
+      return pot ? `${pot.name} (savings)` : channel;
+    }
+    const id = cardIdOfChannel(channel) ?? '';
     return this.cards().find((c) => c.id === id)?.name ?? channel;
   }
 

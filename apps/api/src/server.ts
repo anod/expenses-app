@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { resolve } from 'node:path';
 import { config as dotenvConfig } from 'dotenv';
 import express, {
-  type ErrorRequestHandler,
   type Request,
   type RequestHandler,
   type Response,
@@ -12,8 +11,8 @@ import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 import { findRepoRoot } from './findRepoRoot.js';
 import { loadConfig, isGraphConfig, type Config, type GraphConfig } from './config.js';
-import { DumpReader, NoDumpFoundError } from './dumpReader.js';
-import { GraphClient, GraphError, GraphTimeoutError } from './graph/graphClient.js';
+import { DumpReader } from './dumpReader.js';
+import { GraphClient } from './graph/graphClient.js';
 import { GraphReader } from './graph/graphReader.js';
 import { WorkbookResolver } from './graph/workbookResolver.js';
 import { ExcelWriter } from './graph/excelWriter.js';
@@ -26,8 +25,8 @@ import { computeForecast } from './forecast/computeForecast.js';
 import { buildForecastRoutes } from './forecast/routes.js';
 import { buildBackupRoutes } from './backup/routes.js';
 import { GraphEsopReader } from './esop/graphEsopReader.js';
-import { MarketDataTimeoutError } from './esop/marketData.js';
 import { buildEsopRoutes } from './esop/routes.js';
+import { errorHandler } from './errorHandler.js';
 
 // Load .env from the repo root explicitly (avoids cwd ambiguity).
 const repoRoot = findRepoRoot();
@@ -363,43 +362,6 @@ if (config.SERVE_SPA) {
   });
 }
 
-const errorHandler: ErrorRequestHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
-  if (err instanceof NoDumpFoundError) {
-    req.log.warn({ err }, 'no dump available');
-    res.status(err.status).json({ error: err.code, message: err.message });
-    return;
-  }
-  if (err instanceof GraphError) {
-    const code = err.graphCode ?? 'GRAPH_ERROR';
-    let status = err.status;
-    let actionable = err.message;
-    if (err.status === 401) {
-      actionable = 'Microsoft Graph rejected the access token. Sign in again.';
-    } else if (err.status === 403) {
-      actionable = `Microsoft Graph denied access (${code}). Check that the signed-in account has access to the workbook and that scopes ${'GRAPH_SCOPES'} are granted.`;
-    } else if (err.status === 404) {
-      actionable = `Workbook or worksheet not found (${code}). Verify ONEDRIVE_WORKBOOK_URL and WORKSHEET_NAME.`;
-    } else if (err.status >= 500 && err.status < 600) {
-      status = 502;
-    }
-    req.log.warn({ status: err.status, code, retryable: err.retryable }, 'graph error');
-    res.status(status).json({ error: code, message: actionable });
-    return;
-  }
-  if (err instanceof GraphTimeoutError) {
-    req.log.warn('graph request timed out');
-    res.status(504).json({ error: 'GRAPH_TIMEOUT', message: err.message });
-    return;
-  }
-  if (err instanceof MarketDataTimeoutError) {
-    req.log.warn('market data request timed out');
-    res.status(504).json({ error: 'MARKET_DATA_TIMEOUT', message: err.message });
-    return;
-  }
-  const message = err instanceof Error ? err.message : String(err);
-  req.log.error({ err }, 'unhandled error');
-  res.status(500).json({ error: 'INTERNAL_ERROR', message });
-};
 app.use(errorHandler);
 
 const server = app.listen(config.PORT, () => {

@@ -6,6 +6,7 @@ import type {
   ForecastResult,
   LedgerEntry,
   RecurringTemplate,
+  SavingsPot,
   Settings,
   EsopCalculationResult,
 } from '@expenses/shared';
@@ -55,6 +56,17 @@ export class ForecastApi {
   }
   deleteCard(id: string) {
     return this.http.delete<{ forecast: ForecastResult }>(`/api/cards/${id}`);
+  }
+
+  listPots() { return this.http.get<SavingsPot[]>('/api/pots'); }
+  createPot(body: Omit<SavingsPot, 'id'> & { id?: string }) {
+    return this.http.post<MutationResult<SavingsPot>>('/api/pots', body);
+  }
+  updatePot(id: string, body: Omit<SavingsPot, 'id'>) {
+    return this.http.patch<MutationResult<SavingsPot>>(`/api/pots/${id}`, body);
+  }
+  deletePot(id: string) {
+    return this.http.delete<{ forecast: ForecastResult }>(`/api/pots/${id}`);
   }
 
   listLedger() { return this.http.get<LedgerEntry[]>('/api/ledger'); }

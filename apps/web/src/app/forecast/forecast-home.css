@@ -365,6 +365,11 @@
   color: var(--md-sys-color-on-tertiary-container);
 }
 
+.row-icon--savings {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
 .charge-main {
   display: flex;
   align-items: baseline;
@@ -480,6 +485,18 @@
 }
 .bank-summary h3 .material-symbols-outlined {
   color: var(--md-sys-color-primary);
+}
+
+.pot-summary {
+  background: color-mix(in srgb, var(--md-sys-color-secondary-container) 45%, var(--md-sys-color-surface));
+}
+.pot-summary h3 .material-symbols-outlined {
+  color: var(--md-sys-color-secondary);
+}
+.kpi-delta {
+  margin-left: 0.35rem;
+  color: var(--md-sys-color-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .card-summary .card-header {

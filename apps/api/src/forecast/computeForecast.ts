@@ -6,8 +6,9 @@ export const computeForecast = (repo: StateRepo): ForecastResult => {
   const settings = repo.getSettings();
   const account = repo.getAccount();
   const cards = repo.listCards();
+  const pots = repo.listPots();
   const templates = repo.listRecurring();
   const persisted = repo.listLedger();
   const today = todayInZone(settings.timezone);
-  return forecast({ templates, persisted, account, cards, settings, today });
+  return forecast({ templates, persisted, account, cards, pots, settings, today });
 };

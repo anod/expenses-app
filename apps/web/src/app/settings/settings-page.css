@@ -208,6 +208,54 @@
 .inline-status.success { color: var(--md-sys-color-tertiary); }
 .inline-status.error { color: var(--md-sys-color-error); }
 
+/* --- Savings pots ----------------------------------------------------- */
+.empty-hint {
+  margin: 0 0 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.pot-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--md-sys-shape-corner-medium, 12px);
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.pot-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pot-name { font: var(--md-sys-typescale-body-large); }
+
+.pot-meta {
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.pot-row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.m3-btn.danger { color: var(--md-sys-color-error); }
+
 /* --- Status banners -------------------------------------------------- */
 .status-banner {
   display: flex;

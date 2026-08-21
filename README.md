@@ -112,6 +112,27 @@ When backing up to Excel, only exact monthly day-of-month templates are
 round-trippable in the current workbook format. Weekly and monthly-prediction
 templates are excluded from the export sheets with a warning.
 
+### Savings pots
+
+A **savings pot** is money you deliberately set aside. Pots are managed from
+Settings (`GET/POST/PATCH/DELETE /api/pots`) and get their own channel,
+`savings:<potId>`, alongside `bank` and `cc:<cardId>`.
+
+A contribution is an ordinary ledger entry or recurring template on that
+channel with a negative amount: the money **really leaves the bank account**,
+so it lowers the projected balance and counts against the safety threshold,
+and the same amount is added to the pot. A positive amount is a withdrawal
+back into the bank.
+
+Each pot carries its own `balance`/`asOf` snapshot — independent of the bank
+snapshot — and the forecast day-walks it forward, returning it as
+`ForecastResult.pots[]`. The home page shows a card per pot (saved today vs.
+projected at the horizon) and a dashed savings series on the projected-balance
+chart. On that chart, contributions also count toward the "Expected spending"
+line, so it continues to account for the full drop in the balance. Deleting a
+pot also deletes its ledger entries and recurring templates, since an
+unresolvable `savings:` channel would break the forecast.
+
 ## Other scripts
 
 | Command | Effect |
