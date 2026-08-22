@@ -320,8 +320,16 @@ export class ForecastHomeComponent {
     const card = f?.cards.find((c) => c.cardId === cardId);
     if (!card) return;
     const full = this.cards().find((c) => c.id === cardId);
+    // Prefill the outstanding the tile shows for today, not the stored
+    // snapshot: the form dates itself `today`, and the pipeline treats cc
+    // charges dated on or before a card's `asOf` as already inside
+    // `currentDebit`. Pairing the older `snapshotDebit` with today's date is an
+    // internally false statement — it drops every charge since that snapshot,
+    // and if a billing day fell in between it re-bills debt already settled.
+    // `openingDebit` is the value rendered as "Current debit" on the tile, so
+    // prefilling it makes an unchanged save a true no-op.
     this.cardForm.reset({
-      currentDebit: card.snapshotDebit,
+      currentDebit: card.openingDebit,
       asOf: this.todayIso(),
       mode: full?.mode === 'debit' ? 'debit' : 'credit',
     });
