@@ -586,6 +586,10 @@
   margin-top: 0.25rem;
 }
 
+/* Pushes Delete to the leading edge, away from Cancel/Save. */
+.snapshot-form .form-actions-spacer { flex: 1 1 auto; }
+.snapshot-form .m3-btn.danger { color: var(--md-sys-color-error); }
+
 /* ---------- Timeline clear button ---------- */
 
 .timeline-charge .clear-btn {

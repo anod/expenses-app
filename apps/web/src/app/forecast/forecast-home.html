@@ -261,8 +261,12 @@
               <form class="snapshot-form" [formGroup]="potForm" (ngSubmit)="savePot(pot.potId)">
                 <h3 class="form-title">
                   <span class="material-symbols-outlined">savings</span>
-                  Update {{ pot.name }} snapshot
+                  Edit {{ pot.name }}
                 </h3>
+                <label class="field">
+                  <span class="field-label">Name</span>
+                  <input type="text" formControlName="name" />
+                </label>
                 <label class="field">
                   <span class="field-label">Amount saved</span>
                   <input type="number" formControlName="balance" min="0" step="1" />
@@ -272,6 +276,12 @@
                   <input type="date" formControlName="asOf" />
                 </label>
                 <div class="form-actions">
+                  <button type="button" class="m3-btn danger" (click)="deletePot(pot.potId)"
+                          [disabled]="saving()">
+                    <span class="material-symbols-outlined">delete</span>
+                    Delete
+                  </button>
+                  <span class="form-actions-spacer"></span>
                   <button type="button" class="m3-btn" (click)="cancelEdit()" [disabled]="saving()">Cancel</button>
                   <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || potForm.invalid">
                     <span class="material-symbols-outlined" [class.spin]="saving()">
