@@ -124,6 +124,43 @@ tr.is-editing td {
 .field { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
 .field-span-2 { grid-column: span 2; }
 
+/* Inline "create a savings pot" block, shown when the channel picker is on
+   "+ New savings pot…". Spans the whole editor grid at every breakpoint. */
+.new-pot-draft {
+  grid-column: 1 / -1;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px dashed var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-lg);
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.new-pot-draft > .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+}
+
+.new-pot-draft .material-symbols-outlined { font-size: 1.125rem; }
+
+.new-pot-hint {
+  margin: 0;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.new-pot-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .new-pot-grid { grid-template-columns: 2fr 1fr 1fr; }
+}
+
 .field-label {
   font: var(--md-sys-typescale-label-medium);
   color: var(--md-sys-color-on-surface-variant);

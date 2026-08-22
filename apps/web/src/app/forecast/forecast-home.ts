@@ -97,7 +97,9 @@ export class ForecastHomeComponent {
     mode: ['credit' as 'credit' | 'debit', [Validators.required]],
   });
 
+  // Limits mirror the API's `SavingsPotInput` (name 1–64).
   protected readonly potForm = this.fb.nonNullable.group({
+    name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(64)]],
     balance: [0, [Validators.required, Validators.min(0)]],
     asOf: ['', [Validators.required]],
   });
@@ -329,7 +331,14 @@ export class ForecastHomeComponent {
   protected startEditPot(potId: string): void {
     const pot = this.forecast()?.pots.find((p) => p.potId === potId);
     if (!pot) return;
-    this.potForm.reset({ balance: pot.snapshotBalance, asOf: this.todayIso() });
+    // Prefill the balance the tile shows for today, not the stored snapshot:
+    // the form dates itself `today`, and the pipeline treats movements on or
+    // before a pot's `asOf` as already inside its balance. Seeding the older
+    // `snapshotBalance` against today's date would silently discard every
+    // contribution made since that snapshot — e.g. when renaming a pot without
+    // touching the amount. Prefilling today's balance makes an unchanged save
+    // a true no-op.
+    this.potForm.reset({ name: pot.name, balance: pot.openingBalance, asOf: this.todayIso() });
     this.editing.set(`pot:${potId}`);
   }
 
@@ -402,11 +411,38 @@ export class ForecastHomeComponent {
     try {
       const v = this.potForm.getRawValue();
       const res = await firstValueFrom(this.api.updatePot(potId, {
-        name: pot.name,
+        name: v.name.trim(),
         balance: v.balance,
         asOf: v.asOf,
       }));
       this.forecast.set(res.forecast);
+      this.editing.set(null);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async deletePot(potId: string): Promise<void> {
+    const pot = this.forecast()?.pots.find((p) => p.potId === potId);
+    if (!pot || this.saving()) return;
+    const ok = confirm(
+      `Delete “${pot.name}”? Its contributions and any recurring transfers ` +
+        `into it are removed from the forecast.`,
+    );
+    if (!ok) return;
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const res = await firstValueFrom(this.api.deletePot(potId));
+      this.forecast.set(res.forecast);
+      // The server cascades: the pot's templates and ledger entries are gone.
+      // The timeline still derives past rows from these local signals, so drop
+      // that channel here too rather than showing charges until the next load.
+      const channel = `savings:${potId}`;
+      this.templates.update((arr) => arr.filter((t) => t.channel !== channel));
+      this.ledger.update((arr) => arr.filter((e) => e.channel !== channel));
       this.editing.set(null);
     } catch (err) {
       this.error.set(errorMessage(err));

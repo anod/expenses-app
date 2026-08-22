@@ -114,9 +114,15 @@ templates are excluded from the export sheets with a warning.
 
 ### Savings pots
 
-A **savings pot** is money you deliberately set aside. Pots are managed from
-Settings (`GET/POST/PATCH/DELETE /api/pots`) and get their own channel,
-`savings:<potId>`, alongside `bank` and `cc:<cardId>`.
+A **savings pot** is money you deliberately set aside. A pot gets its own
+channel, `savings:<potId>`, alongside `bank` and `cc:<cardId>`.
+
+You create a pot where you'll actually use it: on the **Recurring** page, pick
+`+ New savings pot…` in the channel dropdown and name it inline while setting up
+the monthly contribution — pay-yourself-first in one step. Once it exists, the
+pot appears as a tile on the **Forecast** home page, where you can rename it,
+correct its current balance, or delete it. (REST equivalent:
+`GET/POST/PATCH/DELETE /api/pots`.)
 
 A contribution is an ordinary ledger entry or recurring template on that
 channel with a negative amount: the money **really leaves the bank account**,

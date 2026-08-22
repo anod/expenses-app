@@ -23,7 +23,7 @@ import {
   type PaymentProgress,
 } from '@expenses/shared';
 import { errorMessage } from '../core/api-error';
-import { ForecastApi } from '../forecast/forecast.api';
+import { ForecastApi, type RecurringWriteBody } from '../forecast/forecast.api';
 
 type EditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
 type LedgerEditState = { kind: 'idle' } | { kind: 'edit'; id: string } | { kind: 'new' };
@@ -35,6 +35,23 @@ type SortColumn = 'description' | 'channel' | 'day' | 'amount' | 'startDate' | '
 type SortDir = 'asc' | 'desc';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+/**
+ * Sentinel channel value that reveals the inline "create a savings pot" fields.
+ * Setting money aside is just a recurring charge, so the pot is created from
+ * the same form as the contribution rather than up front somewhere else. It is
+ * never persisted: `save()` swaps it for the real `savings:<id>` channel.
+ */
+const NEW_POT_CHANNEL = '__new-pot__';
+type ChannelChoice = Channel | typeof NEW_POT_CHANNEL;
+
+/**
+ * The editor form's value once `save()` has swapped the `NEW_POT_CHANNEL`
+ * sentinel for a real channel, so the body builders can't be handed a
+ * sentinel by mistake.
+ */
+type ResolvedFormValue<F extends { getRawValue(): { channel: ChannelChoice } }> =
+  Omit<ReturnType<F['getRawValue']>, 'channel'> & { channel: Channel };
 
 @Component({
   selector: 'app-recurring-page',
@@ -139,12 +156,35 @@ export class RecurringPageComponent {
     })),
   ]);
 
+  /**
+   * Channel choices for the recurring editor: the real channels plus the
+   * "new savings pot" sentinel. The one-time editor keeps using
+   * `channelOptions()` so it only offers pots that already exist.
+   */
+  /** Recurring-form channels: everything in {@link channelOptions} plus "create a new pot". */
+  protected readonly recurringChannelOptions = computed<
+    Array<{ value: ChannelChoice; label: string }>
+  >(() => [...this.channelOptions(), { value: NEW_POT_CHANNEL, label: '+ New savings pot…' }]);
+
+  protected readonly newPotChannel = NEW_POT_CHANNEL;
+
+  /**
+   * Fields for the pot created alongside the contribution. Limits mirror the
+   * API's `SavingsPotInput` (name 1–64) — this page shows no per-field error
+   * text and relies on Save being disabled, so client and server must agree.
+   */
+  protected readonly potDraftForm = this.fb.nonNullable.group({
+    name: ['', [Validators.required, Validators.pattern(/\S/), Validators.maxLength(64)]],
+    balance: [0, [Validators.required, Validators.min(0)]],
+    asOf: ['', [Validators.required]],
+  });
+
   protected readonly form = this.fb.group({
     description: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(200)]),
     recurrenceType: this.fb.nonNullable.control('recurring' as RecurrenceType, [Validators.required]),
     amount: this.fb.nonNullable.control(0, [Validators.required]),
     fullPrice: this.fb.control<number | null>(null, [Validators.min(0)]),
-    channel: this.fb.nonNullable.control('bank' as Channel, [Validators.required]),
+    channel: this.fb.nonNullable.control<ChannelChoice>('bank', [Validators.required]),
     cadenceKind: this.fb.nonNullable.control('monthly' as CadenceKind, [Validators.required]),
     day: this.fb.nonNullable.control(1, [Validators.min(1), Validators.max(31)]),
     dayOfWeek: this.fb.nonNullable.control(5, [Validators.min(0), Validators.max(6)]), // default Fri
@@ -159,6 +199,9 @@ export class RecurringPageComponent {
   });
 
   protected readonly weekdayOptions = WEEKDAY_LABELS.map((label, value) => ({ value, label }));
+
+  /** True while the channel picker is on "+ New savings pot…". */
+  protected readonly creatingPot = computed(() => this.formValue().channel === NEW_POT_CHANNEL);
 
   /** True when the editor is in installment mode (full price split across N payments). */
   protected isInstallmentMode(): boolean {
@@ -295,6 +338,7 @@ export class RecurringPageComponent {
       endDate: t.endDate ?? '',
       paymentCount: total,
     }));
+    this.resetPotDraft();
     this.applyRecurrenceTypeValidators(isInstallment ? 'installment' : 'recurring');
     this.lastCadenceKind = t.cadence.kind;
     this.edit.set({ kind: 'edit', id: t.id });
@@ -303,6 +347,7 @@ export class RecurringPageComponent {
 
   protected startNew(): void {
     const today = todayIsoLocal();
+    this.resetPotDraft();
     this.withSuppressedWeeklyStartSync(() => this.form.reset({
       description: '',
       recurrenceType: 'recurring',
@@ -327,21 +372,56 @@ export class RecurringPageComponent {
     this.error.set(null);
   }
 
+  /**
+   * Clear the inline pot draft. Called whenever an editor opens so a draft
+   * abandoned in a previous session can't be submitted by a later save.
+   */
+  private resetPotDraft(): void {
+    this.potDraftForm.reset({ name: '', balance: 0, asOf: todayIsoLocal() });
+  }
+
   protected async save(): Promise<void> {
+    const creatingPot = this.creatingPot();
+    if (creatingPot && this.potDraftForm.invalid) {
+      this.potDraftForm.markAllAsTouched();
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
     const state = this.edit();
     if (state.kind === 'idle') return;
-    const v = this.form.getRawValue();
-    const body =
-      v.recurrenceType === 'installment'
-        ? this.installmentBody(v)
-        : this.recurringBody(v);
     this.saving.set(true);
     this.error.set(null);
+    // Snapshot both forms up front. The inputs stay enabled while the pot POST
+    // is in flight, so re-reading them afterwards could pick up edits that
+    // never went through the validation above — or send the template to a pot
+    // the user has since switched away from.
+    const raw = this.form.getRawValue();
+    const draft = this.potDraftForm.getRawValue();
+    // Set when this save created a pot, so a later failure can undo it rather
+    // than leaving an empty pot behind that the user never asked for.
+    let createdPotId: string | null = null;
     try {
+      let channel: Channel;
+      if (creatingPot) {
+        const created = await firstValueFrom(this.api.createPot({
+          name: draft.name.trim(),
+          balance: draft.balance,
+          asOf: draft.asOf,
+        }));
+        createdPotId = created.entity.id;
+        this.pots.update((arr) => [...arr, created.entity]);
+        channel = savingsChannelOf(created.entity.id);
+      } else {
+        channel = raw.channel as Channel;
+      }
+      const v = { ...raw, channel };
+      const body =
+        v.recurrenceType === 'installment'
+          ? this.installmentBody(v)
+          : this.recurringBody(v);
       if (state.kind === 'new') {
         const res = await firstValueFrom(this.api.createRecurring(body));
         this.templates.update((arr) => [...arr, res.entity]);
@@ -352,12 +432,30 @@ export class RecurringPageComponent {
       this.edit.set({ kind: 'idle' });
     } catch (err) {
       this.error.set(errorMessage(err));
+      // Only undo the pot when the template was being created. On an edit the
+      // template already existed, and a failed-looking PATCH may still have
+      // committed — deleting the pot would then cascade that pre-existing
+      // template away (deletePot clears its channel's templates and entries).
+      // An abandoned empty pot is the far cheaper mistake; it is removable
+      // from its tile on the forecast page.
+      if (createdPotId && state.kind === 'new') await this.rollbackPot(createdPotId);
     } finally {
       this.saving.set(false);
     }
   }
 
-  private recurringBody(v: ReturnType<typeof this.form.getRawValue>): import('../forecast/forecast.api').RecurringWriteBody {
+  /** Best-effort undo of a pot created moments ago by a save that then failed. */
+  private async rollbackPot(potId: string): Promise<void> {
+    try {
+      await firstValueFrom(this.api.deletePot(potId));
+      this.pots.update((arr) => arr.filter((p) => p.id !== potId));
+    } catch {
+      // Keep the original save error on screen. The pot is empty and can be
+      // removed from its card on the forecast page.
+    }
+  }
+
+  private recurringBody(v: ResolvedFormValue<typeof this.form>): RecurringWriteBody {
     const cadence =
       v.cadenceKind === 'weekly'
         ? { kind: 'weekly' as const, dayOfWeek: v.dayOfWeek as 0 | 1 | 2 | 3 | 4 | 5 | 6 }
@@ -381,7 +479,7 @@ export class RecurringPageComponent {
     };
   }
 
-  private installmentBody(v: ReturnType<typeof this.form.getRawValue>): import('../forecast/forecast.api').RecurringWriteBody {
+  private installmentBody(v: ResolvedFormValue<typeof this.form>): RecurringWriteBody {
     const count = v.paymentCount as number;
     const signedFull = -Math.abs(v.fullPrice as number);
     const cadence = { kind: 'monthly' as const, day: v.day, monthEndPolicy: 'clamp' as const };
@@ -456,6 +554,7 @@ export class RecurringPageComponent {
    */
   protected selectedCardBillingDay(): number | null {
     const channel = this.form.controls.channel.value;
+    if (channel === NEW_POT_CHANNEL) return null;
     const cardId = cardIdOfChannel(channel);
     if (cardId == null) return null;
     return this.cards().find((c) => c.id === cardId)?.billingDayOfMonth ?? null;

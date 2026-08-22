@@ -50,11 +50,37 @@
         <label class="field">
           <span class="field-label">Channel</span>
           <select formControlName="channel">
-            @for (opt of channelOptions(); track opt.value) {
+            @for (opt of recurringChannelOptions(); track opt.value) {
               <option [value]="opt.value">{{ opt.label }}</option>
             }
           </select>
         </label>
+
+        @if (creatingPot()) {
+          <div class="field field-span-2 new-pot-draft" [formGroup]="potDraftForm">
+            <span class="field-label">
+              <span class="material-symbols-outlined">savings</span> New savings pot
+            </span>
+            <p class="new-pot-hint">
+              Created together with this contribution. The money leaves the bank account and is
+              projected forward in the pot.
+            </p>
+            <div class="new-pot-grid">
+              <label class="field">
+                <span class="field-label">Pot name</span>
+                <input type="text" formControlName="name" placeholder="e.g. Rainy day fund" />
+              </label>
+              <label class="field">
+                <span class="field-label">Already saved</span>
+                <input type="number" formControlName="balance" min="0" step="1" />
+              </label>
+              <label class="field">
+                <span class="field-label">As of</span>
+                <input type="date" formControlName="asOf" />
+              </label>
+            </div>
+          </div>
+        }
 
         @if (isInstallmentMode()) {
           <label class="field">
@@ -208,7 +234,11 @@
         <button type="button" class="m3-btn" (click)="cancel()" [disabled]="saving()">
           Cancel
         </button>
-        <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || form.invalid">
+        <button
+          type="submit"
+          class="m3-btn m3-btn--filled"
+          [disabled]="saving() || form.invalid || (creatingPot() && potDraftForm.invalid)"
+        >
           @if (saving()) {
             <span class="material-symbols-outlined spin">progress_activity</span>
           } @else {
