@@ -31,31 +31,91 @@
   }
 
   @if (result(); as esop) {
-    <div class="card price-panel">
+    <div class="card price-panel" [class.simulating]="simulating()">
       <div class="price-values">
-        <div class="price-summary">
-          <span>USD/NIS</span>
-          <strong>{{ esop.assumptions.usdNisRate }} ₪/$</strong>
-        </div>
-        <div class="price-summary">
-          <span>{{ stockSymbol() }}</span>
-          <strong>{{ usd(esop.assumptions.currentPriceUsd) }}</strong>
-        </div>
+        @if (simulating()) {
+          <label class="simulation-field">
+            <span>USD/NIS <small>₪/$</small></span>
+            <input
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="any"
+              required
+              aria-label="Simulated USD/NIS exchange rate"
+              [ngModel]="simulatedRate()"
+              (ngModelChange)="simulatedRate.set($event)"
+              [attr.aria-invalid]="simulationError() ? 'true' : null"
+              [attr.aria-describedby]="simulationError() ? 'simulation-error' : 'simulation-note'"
+            />
+          </label>
+          <label class="simulation-field">
+            <span>{{ stockSymbol() }} <small>USD</small></span>
+            <input
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="any"
+              required
+              aria-label="Simulated stock price in USD"
+              [ngModel]="simulatedPrice()"
+              (ngModelChange)="simulatedPrice.set($event)"
+              [attr.aria-invalid]="simulationError() ? 'true' : null"
+              [attr.aria-describedby]="simulationError() ? 'simulation-error' : 'simulation-note'"
+            />
+          </label>
+        } @else {
+          <div class="price-summary">
+            <span>USD/NIS</span>
+            <strong>{{ esop.assumptions.usdNisRate }} ₪/$</strong>
+          </div>
+          <div class="price-summary">
+            <span>{{ stockSymbol() }}</span>
+            <strong>{{ usd(esop.assumptions.currentPriceUsd) }}</strong>
+          </div>
+        }
         <app-info-hint
           class="price-info"
           label="Market values &amp; last refresh"
           [text]="marketValuesHint()"
         />
       </div>
-      <button
-        type="button"
-        class="m3-btn m3-btn--tonal"
-        (click)="refresh()"
-        [disabled]="updating() || loading()"
-      >
-        <span class="material-symbols-outlined" [class.spin]="updating()">refresh</span>
-        {{ updating() ? 'Updating…' : 'Update' }}
-      </button>
+      <div class="price-actions">
+        <button
+          type="button"
+          class="m3-btn m3-btn--tonal simulation-toggle"
+          (click)="toggleSimulation()"
+          [attr.title]="simulating() ? 'Reset simulation' : 'Simulate prices'"
+          [attr.aria-label]="simulating() ? 'Reset simulation' : 'Simulate prices'"
+          [attr.aria-pressed]="simulating()"
+          [disabled]="updating() || loading()"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">
+            {{ simulating() ? 'restart_alt' : 'calculate' }}
+          </span>
+        </button>
+        <button
+          type="button"
+          class="m3-btn m3-btn--tonal market-update"
+          aria-label="Update saved market prices"
+          title="Update saved market prices"
+          (click)="refresh()"
+          [disabled]="updating() || loading() || simulating()"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true" [class.spin]="updating()">
+            refresh
+          </span>
+          <span class="update-label">{{ updating() ? 'Updating…' : 'Update' }}</span>
+        </button>
+      </div>
+      @if (simulating()) {
+        <p id="simulation-note" class="simulation-note" role="status">
+          <strong>Simulation</strong> · Live preview, not saved. Reset or leave to restore prices.
+        </p>
+        @if (simulationError(); as message) {
+          <div id="simulation-error" class="error" role="alert">{{ message }}</div>
+        }
+      }
     </div>
 
     @if (updateMessage(); as msg) {

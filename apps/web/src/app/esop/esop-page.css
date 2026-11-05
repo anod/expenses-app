@@ -1,7 +1,4 @@
-/* Padding/max-width come from the shared `.page` rule so this tab lines up with
-   the others. `minmax(0, 1fr)` stops the wide grants table from forcing the
-   grid track past the container — without it the automatic minimum size of the
-   card wins and the whole page scrolls sideways instead of just the table. */
+/* Keep the wide grants table from expanding the shared page container. */
 .page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -101,20 +98,52 @@
 }
 
 .price-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.price-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.simulation-toggle {
+  width: 2.75rem;
+  padding: 0;
+}
+
+.price-panel.simulating {
+  border-color: var(--md-sys-color-primary);
+}
+
+.simulation-field > span {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 1.5rem;
-  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 0.35rem;
 }
 
-.price-info {
-  align-self: center;
+.simulation-field small {
+  font: var(--md-sys-typescale-label-medium);
 }
 
-.price-summary small {
+.simulation-note {
+  flex-basis: 100%;
+  margin: 0;
   color: var(--md-sys-color-on-surface-variant);
-  font: var(--md-sys-typescale-body-small);
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.simulation-note strong {
+  color: var(--md-sys-color-primary);
+}
+
+.price-panel > .error {
+  flex-basis: 100%;
 }
 
 .update-message {
@@ -215,12 +244,9 @@ td.unlocked {
   box-shadow: var(--md-sys-elevation-level2);
 }
 
-.compact {
-  margin-top: 0.75rem;
-}
-
 label {
   display: grid;
+  min-width: 0;
   gap: 0.25rem;
   color: var(--md-sys-color-on-surface-variant);
   font: var(--md-sys-typescale-label-large);
@@ -233,6 +259,9 @@ input {
   font: var(--md-sys-typescale-body-large);
   color: var(--md-sys-color-on-surface);
   background: var(--md-sys-color-surface);
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .summary-grid {
@@ -383,10 +412,6 @@ td {
     display: none;
   }
 
-  .page-head .m3-btn {
-    justify-self: start;
-  }
-
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
@@ -426,26 +451,66 @@ td {
     display: none;
   }
 
-  .price-summary {
+  .price-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    flex: 1 1 auto;
+    gap: 0.5rem;
+  }
+
+  .price-values {
+    width: 100%;
+    gap: 0.35rem;
+  }
+
+  .simulation-field input {
+    padding-inline: 0.4rem;
+    appearance: textfield;
+  }
+
+  .simulation-field small {
+    display: none;
+  }
+
+  .simulation-field input::-webkit-inner-spin-button,
+  .simulation-field input::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  .simulation-note,
+  .price-panel > .error {
+    grid-column: 1 / -1;
+  }
+
+  .price-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-width: 0;
   }
 
   .price-summary strong {
     font: var(--md-sys-typescale-body-large);
+    overflow-wrap: anywhere;
   }
 
-  .price-panel .m3-btn .material-symbols-outlined {
-    margin-inline-end: 0;
+  .price-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 2.75rem);
+    justify-content: end;
   }
 
-  .price-panel .m3-btn {
-    font-size: 0;
-    gap: 0;
+  .price-actions .m3-btn {
+    min-height: 2.75rem;
   }
 
-  .price-panel .m3-btn .material-symbols-outlined {
-    font-size: 1.25rem;
+  .market-update {
+    padding: 0;
+  }
+
+  .market-update .update-label {
+    display: none;
   }
 
   .summary-card {

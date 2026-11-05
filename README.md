@@ -112,6 +112,15 @@ When backing up to Excel, only exact monthly day-of-month templates are
 round-trippable in the current workbook format. Weekly and monthly-prediction
 templates are excluded from the export sheets with a warning.
 
+### ESOP price simulation
+
+On the **ESOP** page, choose **Simulate prices** to temporarily adjust the USD/NIS
+exchange rate and stock price. Totals, grant taxes, and unlock forecasts
+recalculate locally as you type; no values are written to the workbook or DB.
+Both inputs must be positive numbers. **Reset simulation** or leaving the page
+restores saved market values. The market **Update** action is disabled during
+simulation to prevent accidental writes.
+
 ### Savings pots
 
 A **savings pot** is money you deliberately set aside. A pot gets its own

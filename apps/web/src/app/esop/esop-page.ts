@@ -1,6 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { esopUnlockLabel, type EsopCalculationResult, type EsopComputedGrant } from '@expenses/shared';
+import {
+  calculateEsop,
+  esopUnlockLabel,
+  type EsopCalculationResult,
+  type EsopComputedGrant,
+} from '@expenses/shared';
 import { ForecastApi } from '../forecast/forecast.api';
 import { errorMessage as formatApiError } from '../core/api-error';
 import { InfoHintComponent } from '../core/info-hint';
@@ -8,7 +14,7 @@ import { InfoHintComponent } from '../core/info-hint';
 @Component({
   selector: 'app-esop-page',
   standalone: true,
-  imports: [InfoHintComponent],
+  imports: [FormsModule, InfoHintComponent],
   templateUrl: './esop-page.html',
   styleUrl: './esop-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -16,7 +22,53 @@ import { InfoHintComponent } from '../core/info-hint';
 export class EsopPageComponent {
   private readonly api = inject(ForecastApi);
 
-  protected readonly result = signal<EsopCalculationResult | null>(null);
+  private readonly savedResult = signal<EsopCalculationResult | null>(null);
+  protected readonly simulating = signal(false);
+  protected readonly simulatedRate = signal<number | null>(null);
+  protected readonly simulatedPrice = signal<number | null>(null);
+  private readonly preview = computed(() => {
+    const saved = this.savedResult();
+    if (!saved || !this.simulating()) return { result: saved, error: null };
+    const rate = this.simulatedRate();
+    const price = this.simulatedPrice();
+    if (
+      rate == null ||
+      price == null ||
+      !Number.isFinite(rate) ||
+      !Number.isFinite(price) ||
+      rate <= 0 ||
+      price <= 0
+    ) {
+      return {
+        result: saved,
+        error: 'Enter a positive exchange rate and stock price. Showing saved values until both are valid.',
+      };
+    }
+    const simulated = calculateEsop(saved.grants, {
+      ...saved.assumptions,
+      usdNisRate: rate,
+      currentPriceUsd: price,
+    });
+    const values = [
+      ...Object.values(simulated.totals),
+      ...Object.values(simulated.pastLockdownTotals),
+      ...simulated.unblockForecasts.flatMap((forecast) => [
+        forecast.sumNis,
+        forecast.netNis,
+        forecast.sumDeltaNis,
+        forecast.netDeltaNis,
+      ]),
+    ];
+    if (values.some((value) => value != null && !Number.isFinite(value))) {
+      return { result: saved, error: 'Values are too large to calculate. Showing saved values.' };
+    }
+    return {
+      result: { ...simulated, warnings: [...new Set([...saved.warnings, ...simulated.warnings])] },
+      error: null,
+    };
+  });
+  protected readonly result = computed(() => this.preview().result);
+  protected readonly simulationError = computed(() => this.preview().error);
   protected readonly loading = signal(true);
   protected readonly updating = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -35,12 +87,28 @@ export class EsopPageComponent {
     this.error.set(null);
     try {
       const result = await firstValueFrom(this.api.getEsop());
-      this.result.set(result);
+      this.savedResult.set(result);
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  protected toggleSimulation(): void {
+    if (this.loading() || this.updating()) return;
+    if (this.simulating()) {
+      this.simulating.set(false);
+      this.simulatedRate.set(null);
+      this.simulatedPrice.set(null);
+      return;
+    }
+    const saved = this.savedResult();
+    if (!saved) return;
+    this.simulatedRate.set(saved.assumptions.usdNisRate);
+    this.simulatedPrice.set(saved.assumptions.currentPriceUsd);
+    this.updateMessage.set(null);
+    this.simulating.set(true);
   }
 
   private async loadSymbols(): Promise<void> {
@@ -58,7 +126,7 @@ export class EsopPageComponent {
    * their fetch timestamps) back to the workbook, and show the recalculation.
    */
   protected async refresh(): Promise<void> {
-    if (this.updating()) return;
+    if (this.updating() || this.simulating()) return;
     this.updating.set(true);
     this.error.set(null);
     this.updateMessage.set(null);
@@ -66,7 +134,7 @@ export class EsopPageComponent {
       const updated = await firstValueFrom(
         this.api.updateEsopMarket({ stockSymbol: this.stockSymbol(), fxSymbol: this.fxSymbol() }),
       );
-      this.result.set(updated.esop);
+      this.savedResult.set(updated.esop);
       this.updateMessage.set(`Updated from ${updated.stock.symbol} · ${updated.fx.symbol}.`);
     } catch (err) {
       this.error.set(errorMessage(err));
@@ -158,7 +226,7 @@ export class EsopPageComponent {
    * uncluttered and mobile-friendly.
    */
   protected marketValuesHint(): string {
-    const esop = this.result();
+    const esop = this.savedResult();
     const rate = this.updatedAt(esop?.assumptions.usdNisRateUpdatedAt) ?? 'never refreshed';
     const price = this.updatedAt(esop?.assumptions.currentPriceUsdUpdatedAt) ?? 'never refreshed';
     return `Last refreshed\nUSD/NIS: ${rate}\n${this.stockSymbol()}: ${price}`;
