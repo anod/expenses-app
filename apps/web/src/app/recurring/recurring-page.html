@@ -5,7 +5,10 @@
         <span class="material-symbols-outlined">event_repeat</span>
         Recurring templates
       </h1>
-      <p class="subtitle">Scheduled income and expenses that repeat every month or week.</p>
+      <p class="subtitle">
+        Scheduled income and expenses that repeat every month or week. Finished schedules are
+        automatically archived after their last payment date.
+      </p>
     </div>
     <button
       type="button"
@@ -18,6 +21,23 @@
       <span class="btn-label">New template</span>
     </button>
   </header>
+
+  @if (archivedTemplates().length > 0 || showingArchived()) {
+    <div class="archive-toolbar">
+      <span>
+        {{ showingArchived() ? 'Showing archived payments' : archivedTemplates().length + ' finished' }}
+      </span>
+      <button
+        type="button"
+        class="m3-btn m3-btn--tonal"
+        (click)="toggleArchived()"
+        [attr.aria-pressed]="showingArchived()"
+      >
+        <span class="material-symbols-outlined">{{ showingArchived() ? 'event_repeat' : 'archive' }}</span>
+        {{ showingArchived() ? 'Show active' : 'Show archived (' + archivedTemplates().length + ')' }}
+      </button>
+    </div>
+  }
 
   @if (error(); as e) {
     <div class="m3-card error-card">
@@ -265,7 +285,19 @@
       <h3>No recurring templates yet</h3>
       <p>Use “New template” to add one.</p>
     </div>
-  } @else if (templates().length > 0) {
+  } @else if (displayedTemplates().length === 0 && isIdle()) {
+    <div class="m3-card empty-state">
+      <span class="material-symbols-outlined empty-icon">
+        {{ showingArchived() ? 'archive' : 'event_repeat' }}
+      </span>
+      <h3>{{ showingArchived() ? 'No archived payments' : 'No active recurring templates' }}</h3>
+      <p>
+        {{ showingArchived()
+          ? 'Finished schedules will appear here after their last payment date.'
+          : 'All finished schedules are in Archived.' }}
+      </p>
+    </div>
+  } @else if (displayedTemplates().length > 0) {
     <!-- Desktop / tablet: full table with sortable columns. -->
     <div class="m3-card table-card">
       <table class="m3-table">
@@ -299,7 +331,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (t of sortedTemplates(); track t.id) {
+          @for (t of displayedTemplates(); track t.id) {
             <tr [class.is-editing]="isEditing(t.id)">
               <td>{{ displayDesc(t.description) }}
                 @if (skipCount(t); as n) {
@@ -359,7 +391,7 @@
          signal so any desktop-selected sort still applies if the viewport
          later narrows. -->
     <ol class="template-list">
-      @for (t of sortedTemplates(); track t.id) {
+      @for (t of displayedTemplates(); track t.id) {
         <li class="m3-card template-row" [class.is-editing]="isEditing(t.id)">
           <div class="template-row-main">
             <div class="template-row-icon"

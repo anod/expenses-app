@@ -82,6 +82,12 @@ export class RecurringPageComponent {
   protected readonly ledgerEdit = signal<LedgerEditState>({ kind: 'idle' });
   protected readonly sortColumn = signal<SortColumn>('day');
   protected readonly sortDir = signal<SortDir>('asc');
+  protected readonly showingArchived = signal(false);
+  private readonly today = signal(todayIsoLocal());
+  private readonly dateRefreshTimer = setInterval(() => {
+    const today = todayIsoLocal();
+    if (today !== this.today()) this.today.set(today);
+  }, 60_000);
 
   /** Standalone ledger entries: excludes template-bound overrides and
    * legacy card-bill placeholders that have no useful edit semantics. */
@@ -102,6 +108,16 @@ export class RecurringPageComponent {
     arr.sort((a, b) => dir * this.compareBy(col, a, b));
     return arr;
   });
+
+  protected readonly archivedTemplates = computed(() =>
+    this.sortedTemplates().filter((template) => this.isFinished(template)),
+  );
+  protected readonly activeTemplates = computed(() =>
+    this.sortedTemplates().filter((template) => !this.isFinished(template)),
+  );
+  protected readonly displayedTemplates = computed(() =>
+    this.showingArchived() ? this.archivedTemplates() : this.activeTemplates(),
+  );
 
   protected toggleSort(col: SortColumn): void {
     if (this.sortColumn() === col) {
@@ -262,6 +278,7 @@ export class RecurringPageComponent {
   });
 
   constructor() {
+    this.destroyRef.onDestroy(() => clearInterval(this.dateRefreshTimer));
     this.form.controls.recurrenceType.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((type) => this.applyRecurrenceTypeValidators(type));
@@ -670,8 +687,16 @@ export class RecurringPageComponent {
    * `null` for open-ended (no endDate) templates.
    */
   protected paymentProgressFor(t: RecurringTemplate): PaymentProgress | null {
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
-    return paymentProgress(t, today);
+    return paymentProgress(t, this.today());
+  }
+
+  private isFinished(t: RecurringTemplate): boolean {
+    const progress = paymentProgress(t, this.today());
+    return progress != null && progress.total > 0 && progress.paid >= progress.total;
+  }
+
+  protected toggleArchived(): void {
+    this.showingArchived.update((showing) => !showing);
   }
 
   /**
