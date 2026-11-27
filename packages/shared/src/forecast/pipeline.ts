@@ -36,6 +36,7 @@ import {
   installmentPerPayment,
   scheduledPaymentCount,
 } from './paymentProgress.js';
+import { projectSpendingBudget, spendingBudgetAllocations } from './spendingBudget.js';
 
 /** The `kind: 'ledger'` arm of `ChargeSource`. */
 type ChargeSourceLedger = Extract<ChargeSource, { kind: 'ledger' }>;
@@ -318,6 +319,22 @@ export const project = (
     arr.push(charge);
   };
 
+  if (settings.spendingBudget) {
+    validateNotFuture(settings.spendingBudget.asOf, today, 'spending budget');
+    // Elapsed estimates age the allowance, not the recorded bank balance.
+    // Refreshing a budget snapshot cannot change today's bank balance.
+    for (const allocation of spendingBudgetAllocations(
+      settings.spendingBudget, addDays(today, 1), endDate,
+    )) {
+      if (allocation.amount === 0) continue;
+      pushBank(allocation.date, {
+        description: 'Extra spending allowance',
+        amount: -allocation.amount,
+        source: { kind: 'spending-budget' },
+      });
+    }
+  }
+
   const pushCc = (cardId: string, billDate: IsoDate, entry: LedgerEntry): void => {
     let m = ccByCardBillDate.get(cardId);
     if (!m) {
@@ -515,6 +532,7 @@ export const project = (
     const charges = bankByDate.get(cur) ?? [];
     const delta = charges.reduce((s, c) => s + c.amount, 0);
     balance += delta;
+    if (settings.spendingBudget) balance = roundCents(balance);
     if (compareIso(cur, visibleStart) >= 0) {
       const { d } = parseIso(cur);
       days.push({
@@ -673,6 +691,8 @@ export const project = (
     startDate: visibleStart, endDate, days, priorDays, status, minBalance, minBalanceDate,
     cards: cardForecasts,
     pots: potForecasts,
+    spendingBudget: settings.spendingBudget
+      ? projectSpendingBudget(settings.spendingBudget, today) : null,
     account: { asOf: account.asOf, bankBalance: account.bankBalance },
   };
 };

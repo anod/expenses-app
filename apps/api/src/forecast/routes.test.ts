@@ -243,6 +243,31 @@ describe('forecast routes', () => {
     expect(r.body.entity.threshold).toBe(5000);
   });
 
+  it('saves a budget snapshot, returns its forecast, preserves it on unrelated patches, and disables it', async () => {
+    repo.upsertAccount({ bankBalance: 10_000, asOf: TODAY });
+    const spendingBudget = { monthlyAllowance: 1000, remaining: 900, asOf: TODAY };
+    const saved = await request(app).patch('/api/settings').send({ spendingBudget }).expect(200);
+    expect(saved.body.entity.spendingBudget).toEqual(spendingBudget);
+    expect(saved.body.forecast.spendingBudget.remainingToday).toBe(900);
+    expect(saved.body.forecast.days.find((day: { date: string }) => day.date === '2026-05-10').balance).toBe(9100);
+    await request(app).patch('/api/settings').send({ threshold: 500 }).expect(200);
+    expect(repo.getSettings().spendingBudget).toEqual(spendingBudget);
+    const disabled = await request(app).patch('/api/settings').send({ spendingBudget: null }).expect(200);
+    expect(disabled.body.entity.spendingBudget).toBeNull();
+    expect(disabled.body.forecast.days.every((day: { balance: number }) => day.balance === 10_000)).toBe(true);
+  });
+
+  it.each([
+    { monthlyAllowance: -1, remaining: 0, asOf: TODAY },
+    { monthlyAllowance: 1, remaining: 1.001, asOf: TODAY },
+    { monthlyAllowance: 1, asOf: TODAY },
+    { monthlyAllowance: 1, remaining: 1, asOf: '2026-02-30' },
+    { monthlyAllowance: 1, remaining: 1, asOf: '2099-01-01' },
+  ])('rejects invalid budget snapshots before changing stored state: %j', async (spendingBudget) => {
+    await request(app).patch('/api/settings').send({ spendingBudget }).expect(400);
+    expect(repo.getSettings().spendingBudget ?? null).toBeNull();
+  });
+
   it('PATCH /api/settings preserves ESOP market symbols when omitted', async () => {
     await request(app)
       .patch('/api/settings')

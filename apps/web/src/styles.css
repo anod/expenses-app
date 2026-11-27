@@ -5,6 +5,7 @@
    ============================================================ */
 
 :root {
+  color-scheme: light;
   /* Color: light scheme */
   --md-sys-color-primary: #6750a4;
   --md-sys-color-on-primary: #ffffff;
@@ -67,10 +68,13 @@
   --md-sys-typescale-headline-medium: 600 1.5rem/1.3 var(--md-sys-font-brand);
   --md-sys-typescale-title-large: 600 1.25rem/1.4 var(--md-sys-font-brand);
   --md-sys-typescale-title-medium: 600 1rem/1.5 var(--md-sys-font-brand);
+  --md-sys-typescale-title-small: 500 0.875rem/1.4 var(--md-sys-font-brand);
   --md-sys-typescale-body-large: 400 1rem/1.5 var(--md-sys-font-plain);
   --md-sys-typescale-body-medium: 400 0.875rem/1.5 var(--md-sys-font-plain);
+  --md-sys-typescale-body-small: 400 0.75rem/1.5 var(--md-sys-font-plain);
   --md-sys-typescale-label-large: 500 0.875rem/1.4 var(--md-sys-font-plain);
   --md-sys-typescale-label-medium: 500 0.75rem/1.3 var(--md-sys-font-plain);
+  --md-sys-typescale-label-small: 500 0.6875rem/1.3 var(--md-sys-font-plain);
 
   /* Motion */
   --md-sys-motion-emphasized: cubic-bezier(0.2, 0.0, 0, 1.0);
@@ -79,6 +83,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --md-sys-color-primary: #d0bcff;
     --md-sys-color-on-primary: #381e72;
     --md-sys-color-primary-container: #4f378b;

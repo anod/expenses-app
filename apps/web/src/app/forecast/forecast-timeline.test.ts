@@ -53,6 +53,69 @@ const ccBillOn = (items: readonly ChargeItem[], date: string): ChargeItem => {
 };
 
 describe('forecast timeline', () => {
+  it('shows pre-budget and final anchor balances without deducting the allowance twice', () => {
+    const input = {
+      templates: [],
+      persisted: [{
+        id: 'income', description: 'Income', amount: 1000, channel: 'bank' as const,
+        date: '2026-05-31', status: 'pending' as const,
+      }],
+      account: { bankBalance: 10_000, asOf: '2026-05-30' },
+      cards: [creditCard],
+      settings: {
+        ...settings,
+        spendingBudget: { monthlyAllowance: 1000, remaining: 550, asOf: '2026-05-30' },
+      },
+      today: '2026-05-30',
+    };
+    const result = forecast(input);
+    const makeTimeline = (filter: 'all' | 'bank' | 'cc' | 'anchors') => buildForecastTimeline({
+      forecast: result, threshold: settings.threshold, filter,
+      ledger: input.persisted, templates: [], cards: input.cards, todayIso: input.today,
+    });
+    const all = makeTimeline('all');
+    expect(all.filter((item) => item.kind === 'charge').some((item) =>
+      item.description === 'Extra spending allowance',
+    )).toBe(false);
+    const anchors = all.filter((item) => item.kind === 'anchor');
+    expect(anchors[0]).toMatchObject({
+      date: '2026-06-10', balanceBeforeBudget: 10_700, balance: 10_150,
+    });
+    expect(anchors[1]).toMatchObject({
+      date: '2026-07-10', balanceBeforeBudget: 10_700, balance: 9_150,
+    });
+    expect(all.map((item) => item.kind)).not.toContain('period');
+    for (const filter of ['bank', 'cc', 'anchors'] as const) {
+      expect(makeTimeline(filter).filter((item) => item.kind === 'anchor')).toEqual(anchors);
+    }
+    const closingItems = all.filter((item) => item.date === '2026-06-10');
+    expect(closingItems.map((item) => item.kind)).toEqual(['anchor']);
+    const warning = buildForecastTimeline({
+      forecast: result, threshold: 10_200, filter: 'anchors',
+      ledger: input.persisted, templates: [], cards: input.cards, todayIso: input.today,
+    });
+    expect(warning[0]).toMatchObject({ balance: 10_150, belowThreshold: true });
+    const current = buildCurrentPeriodDays({
+      forecast: result, ledger: input.persisted, templates: [], cards: input.cards, todayIso: input.today,
+    });
+    expect(current.find((day) => day.date === '2026-06-10')?.balance).toBe(10_150);
+  });
+
+  it('keeps a single unchanged anchor balance when no spending budget is configured', () => {
+    const result = forecast({
+      templates: [], persisted: [], cards: [], settings,
+      account: { bankBalance: 10_000, asOf: '2026-05-30' },
+      today: '2026-05-30',
+    });
+    const timeline = buildForecastTimeline({
+      forecast: result, threshold: settings.threshold, filter: 'anchors',
+      ledger: [], templates: [], cards: [], todayIso: '2026-05-30',
+    });
+    expect(timeline[0]).toEqual({
+      kind: 'anchor', date: '2026-06-10', balance: 10_000, belowThreshold: false,
+    });
+  });
+
   it('itemizes current cc bill charges from the full billing cycle and greys only past rows', () => {
     const result = forecast({
       persisted: [persistedCharge],

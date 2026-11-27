@@ -12,7 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import type { DailyProjection, PotForecast, RecurringTemplate } from '@expenses/shared';
-import { cardIdOfChannel } from '@expenses/shared';
+import { buildForecastPeriods, cardIdOfChannel } from '@expenses/shared';
 import type { TopLevelSpec } from 'vega-lite';
 import type { View as VegaView } from 'vega';
 
@@ -189,14 +189,13 @@ export class BalanceChartComponent {
       }
     }
     const anchors: AnchorDatum[] = [];
-    let spendInPeriod = 0;
+    const periodsByEnd = new Map(buildForecastPeriods(this.days()).map((period) => [period.endDate, period]));
     let splitCcInPeriod = 0;
 
     for (const day of this.days()) {
       for (const charge of day.charges) {
         if (charge.amount >= 0) continue;
 
-        spendInPeriod += Math.abs(charge.amount);
         if (charge.source.kind === 'cc-bill') {
           // Include installments already accounted in the opening currentDebit:
           // they are part of this bill's spend (inside the opening-balance lump),
@@ -214,7 +213,7 @@ export class BalanceChartComponent {
               splitCcInPeriod += Math.abs(entry.amount);
             }
           }
-        } else {
+        } else if (charge.source.kind === 'ledger') {
           const template = charge.source.recurringId
             ? templateById.get(charge.source.recurringId)
             : undefined;
@@ -229,11 +228,10 @@ export class BalanceChartComponent {
           date: day.date,
           anchorDateLabel: this.formatAnchorDate(day.date),
           anchorBalance: day.balance,
-          expectedSpending: spendInPeriod,
+          expectedSpending: periodsByEnd.get(day.date)?.totalOutflows ?? 0,
           creditCardPayments: splitCcInPeriod,
           savingsBalance: savingsByDate.get(day.date) ?? 0,
         });
-        spendInPeriod = 0;
         splitCcInPeriod = 0;
       }
     }

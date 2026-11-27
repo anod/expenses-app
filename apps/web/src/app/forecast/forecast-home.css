@@ -249,9 +249,9 @@
   display: grid;
   grid-template-columns: 36px 1fr auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   position: relative;
-  padding: 0.6rem 0.5rem;
+  padding: 0.5rem 0.75rem;
   margin: 0.35rem 0;
   border-top: 1px solid var(--md-sys-color-outline-variant);
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
@@ -283,9 +283,6 @@
 .anchor-icon { font-variation-settings: 'FILL' 1, 'wght' 500; }
 
 .anchor-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
   min-width: 0;
 }
 
@@ -294,16 +291,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.anchor-sub {
-  font: var(--md-sys-typescale-label-small);
-  opacity: 0.7;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .anchor-balance {
   font: var(--md-sys-typescale-title-medium);
   font-variant-numeric: tabular-nums;
+}
+.has-budget .anchor-balance {
+  font: var(--md-sys-typescale-body-medium);
+  padding-inline-end: 0.5rem;
+  opacity: 0.8;
 }
 
 /* Charge row — compact, single-line */
@@ -458,13 +453,12 @@
     padding: 0.25rem 0.4rem;
   }
   .timeline-anchor {
-    grid-template-columns: 32px 1fr auto;
-    gap: 0.5rem;
+    grid-template-columns: 28px 1fr auto;
+    gap: 0.25rem 0.5rem;
   }
   .row-icon { width: 24px; height: 24px; }
   .row-icon .material-symbols-outlined { font-size: 16px; }
-  .anchor-rail { width: 32px; height: 32px; }
-  .anchor-sub { display: none; }
+  .anchor-rail { width: 28px; height: 28px; }
   .clear-btn, .clear-btn-placeholder { width: 24px; height: 24px; }
   .clear-btn .material-symbols-outlined { font-size: 18px; }
   .charge-main { gap: 0.4rem; }
@@ -476,9 +470,14 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
+  align-items: start;
 }
 
-.card-summary { padding: 1rem 1.25rem; }
+.credit-snapshots { display: contents; }
+.credit-empty { display: none; }
+.snapshot-pills { display: none; }
+
+.card-summary { padding: 1rem 1.25rem; min-height: 10.25rem; }
 
 .bank-summary {
   background: color-mix(in srgb, var(--md-sys-color-primary-container) 60%, var(--md-sys-color-surface));
@@ -505,6 +504,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+  min-height: 36px;
 }
 
 .card-summary h3 {
@@ -530,6 +530,73 @@
   font: var(--md-sys-typescale-title-large);
   font-variant-numeric: tabular-nums;
   color: var(--md-sys-color-on-surface);
+}
+
+.budget-summary {
+  background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 35%, var(--md-sys-color-surface));
+}
+.budget-value, .budget-summary h3 .material-symbols-outlined { color: var(--md-sys-color-tertiary); }
+.budget-help {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.budget-error { color: var(--md-sys-color-error); margin: 0; }
+
+.anchor-after-budget {
+  grid-column: 2 / -1;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--md-sys-shape-corner-xs);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-title-medium);
+  white-space: nowrap;
+}
+.anchor-after-budget .material-symbols-outlined { font-size: 18px; }
+.timeline-anchor.is-breach .anchor-after-budget {
+  background: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-error);
+}
+
+@media (max-width: 760px) {
+  .timeline-filters { width: 100%; flex-wrap: nowrap; gap: 0.25rem; }
+  .timeline-filters .m3-chip { flex: 1; justify-content: center; min-height: 44px; padding: 0.25rem; font-size: 0.75rem; }
+  .timeline-filters .material-symbols-outlined { display: none; }
+  .card-summary { min-height: 0; }
+  .cards-row { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+  .snapshot-pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+  .snapshot-pill {
+    min-width: 0;
+    height: 48px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: 16px;
+    background: var(--md-sys-color-surface-container);
+    color: var(--md-sys-color-on-surface);
+    font: var(--md-sys-typescale-label-medium);
+    cursor: pointer;
+    text-align: start;
+  }
+  .snapshot-pill-label { display: flex; align-items: center; justify-content: space-between; }
+  .snapshot-pill-label .material-symbols-outlined { font-size: 14px; }
+  .snapshot-pill-amount { display: block; font-size: clamp(0.75rem, 3.5vw, 0.875rem); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .snapshot-pill[aria-expanded='true'] {
+    border-color: var(--md-sys-color-primary);
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+  }
+  .snapshot-pill:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+  .snapshot-pill:disabled { opacity: 0.5; cursor: default; }
+  .bank-summary, .budget-summary, .credit-snapshots { display: none; }
+  .bank-summary.is-expanded, .budget-summary.is-expanded { display: block; }
+  .credit-snapshots.is-expanded { display: contents; }
+  .credit-empty { display: block; }
+  .snapshot-form .form-actions { flex-wrap: wrap; }
+  .snapshot-form .m3-btn { min-height: 44px; padding-inline: 0.75rem; }
 }
 
 /* ---------- Snapshot edit forms ---------- */
@@ -652,17 +719,10 @@
   background: color-mix(in srgb, var(--md-sys-color-inverse-on-surface, #f1f1f1) 12%, transparent) !important;
 }
 
-/* ---------- Mobile: collapse Bank/Card summary cards to a chip ---------- */
+/* ---------- Mobile: compact savings pots ---------- */
 @media (max-width: 600px) {
-  .cards-row {
-    /* On a phone the auto-fit grid otherwise still allocates ~260px columns
-       and leaves a big gap; stack to a single column instead. */
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-
-  /* Apply chip layout only to summary cards that are *not* being edited. */
-  .card-summary:not(:has(.snapshot-form)) {
+  /* Keep pots compact outside their edit form. */
+  .pot-summary:not(:has(.snapshot-form)) {
     position: relative;
     display: flex;
     flex-direction: row;
@@ -670,7 +730,7 @@
     gap: 0.75rem;
     padding: 0.5rem 2.75rem 0.5rem 0.75rem; /* right pad for absolutely-placed edit btn */
   }
-  .card-summary:not(:has(.snapshot-form)) .card-header {
+  .pot-summary .card-header {
     flex: 1 1 auto;
     min-width: 0;
     margin-bottom: 0;
@@ -678,40 +738,33 @@
     gap: 0.5rem;
     justify-content: flex-start;
   }
-  .card-summary:not(:has(.snapshot-form)) h3 {
+  .pot-summary:not(:has(.snapshot-form)) h3 {
     font: var(--md-sys-typescale-title-small);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .card-summary:not(:has(.snapshot-form)) .card-meta {
+  .pot-summary :is(.card-meta, .kpi-label, .pot-projection) {
     display: none;
   }
   /* Detach the edit button from the header so the order is
      [icon name] [value] [edit-btn]. */
-  .card-summary:not(:has(.snapshot-form)) .card-header-actions {
+  .pot-summary .card-header-actions {
     position: absolute;
     inset-block: 0;
     inset-inline-end: 0.25rem;
     display: flex;
     align-items: center;
   }
-  /* Drop the first KPI (Snapshot / Current debit); inline the second
-     (Today / At <next-anchor>) right of the header. */
-  .card-summary:not(:has(.snapshot-form)) .card-grid {
+  /* Show today's savings beside its name. */
+  .pot-summary .card-grid {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
     margin: 0;
   }
-  .card-summary:not(:has(.snapshot-form)) .card-grid > div:first-child {
-    display: none;
-  }
-  .card-summary:not(:has(.snapshot-form)) .kpi-label {
-    display: none;
-  }
-  .card-summary:not(:has(.snapshot-form)) .kpi-value-sm {
+  .pot-summary .kpi-value-sm {
     font: var(--md-sys-typescale-title-medium);
   }
 }

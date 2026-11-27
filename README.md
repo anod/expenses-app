@@ -148,6 +148,44 @@ line, so it continues to account for the full drop in the balance. Deleting a
 pot also deletes its ledger entries and recurring templates, since an
 unresolvable `savings:` channel would break the forecast.
 
+### Additional spending budget
+
+On **Forecast**, edit the **Spending budget** card just like a bank or credit-card
+snapshot. Set the extra monthly allowance, the amount still expected this period,
+and its end-of-day snapshot date. This is **additional unplanned spending**, not a
+cap on bills or a bank balance: it lowers future projected balances and affects
+the minimum balance and safety warnings.
+
+The remainder is spread evenly, in cents, over the days after the snapshot
+through the next 10th; the final day absorbs rounding. New full periods run from
+the 11th through the next 10th and use the monthly allowance. As time passes,
+elapsed estimates reduce the displayed remainder, but are not treated as actual
+historical bank transactions. Only future allocations reduce the bank forecast.
+Update the remaining amount when recording real spending; scheduled ledger
+outflows, credit-card bills, and savings contributions remain separate.
+
+Each dated timeline anchor shows the balance before the allowance, with the
+final balance after the allowance directly beneath it beside a colored wallet
+icon. The final balance matches the chart and includes the allowance only once;
+there are no separate budget or period calculation rows. Credit-card bill
+breakdowns are not counted again. Expected spending totals cover all channels;
+partial first/last periods include only forecast dates. Predictions
+cannot be cleared or skipped as ledger transactions.
+
+Desktop snapshot cards have matching sizes. On mobile, **Bank / CC / Budget**
+share one compact row; tapping a pill expands its details, and tapping again
+collapses them. Only one group is open at a time. Switching groups cancels unsaved
+snapshot edits. Use **Disable** in the budget editor to remove the allowance.
+Timeline filters use a single compact text-only row on mobile.
+Compact mobile savings-pot cards show today's saved balance, not the end-of-horizon
+projection. Desktop cards show both amounts with their labels.
+
+Budget settings persist in SQLite through `PATCH /api/settings`
+(`spendingBudget: { monthlyAllowance, remaining, asOf }`; null disables it).
+Amounts must be nonnegative whole cents and the snapshot date cannot be in the
+future. Omitting the field preserves it. In demo mode, changes remain in memory
+and never affect the real DB or Excel workbook.
+
 ## Other scripts
 
 | Command | Effect |

@@ -409,6 +409,12 @@ export const buildForecastRoutes = (getRepo: () => StateRepo): Router => {
       }
       if (esopStockSymbol != null) next.esopStockSymbol = esopStockSymbol.trim();
       if (esopFxSymbol != null) next.esopFxSymbol = esopFxSymbol.trim();
+      if (input.spendingBudget !== undefined) {
+        next.spendingBudget = input.spendingBudget;
+      }
+      if (next.spendingBudget) {
+        validateNoFutureAsOf(next.spendingBudget.asOf, todayInZone(next.timezone), 'spending budget');
+      }
       getRepo().upsertSettings(next);
       withForecast(res, getRepo().getSettings());
     } catch (err) {
