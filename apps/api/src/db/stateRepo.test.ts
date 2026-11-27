@@ -178,6 +178,30 @@ describe('StateRepo', () => {
     expect(() => new StateRepo(db).getAccount()).not.toThrow();
   });
 
+  it('budget settings persist across reopening and can be disabled', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'expenses-budget-'));
+    const path = join(tempDir, 'state.db');
+    const budget = { monthlyAllowance: 1000.25, remaining: 123.45, asOf: '2026-05-16' };
+    const db = openDb({ path, migrationsDir });
+    try {
+      const original = new StateRepo(db);
+      original.upsertSettings({ ...original.getSettings(), spendingBudget: budget });
+      db.close();
+      const reopened = openDb({ path, migrationsDir });
+      try {
+        const persisted = new StateRepo(reopened);
+        expect(persisted.getSettings().spendingBudget).toEqual(budget);
+        persisted.upsertSettings({ ...persisted.getSettings(), spendingBudget: null });
+        expect(persisted.getSettings().spendingBudget).toBeNull();
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      if (db.open) db.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('migration 007 preserves recurring skips and recurring-linked ledger overrides', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'expenses-migrations-'));
     try {

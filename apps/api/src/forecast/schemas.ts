@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isSpendingBudgetAmount } from '@expenses/shared';
 
 const isoDate = z
   .string()
@@ -92,6 +93,15 @@ export const SettingsInput = z.object({
   workbookUrl: z.string().trim().max(2048).optional().or(z.literal('')),
   esopStockSymbol: z.string().trim().min(1).max(64).optional(),
   esopFxSymbol: z.string().trim().min(1).max(64).optional(),
+  spendingBudget: z.object({
+    monthlyAllowance: z.number().refine(isSpendingBudgetAmount, 'must be a nonnegative amount in whole cents'),
+    remaining: z.number().refine(isSpendingBudgetAmount, 'must be a nonnegative amount in whole cents'),
+    asOf: isoDate.refine(
+      (date) => Number.isFinite(Date.parse(`${date}T00:00:00Z`)) &&
+        new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date,
+      'must be a real calendar date',
+    ),
+  }).nullable().optional(),
 });
 
 export type AccountInputT = z.infer<typeof AccountInput>;

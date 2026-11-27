@@ -338,9 +338,13 @@ export class StateRepo {
         workbook_url: string | null;
         esop_stock_symbol: string | null;
         esop_fx_symbol: string | null;
+        budget_monthly: number | null;
+        budget_remaining: number | null;
+        budget_as_of: string | null;
       }>(
         'SELECT threshold, timezone, horizon_months, currency, workbook_url, ' +
-        'esop_stock_symbol, esop_fx_symbol FROM settings WHERE id = 1',
+        'esop_stock_symbol, esop_fx_symbol, budget_monthly, budget_remaining, budget_as_of ' +
+        'FROM settings WHERE id = 1',
       )
       .get();
     if (!row) return DEFAULT_SETTINGS;
@@ -351,6 +355,9 @@ export class StateRepo {
       currency: row.currency as 'ILS',
       esopStockSymbol: row.esop_stock_symbol?.trim() || DEFAULT_ESOP_STOCK_SYMBOL,
       esopFxSymbol: row.esop_fx_symbol?.trim() || DEFAULT_ESOP_FX_SYMBOL,
+      spendingBudget: row.budget_as_of != null && row.budget_monthly != null && row.budget_remaining != null
+        ? { monthlyAllowance: row.budget_monthly, remaining: row.budget_remaining, asOf: row.budget_as_of }
+        : null,
     };
     if (row.workbook_url != null && row.workbook_url !== '') {
       s.workbookUrl = row.workbook_url;
@@ -362,12 +369,14 @@ export class StateRepo {
     this.db
       .prepare(
         'INSERT INTO settings(id, threshold, timezone, horizon_months, currency, workbook_url, ' +
-        'esop_stock_symbol, esop_fx_symbol) VALUES (1, ?, ?, ?, ?, ?, ?, ?) ' +
+        'esop_stock_symbol, esop_fx_symbol, budget_monthly, budget_remaining, budget_as_of) ' +
+        'VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET ' +
         'threshold=excluded.threshold, timezone=excluded.timezone, ' +
         'horizon_months=excluded.horizon_months, currency=excluded.currency, ' +
         'workbook_url=excluded.workbook_url, esop_stock_symbol=excluded.esop_stock_symbol, ' +
-        'esop_fx_symbol=excluded.esop_fx_symbol',
+        'esop_fx_symbol=excluded.esop_fx_symbol, budget_monthly=excluded.budget_monthly, ' +
+        'budget_remaining=excluded.budget_remaining, budget_as_of=excluded.budget_as_of',
       )
       .run(
         s.threshold,
@@ -377,6 +386,9 @@ export class StateRepo {
         s.workbookUrl && s.workbookUrl.trim() !== '' ? s.workbookUrl.trim() : null,
         s.esopStockSymbol?.trim() || DEFAULT_ESOP_STOCK_SYMBOL,
         s.esopFxSymbol?.trim() || DEFAULT_ESOP_FX_SYMBOL,
+        s.spendingBudget?.monthlyAllowance ?? null,
+        s.spendingBudget?.remaining ?? null,
+        s.spendingBudget?.asOf ?? null,
       );
   }
 }

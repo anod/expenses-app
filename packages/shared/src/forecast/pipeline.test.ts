@@ -12,6 +12,8 @@ import {
   type SavingsPot,
   type Settings,
   occurrenceKeyOf,
+  buildForecastPeriods,
+  spendingBudgetAllocations,
 } from './index.js';
 
 const TODAY = '2026-05-16';
@@ -32,6 +34,111 @@ const visa: CreditCard = {
   asOf: TODAY,
   billingDayOfMonth: 2,
 };
+
+describe('additional spending budget', () => {
+  const budgetSettings: Settings = {
+    ...baseSettings,
+    horizonMonths: 2,
+    spendingBudget: { monthlyAllowance: 10_000, remaining: 3000, asOf: '2026-11-27' },
+  };
+
+  it('reduces bank projections in addition to bills and savings, and sums each once', () => {
+    const result = forecast({
+      templates: [],
+      persisted: [{
+        id: 'save', description: 'Savings', amount: -1000, channel: 'savings:pot',
+        date: '2026-11-28', status: 'pending',
+      }],
+      pots: [{ id: 'pot', name: 'Pot', balance: 0, asOf: '2026-11-27' }],
+      cards: [{
+        id: 'visa', name: 'Visa', currentDebit: 6500, asOf: '2026-11-27',
+        billingDayOfMonth: 2,
+      }],
+      account: acct(27_500, '2026-11-27'),
+      settings: budgetSettings, today: '2026-11-27',
+    });
+    expect(result.days.find((day) => day.date === '2026-12-10')?.balance).toBe(17_000);
+    expect(result.days.find((day) => day.date === '2026-11-28')?.balance).toBe(26_269.24);
+    expect(result.pots[0]?.closingBalance).toBe(1000);
+    expect(result.spendingBudget).toMatchObject({ remainingToday: 3000, periodEnd: '2026-12-10' });
+    expect(buildForecastPeriods(result.days)[0]).toMatchObject({
+      scheduledOutflows: 7500, additionalAllowance: 3000, totalOutflows: 10_500, partial: true,
+    });
+  });
+
+  it('rolls full monthly allowances forward and keeps partial horizon allocations', () => {
+    const result = project([], acct(30_000, '2026-11-27'), [], budgetSettings, '2026-11-27');
+    const periods = buildForecastPeriods(result.days);
+    expect(periods[1]).toMatchObject({
+      startDate: '2026-12-11', endDate: '2027-01-10', additionalAllowance: 10_000, partial: false,
+    });
+    expect(periods[2]).toMatchObject({
+      coveredEnd: '2027-01-27', endDate: '2027-02-10', partial: true,
+    });
+    expect(periods[2]!.additionalAllowance).toBeGreaterThan(0);
+    expect(periods[2]!.additionalAllowance).toBeLessThan(10_000);
+    expect(result.minBalance).toBeLessThan(30_000 - 13_000);
+  });
+
+  it('rebases against bank and budget snapshots without charging snapshot-day spending twice', () => {
+    const oldBudget: Settings = {
+      ...baseSettings,
+      spendingBudget: { monthlyAllowance: 3000, remaining: 3000, asOf: '2026-05-11' },
+    };
+    const freshBank = project([], acct(10_000, '2026-05-16'), [], oldBudget, '2026-05-16');
+    expect(freshBank.days[0]?.balance).toBe(10_000);
+    expect(freshBank.spendingBudget?.remainingToday).toBe(2500);
+    const rebase = project([], acct(10_000, '2026-05-16'), [], {
+      ...oldBudget, spendingBudget: { monthlyAllowance: 3000, remaining: 2500, asOf: '2026-05-16' },
+    }, '2026-05-16');
+    expect(rebase.days).toEqual(freshBank.days);
+
+    const newerBudget = project([], acct(10_000, '2026-05-11'), [], {
+      ...oldBudget, spendingBudget: { monthlyAllowance: 3000, remaining: 2500, asOf: '2026-05-16' },
+    }, '2026-05-16');
+    expect(newerBudget.priorDays.every((day) => day.delta === 0)).toBe(true);
+    expect(newerBudget.days[0]?.balance).toBe(10_000);
+  });
+
+  it('ages the allowance without inventing historical bank spending, and affects future safety', () => {
+    const settings = {
+      ...baseSettings,
+      spendingBudget: { monthlyAllowance: 0, remaining: 3000, asOf: '2026-05-11' },
+    };
+    const result = project([], acct(3000, '2026-05-11'), [], settings, '2026-05-16');
+    expect(result.days[0]?.balance).toBe(3000);
+    expect(result.spendingBudget?.remainingToday).toBe(2500);
+    expect(result.priorDays.every((day) => day.delta === 0)).toBe(true);
+    expect(result.status).toBe('breach');
+    expect(project([], acct(3000, '2026-05-11'), [], {
+      ...settings,
+      spendingBudget: { monthlyAllowance: 0, remaining: 2500, asOf: '2026-05-16' },
+    }, '2026-05-16').days).toEqual(result.days);
+  });
+
+  it('uses exact cents across leap-year and anchor boundaries, including a snapshot on the 10th', () => {
+    const budget = { monthlyAllowance: 1, remaining: 0.05, asOf: '2028-02-10' };
+    const allocations = spendingBudgetAllocations(budget, '2028-02-10', '2028-04-10');
+    expect(allocations[0]?.date).toBe('2028-02-11');
+    const first = allocations.filter((allocation) => allocation.date <= '2028-03-10');
+    expect(first.reduce((sum, allocation) => sum + Math.round(allocation.amount * 100), 0)).toBe(5);
+    expect(first.at(-1)).toEqual({ date: '2028-03-10', amount: 0.05 });
+    const next = allocations.filter((allocation) => allocation.date > '2028-03-10');
+    expect(next.reduce((sum, allocation) => sum + Math.round(allocation.amount * 100), 0)).toBe(100);
+    expect(next[0]?.date).toBe('2028-03-11');
+  });
+
+  it('leaves disabled/zero forecasts unchanged and rejects future snapshots', () => {
+    const baseline = project([], acct(), [], baseSettings, TODAY);
+    expect(project([], acct(), [], {
+      ...baseSettings, spendingBudget: { monthlyAllowance: 0, remaining: 0, asOf: TODAY },
+    }, TODAY).days).toEqual(baseline.days);
+    expect(baseline.spendingBudget).toBeNull();
+    expect(() => project([], acct(), [], {
+      ...baseSettings, spendingBudget: { monthlyAllowance: 1, remaining: 1, asOf: '2099-01-01' },
+    }, TODAY)).toThrow(/spending budget asOf must not be in the future/);
+  });
+});
 
 describe('forecast pipeline', () => {
   // 1

@@ -161,6 +161,30 @@ export interface LedgerEntry {
   occurrenceKey?: string;
 }
 
+export interface SpendingBudget {
+  /** Additional predicted spending per full period (11th through the next 10th). */
+  monthlyAllowance: number;
+  /** Additional spending still expected after the end-of-day snapshot. */
+  remaining: number;
+  asOf: IsoDate;
+}
+
+export interface SpendingBudgetForecast extends SpendingBudget {
+  remainingToday: number;
+  periodEnd: IsoDate;
+}
+
+export interface ForecastPeriod {
+  startDate: IsoDate;
+  endDate: IsoDate;
+  coveredStart: IsoDate;
+  coveredEnd: IsoDate;
+  partial: boolean;
+  scheduledOutflows: number;
+  additionalAllowance: number;
+  totalOutflows: number;
+}
+
 export interface Settings {
   threshold: number;
   timezone: string;
@@ -177,9 +201,14 @@ export interface Settings {
   esopStockSymbol?: string;
   /** Yahoo Finance ticker used to refresh ESOP USD/NIS rate. */
   esopFxSymbol?: string;
+  /** Null/absent disables forecast-only additional spending. */
+  spendingBudget?: SpendingBudget | null;
 }
 
 export type ChargeSource =
+  | {
+      kind: 'spending-budget';
+    }
   | {
       kind: 'ledger';
       entryId: string;
@@ -285,6 +314,7 @@ export interface ForecastResult {
   cards: CardForecast[];
   /** Projected savings pots, one per configured pot. Empty when none exist. */
   pots: PotForecast[];
+  spendingBudget: SpendingBudgetForecast | null;
   /** Snapshot of the bank account at the time of forecast (last user update). */
   account: {
     asOf: IsoDate;

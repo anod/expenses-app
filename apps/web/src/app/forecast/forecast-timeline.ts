@@ -72,6 +72,8 @@ export interface AnchorItem {
   kind: 'anchor';
   date: string;
   balance: number;
+  /** Projected balance with the forecast-only allowance deductions added back. */
+  balanceBeforeBudget?: number;
   belowThreshold: boolean;
 }
 
@@ -151,7 +153,7 @@ export const buildForecastTimeline = ({
 
   const toChargeItem = (
     date: string,
-    charge: ProjectionCharge,
+    charge: ProjectionCharge & { source: Exclude<ProjectionCharge['source'], { kind: 'spending-budget' }> },
     accountedBilledEntries: ReadonlyArray<LedgerEntry> = [],
   ): ChargeItem => {
     if (charge.source.kind === 'cc-bill') {
@@ -384,9 +386,17 @@ export const buildForecastTimeline = ({
     }
   }
 
+  let budgetDeductionCents = 0;
   for (const day of forecast.days) {
+    budgetDeductionCents += day.charges.reduce(
+      (sum, charge) => charge.source.kind === 'spending-budget'
+        ? sum - Math.round(charge.amount * 100)
+        : sum,
+      0,
+    );
     if (filter !== 'anchors') {
       for (const charge of day.charges) {
+        if (charge.source.kind === 'spending-budget') continue;
         let accounted: ReadonlyArray<LedgerEntry> = [];
         if (charge.source.kind === 'cc-bill') {
           const clientAccounted = accountedCreditCardEntriesForBill(
@@ -404,7 +414,7 @@ export const buildForecastTimeline = ({
           );
           accounted = [...clientAccounted, ...engineAccounted];
         }
-        const row = toChargeItem(day.date, charge, accounted);
+        const row = toChargeItem(day.date, { ...charge, source: charge.source }, accounted);
         if (filter === 'all' || row.channel === filter) {
           items.push(row);
         }
@@ -415,6 +425,9 @@ export const buildForecastTimeline = ({
         kind: 'anchor',
         date: day.date,
         balance: day.balance,
+        ...(forecast.spendingBudget != null
+          ? { balanceBeforeBudget: roundCents(day.balance + budgetDeductionCents / 100) }
+          : {}),
         belowThreshold: day.balance < threshold,
       });
     }
@@ -422,8 +435,8 @@ export const buildForecastTimeline = ({
 
   return items.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (a.kind === b.kind) return 0;
-    return a.kind === 'anchor' ? 1 : -1;
+    const order = { charge: 0, anchor: 1 };
+    return order[a.kind] - order[b.kind];
   });
 };
 

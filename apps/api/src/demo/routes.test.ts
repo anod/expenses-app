@@ -10,6 +10,8 @@ import { openDb } from '../db/openDb.js';
 import { StateRepo } from '../db/stateRepo.js';
 import { DemoController } from './demoController.js';
 import { buildDemoRoutes } from './routes.js';
+import { buildForecastRoutes } from '../forecast/routes.js';
+import { todayInZone } from '@expenses/shared';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, '..', '..', 'migrations');
@@ -28,6 +30,7 @@ const mkApp = () => {
   const app = express();
   app.use(express.json());
   app.use('/api', buildDemoRoutes(controller, ALLOWED_ORIGIN));
+  app.use('/api', buildForecastRoutes(() => controller.getRepo()));
   return { app, controller };
 };
 
@@ -62,6 +65,22 @@ describe('demo routes', () => {
   it('POST /api/demo rejects malformed body', async () => {
     const { app } = mkApp();
     await request(app).post('/api/demo').send({ enabled: 'yes' }).expect(400);
+  });
+
+  it('budget edits in demo mode never modify real settings and reset with the demo', async () => {
+    const { app, controller } = mkApp();
+    const realSettings = controller.getRepo().getSettings();
+    controller.setActive(true);
+    const spendingBudget = {
+      monthlyAllowance: 1000, remaining: 500,
+      asOf: todayInZone(controller.getRepo().getSettings().timezone),
+    };
+    await request(app).patch('/api/settings').send({ spendingBudget }).expect(200);
+    expect(controller.getRepo().getSettings().spendingBudget).toEqual(spendingBudget);
+    controller.setActive(false);
+    expect(controller.getRepo().getSettings()).toEqual(realSettings);
+    controller.setActive(true);
+    expect(controller.getRepo().getSettings().spendingBudget).toBeNull();
   });
 
   describe('CSRF / origin gate', () => {

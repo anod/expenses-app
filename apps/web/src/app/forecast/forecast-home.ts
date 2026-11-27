@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators, type ValidatorFn } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import type {
   ForecastResult,
@@ -8,7 +8,7 @@ import type {
   RecurringTemplate,
   CreditCard,
 } from '@expenses/shared';
-import { descriptionLabel } from '@expenses/shared';
+import { descriptionLabel, isSpendingBudgetAmount } from '@expenses/shared';
 import { ForecastApi } from './forecast.api';
 import { BalanceChartComponent } from './balance-chart';
 import { PeriodBalanceChartComponent } from './period-balance-chart';
@@ -46,6 +46,10 @@ interface PotSummary {
   nextContributionAmount: number;
 }
 
+type SnapshotEdit = { kind: 'bank' | 'budget' } | { kind: 'card' | 'pot'; id: string };
+const budgetAmountValidator: ValidatorFn = (control) =>
+  isSpendingBudgetAmount(control.value) ? null : { budgetAmount: true };
+
 @Component({
   selector: 'app-forecast-home',
   standalone: true,
@@ -70,6 +74,12 @@ export class ForecastHomeComponent {
   protected readonly chartView = signal<'period' | 'projected'>('period');
   /** Set of billKeys currently expanded to show their contributing charges. */
   protected readonly expandedBills = signal<ReadonlySet<string>>(new Set());
+  protected readonly expandedSnapshot = signal<'bank' | 'cc' | 'budget' | null>(null);
+  protected readonly budgetError = signal<string | null>(null);
+  protected readonly creditTotal = computed(() =>
+    this.cardSummaries().reduce((total, card) => total + card.openingDebit, 0),
+  );
+  protected readonly budget = computed(() => this.forecast()?.spendingBudget ?? null);
 
   protected toggleBill(key: string): void {
     const cur = this.expandedBills();
@@ -82,8 +92,7 @@ export class ForecastHomeComponent {
     return this.expandedBills().has(key);
   }
 
-  /** Which snapshot is being edited: 'bank', a cardId, or null. */
-  protected readonly editing = signal<string | null>(null);
+  protected readonly editing = signal<SnapshotEdit | null>(null);
   protected readonly saving = signal(false);
 
   protected readonly bankForm = this.fb.nonNullable.group({
@@ -95,6 +104,12 @@ export class ForecastHomeComponent {
     currentDebit: [0, [Validators.required, Validators.min(0)]],
     asOf: ['', [Validators.required]],
     mode: ['credit' as 'credit' | 'debit', [Validators.required]],
+  });
+
+  protected readonly budgetForm = this.fb.nonNullable.group({
+    monthlyAllowance: [0, [Validators.required, budgetAmountValidator]],
+    remaining: [0, [Validators.required, budgetAmountValidator]],
+    asOf: ['', [Validators.required]],
   });
 
   // Limits mirror the API's `SavingsPotInput` (name 1–64).
@@ -203,6 +218,7 @@ export class ForecastHomeComponent {
       ledger: this.ledger(),
       templates: this.templates(),
       cards: this.cards(),
+      todayIso: f.startDate,
     });
   });
 
@@ -255,6 +271,7 @@ export class ForecastHomeComponent {
       ledger: this.ledger(),
       templates: this.templates(),
       cards: this.cards(),
+      todayIso: f.startDate,
     });
   });
 
@@ -264,7 +281,7 @@ export class ForecastHomeComponent {
 
   protected fmt(amount: number): string {
     return new Intl.NumberFormat('he-IL', {
-      style: 'currency', currency: 'ILS', maximumFractionDigits: 0,
+      style: 'currency', currency: 'ILS', minimumFractionDigits: 0, maximumFractionDigits: 2,
     }).format(amount);
   }
 
@@ -303,16 +320,24 @@ export class ForecastHomeComponent {
 
   // ---------- Snapshot editing ----------
 
-  protected isEditingBank(): boolean { return this.editing() === 'bank'; }
-  protected isEditingCard(cardId: string): boolean { return this.editing() === cardId; }
-  protected isEditingPot(potId: string): boolean { return this.editing() === `pot:${potId}`; }
+  protected isEditingBank(): boolean { return this.editing()?.kind === 'bank'; }
+  protected isEditingCard(cardId: string): boolean {
+    const editing = this.editing();
+    return editing?.kind === 'card' && editing.id === cardId;
+  }
+  protected isEditingPot(potId: string): boolean {
+    const editing = this.editing();
+    return editing?.kind === 'pot' && editing.id === potId;
+  }
+  protected isEditingBudget(): boolean { return this.editing()?.kind === 'budget'; }
   protected isAnyEdit(): boolean { return this.editing() !== null; }
 
   protected startEditBank(): void {
     const f = this.forecast();
     if (!f) return;
     this.bankForm.reset({ bankBalance: f.account.bankBalance, asOf: this.todayIso() });
-    this.editing.set('bank');
+    this.editing.set({ kind: 'bank' });
+    this.expandedSnapshot.set('bank');
   }
 
   protected startEditCard(cardId: string): void {
@@ -333,7 +358,8 @@ export class ForecastHomeComponent {
       asOf: this.todayIso(),
       mode: full?.mode === 'debit' ? 'debit' : 'credit',
     });
-    this.editing.set(cardId);
+    this.editing.set({ kind: 'card', id: cardId });
+    this.expandedSnapshot.set('cc');
   }
 
   protected startEditPot(potId: string): void {
@@ -347,17 +373,59 @@ export class ForecastHomeComponent {
     // touching the amount. Prefilling today's balance makes an unchanged save
     // a true no-op.
     this.potForm.reset({ name: pot.name, balance: pot.openingBalance, asOf: this.todayIso() });
-    this.editing.set(`pot:${potId}`);
+    this.editing.set({ kind: 'pot', id: potId });
   }
 
-  /** Local-time `YYYY-MM-DD` for prefilling date inputs. */
+  /** Use the forecast timezone, not the device's local date. */
   private todayIso(): string {
-    return new Date().toLocaleDateString('en-CA');
+    return this.forecast()?.startDate ?? new Date().toLocaleDateString('en-CA');
   }
 
   protected cancelEdit(): void {
     this.editing.set(null);
     this.error.set(null);
+    this.budgetError.set(null);
+  }
+
+  protected toggleSnapshot(panel: 'bank' | 'cc' | 'budget'): void {
+    if (this.saving()) return;
+    this.cancelEdit();
+    this.expandedSnapshot.update((current) => current === panel ? null : panel);
+  }
+
+  protected startEditBudget(): void {
+    const budget = this.budget();
+    this.budgetForm.reset({
+      monthlyAllowance: budget?.monthlyAllowance ?? 0,
+      remaining: budget?.remainingToday ?? 0,
+      asOf: this.todayIso(),
+    });
+    this.budgetError.set(null);
+    this.editing.set({ kind: 'budget' });
+    this.expandedSnapshot.set('budget');
+  }
+
+  protected async saveBudget(disable = false): Promise<void> {
+    if (this.saving()) return;
+    if (!disable && this.budgetForm.invalid) {
+      this.budgetForm.markAllAsTouched();
+      this.budgetError.set('Enter nonnegative amounts with up to two decimal places and a snapshot date.');
+      return;
+    }
+    this.saving.set(true);
+    this.budgetError.set(null);
+    try {
+      const res = await firstValueFrom(this.api.patchSettings({
+        spendingBudget: disable ? null : this.budgetForm.getRawValue(),
+      }));
+      this.settings.set(res.entity);
+      this.forecast.set(res.forecast);
+      this.editing.set(null);
+    } catch (err) {
+      this.budgetError.set(errorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected async saveBank(): Promise<void> {

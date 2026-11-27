@@ -109,8 +109,35 @@
 
     @if (cardSummaries().length > 0 || forecast()) {
       <section class="cards-row">
+        <div class="snapshot-pills" aria-label="Balance and budget details">
+          <button type="button" class="snapshot-pill"
+                  [attr.aria-expanded]="expandedSnapshot() === 'bank'"
+                  aria-controls="bank-snapshot" [disabled]="saving()"
+                  (click)="toggleSnapshot('bank')">
+            <span class="snapshot-pill-label">Bank <span class="material-symbols-outlined">{{ expandedSnapshot() === 'bank' ? 'expand_less' : 'expand_more' }}</span></span>
+            <span class="snapshot-pill-amount">{{ fmt(f.days[0]?.balance ?? f.account.bankBalance) }}</span>
+          </button>
+          <button type="button" class="snapshot-pill"
+                  [attr.aria-expanded]="expandedSnapshot() === 'cc'"
+                  aria-controls="credit-snapshots" [disabled]="saving()"
+                  (click)="toggleSnapshot('cc')">
+            <span class="snapshot-pill-label">CC <span class="material-symbols-outlined">{{ expandedSnapshot() === 'cc' ? 'expand_less' : 'expand_more' }}</span></span>
+            <span class="snapshot-pill-amount">{{ fmt(creditTotal()) }}</span>
+          </button>
+          <button type="button" class="snapshot-pill"
+                  title="Remaining additional spending allowance"
+                  [attr.aria-expanded]="expandedSnapshot() === 'budget'"
+                  aria-controls="budget-snapshot" [disabled]="saving()"
+                  (click)="toggleSnapshot('budget')">
+            <span class="snapshot-pill-label">Budget <span class="material-symbols-outlined">{{ expandedSnapshot() === 'budget' ? 'expand_less' : 'expand_more' }}</span></span>
+            <span class="snapshot-pill-amount">
+              @if (budget(); as b) { {{ fmt(b.remainingToday) }} } @else { Not set }
+            </span>
+          </button>
+        </div>
         @if (forecast(); as f) {
-          <article class="m3-card card-summary bank-summary">
+          <article class="m3-card card-summary bank-summary" id="bank-snapshot"
+                   [class.is-expanded]="expandedSnapshot() === 'bank'">
             @if (!isEditingBank()) {
               <header class="card-header">
                 <h3>
@@ -162,6 +189,8 @@
             }
           </article>
         }
+        <div class="credit-snapshots" id="credit-snapshots"
+             [class.is-expanded]="expandedSnapshot() === 'cc'">
         @for (card of cardSummaries(); track card.cardId) {
           <article class="m3-card card-summary">
             @if (!isEditingCard(card.cardId)) {
@@ -222,6 +251,85 @@
             }
           </article>
         }
+        @empty {
+          <article class="m3-card card-summary credit-empty">No credit cards configured.</article>
+        }
+        </div>
+        <article class="m3-card card-summary budget-summary" id="budget-snapshot"
+                 [class.is-expanded]="expandedSnapshot() === 'budget'">
+          @if (!isEditingBudget()) {
+            <header class="card-header">
+              <h3 title="Additional predicted spending beyond scheduled outflows">
+                <span class="material-symbols-outlined">account_balance_wallet</span>
+                Spending budget
+              </h3>
+              <div class="card-header-actions">
+                @if (budget(); as b) {
+                  <span class="card-meta">as of {{ fmtDate(b.asOf) }}</span>
+                }
+                <button type="button" class="m3-btn m3-btn--icon"
+                        [title]="budget() ? 'Edit spending budget' : 'Set spending budget'"
+                        (click)="startEditBudget()" [disabled]="isAnyEdit()">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+              </div>
+            </header>
+            <div class="card-grid">
+              <div>
+                <div class="kpi-label">Per month</div>
+                <div class="kpi-value-sm">
+                  @if (budget(); as b) { {{ fmt(b.monthlyAllowance) }} } @else { Not set }
+                </div>
+              </div>
+              <div>
+                <div class="kpi-label">Remaining @if (budget(); as b) { {{ fmtDate(b.periodEnd) }} }</div>
+                <div class="kpi-value-sm budget-value">
+                  @if (budget(); as b) { {{ fmt(b.remainingToday) }} } @else { — }
+                </div>
+              </div>
+            </div>
+          } @else {
+            <form class="snapshot-form" [formGroup]="budgetForm" (ngSubmit)="saveBudget()">
+              <h3 class="form-title">
+                <span class="material-symbols-outlined">account_balance_wallet</span>
+                Update spending budget
+              </h3>
+              <label class="field">
+                <span class="field-label">Monthly allowance ({{ settings()?.currency }})</span>
+                <input type="number" formControlName="monthlyAllowance" min="0" step="0.01" inputmode="decimal" />
+              </label>
+              <label class="field">
+                <span class="field-label">Remaining this period ({{ settings()?.currency }})</span>
+                <input type="number" formControlName="remaining" min="0" step="0.01" inputmode="decimal" />
+              </label>
+              <label class="field">
+                <span class="field-label">As of (end of day)</span>
+                <input type="date" formControlName="asOf" [max]="chartToday()" />
+              </label>
+              <p class="budget-help">
+                Extra spending beyond scheduled bills and savings. The remaining amount is spread
+                over the days after this snapshot through the next 10th. Future full periods use
+                the monthly allowance.
+              </p>
+              @if (budgetError(); as e) {
+                <p class="budget-error" role="alert">{{ e }}</p>
+              }
+              <div class="form-actions">
+                @if (budget()) {
+                  <button type="button" class="m3-btn danger" (click)="saveBudget(true)" [disabled]="saving()">Disable</button>
+                  <span class="form-actions-spacer"></span>
+                }
+                <button type="button" class="m3-btn" (click)="cancelEdit()" [disabled]="saving()">Cancel</button>
+                <button type="submit" class="m3-btn m3-btn--filled" [disabled]="saving() || budgetForm.invalid">
+                  <span class="material-symbols-outlined" [class.spin]="saving()">
+                    {{ saving() ? 'progress_activity' : 'save' }}
+                  </span>
+                  Save
+                </button>
+              </div>
+            </form>
+          }
+        </article>
         @for (pot of potSummaries(); track pot.potId) {
           <article class="m3-card card-summary pot-summary">
             @if (!isEditingPot(pot.potId)) {
@@ -245,16 +353,16 @@
               <div class="card-grid">
                 <div>
                   <div class="kpi-label">Saved today</div>
-                  <div class="kpi-value-sm">{{ fmt(pot.balanceToday) }}</div>
+                  <div class="kpi-value-sm" title="Saved today">{{ fmt(pot.balanceToday) }}</div>
                 </div>
-                <div>
+                <div class="pot-projection">
                   <div class="kpi-label">
                     Projected
                     @if (pot.contributedInWindow !== 0) {
                       <span class="kpi-delta">{{ pot.contributedInWindow > 0 ? '+' : '' }}{{ fmt(pot.contributedInWindow) }}</span>
                     }
                   </div>
-                  <div class="kpi-value-sm">{{ fmt(pot.projectedBalance) }}</div>
+                  <div class="kpi-value-sm" [title]="'Projected balance on ' + fmtDate(f.endDate)">{{ fmt(pot.projectedBalance) }}</div>
                 </div>
               </div>
             } @else {
@@ -304,7 +412,7 @@
           <span class="material-symbols-outlined">timeline</span>
           Timeline
         </h2>
-        <div class="filter-chips" role="tablist">
+        <div class="filter-chips timeline-filters" role="tablist">
           <button class="m3-chip"
                   role="tab"
                   [attr.aria-pressed]="channelFilter() === 'all'"
@@ -337,15 +445,26 @@
         @for (item of timeline(); track trackTimeline($index, item)) {
           @if (isAnchor(item)) {
             <li class="timeline-anchor"
+                [class.has-budget]="item.balanceBeforeBudget != null"
                 [class.is-breach]="item.belowThreshold">
               <span class="anchor-rail">
                 <span class="material-symbols-outlined anchor-icon">flag</span>
               </span>
               <div class="anchor-main">
                 <span class="anchor-date">{{ fmtAnchorDate(item.date) }}</span>
-                <span class="anchor-sub">end-of-day balance · anchor</span>
               </div>
-              <span class="anchor-balance">{{ fmt(item.balance) }}</span>
+              <span class="anchor-balance"
+                    [title]="item.balanceBeforeBudget != null ? 'Projected balance before additional spending allowance' : 'Projected bank balance'">
+                {{ fmt(item.balanceBeforeBudget ?? item.balance) }}
+              </span>
+              @if (item.balanceBeforeBudget != null) {
+                <span class="anchor-after-budget" role="group"
+                      aria-label="Projected balance after additional spending allowance"
+                      title="Projected balance after additional spending allowance">
+                  <span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
+                  <strong>{{ fmt(item.balance) }}</strong>
+                </span>
+              }
             </li>
           } @else if (isCharge(item)) {
             <li class="timeline-charge"
